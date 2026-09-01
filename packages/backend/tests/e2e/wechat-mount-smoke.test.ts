@@ -207,7 +207,7 @@ describe('进程级 smoke（真实入口 + 优雅退出含 wechat 组件）', ()
       if (child.exitCode === null) child.kill();
     }
     void stderr;
-  });
+  }, 25_000);
 });
 
 // ── 进程辅助（与 process-guard 同款）──────────────────────────────────────────

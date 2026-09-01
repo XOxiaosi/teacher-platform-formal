@@ -22,6 +22,17 @@ describe('测试数据库隔离边界', () => {
     expect(packageJson.scripts?.test).not.toContain('vitest run');
   });
 
+  it('隔离运行器只接受显式 DATABASE_URL，不读取旧 .env', () => {
+    const runnerSource = readFileSync(
+      resolve(backendRoot, 'scripts/run-tests-isolated.mjs'),
+      'utf8',
+    );
+
+    expect(runnerSource).toContain('process.env.DATABASE_URL');
+    expect(runnerSource).not.toContain('packages/contracts/.env');
+    expect(runnerSource).not.toContain('readEnvValue');
+  });
+
   it('拒绝非本地 PostgreSQL 作为测试建库来源', async () => {
     const { assertLocalDatabaseUrl } = await import(safetyModuleUrl);
 

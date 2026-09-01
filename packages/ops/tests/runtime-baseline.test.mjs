@@ -7,12 +7,8 @@ import { fileURLToPath } from 'node:url';
 const opsRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const projectRoot = resolve(opsRoot, '../..');
 
-function readText(relativePath) {
-  return readFileSync(resolve(projectRoot, relativePath), 'utf8');
-}
-
 function readJson(relativePath) {
-  return JSON.parse(readText(relativePath));
+  return JSON.parse(readFileSync(resolve(projectRoot, relativePath), 'utf8'));
 }
 
 test('M0 runtime baseline：Node 与 npm 使用机器可读的精确声明', () => {
@@ -26,49 +22,32 @@ test('M0 runtime baseline：Node 与 npm 使用机器可读的精确声明', () 
   assert.equal(lockfile.packages[''].engines.npm, '10.9.2');
 });
 
-test('M0 runtime baseline：PostgreSQL 17 与 PowerShell 7.4+ 有单一机器可读基线', () => {
-  const baselinePath = resolve(projectRoot, 'deploy/runtime-baseline.json');
-  assert.equal(existsSync(baselinePath), true, '缺少 deploy/runtime-baseline.json');
-  const baseline = JSON.parse(readFileSync(baselinePath, 'utf8'));
-
-  assert.deepEqual(baseline, {
-    node: '>=22.13.0 <23',
-    npm: '10.9.2',
-    postgresql: '17',
-    powershell: '>=7.4.0',
-  });
+test('M0 runtime baseline：旧部署与 CI 材料不成为 Active workspace 契约', () => {
+  // 本轮迁移明确排除旧 deploy/CI/gate 资产；Active Gate 由当前根脚本和项目文档维护。
+  for (const relativePath of [
+    'deploy/runtime-baseline.json',
+    'deploy/DEPLOY.md',
+    'deploy/CI.md',
+    'deploy/windows/README.md',
+    '.github/workflows/ci.yml',
+    'scripts/gate.mjs',
+    'scripts/run-m0-regressions.mjs',
+  ]) {
+    assert.equal(
+      existsSync(resolve(projectRoot, relativePath)),
+      false,
+      `旧迁移资产不应成为 Active workspace 文件：${relativePath}`,
+    );
+  }
 });
 
-test('M0 runtime baseline：CI 与部署手册不回退版本声明', () => {
-  const workflow = readText('.github/workflows/ci.yml');
-  const deploy = readText('deploy/DEPLOY.md');
-  const ci = readText('deploy/CI.md');
-  const windowsManual = readText('deploy/windows/README.md');
-
-  assert.match(workflow, /node-version:\s*['"]22\.16\.0['"]/);
-  assert.match(workflow, /image:\s*postgres:17\b/);
-  assert.match(workflow, /\$PSVersionTable\.PSVersion\s+-lt\s+\[version\]'7\.4\.0'/);
-  assert.doesNotMatch(workflow, /shell:\s*powershell\b/);
-  assert.match(deploy, /Node\.js\s*\|\s*>= 22\.13\.0/);
-  assert.match(deploy, /npm 10\.9\.2/);
-  assert.match(deploy, /PostgreSQL\s*\|\s*17\b/);
-  assert.match(deploy, /PowerShell\s*\|\s*>= 7\.4\.0/);
-  assert.match(ci, /Node\.js >=22\.13\.0 且 <23/);
-  assert.match(ci, /setup-node` 固定 22\.16\.0，内置 npm 10\.9\.2/);
-  assert.doesNotMatch(ci, /固定 22\.12/);
-  assert.match(ci, /PowerShell 7\.4\+/);
-  assert.match(windowsManual, /Node\.js 22\.16\.0/);
-  assert.match(windowsManual, /npm 10\.9\.2/);
-  assert.match(windowsManual, /6 high \/ 0 critical/);
-  assert.match(windowsManual, /不得称“零漏洞”或生产可用/);
-});
-
-test('M0 ops baseline：root test 与 gate 都会执行原始 ops runner', () => {
+test('M0 ops baseline：根测试入口执行受控数据库套件与 ops runner', () => {
   const rootPackage = readJson('package.json');
-  const gate = readText('scripts/gate.mjs');
-  const regressions = readText('scripts/run-m0-regressions.mjs');
 
-  assert.match(rootPackage.scripts.test, /@teacher-platform\/ops run test/);
-  assert.match(gate, /run-m0-regressions\.mjs/);
-  assert.match(regressions, /@teacher-platform\/ops/);
+  assert.match(rootPackage.scripts.test, /node scripts\/run-tests-with-postgres\.mjs/);
+  assert.equal(rootPackage.scripts['test:infrastructure'], 'node --test scripts/run-tests-with-postgres.test.mjs');
+  assert.equal(typeof rootPackage.scripts['test:with-database'], 'string');
+  assert.match(rootPackage.scripts['test:with-database'], /npm run test:infrastructure/);
+  assert.match(rootPackage.scripts['test:with-database'], /@teacher-platform\/ops run test/);
+  assert.equal(rootPackage.scripts['test:local-safe'], 'node --test scripts/start-local-safe.test.mjs scripts/smoke-built-backend.test.mjs');
 });

@@ -10,8 +10,6 @@ import {
 } from '../../../src/features/admin/index.js';
 import { createSlidingWindowLimiter } from '../../../src/app/middleware/rate-limit.js';
 import type { DatabaseClientPool } from '../../../src/shared/database-pool/index.js';
-import { loadDatabaseUrl } from '../../../../ops/lib/pg-utils.mjs';
-import { createDatabaseClientPool } from '../../../src/shared/database-pool/index.js';
 
 /**
  * 反馈看板数据源（P7 渠道线 A6）单测：
@@ -25,9 +23,17 @@ import { createDatabaseClientPool } from '../../../src/shared/database-pool/inde
 const ADMIN_EMAIL = 'admin@example.com';
 const ADMIN_PASSWORD = 'admin-secret-123';
 const ADMIN_HASH = hashAdminPassword(ADMIN_PASSWORD);
-
 const prisma = new PrismaClient();
-const baseUrl = new URL(loadDatabaseUrl());
+
+// feedback/summary 只访问 registryPrisma.userRequirement，不触达教师库。
+// 使用惰性 stub，避免每个 app 装配都创建一个未使用的真实连接池；这也使
+// 未登录路由测试不会因为无关 pool 的连接生命周期而留下 socket。
+const inertPool: DatabaseClientPool = {
+  acquire: async () => { throw new Error('not used in feedback summary tests'); },
+  release: () => undefined,
+  closeAll: async () => undefined,
+  size: () => 0,
+};
 
 const seedQuotePrefix = `fb-summary-${Date.now()}-`;
 const seededIds: string[] = [];
@@ -42,10 +48,7 @@ function createAdminApp(overrides: { pool?: DatabaseClientPool } = {}) {
       authService,
       loginLimiter: createSlidingWindowLimiter(),
       registryPrisma: prisma,
-      pool: overrides.pool ?? createDatabaseClientPool({
-        baseUrl: `postgres://${baseUrl.username}:${baseUrl.password}@${baseUrl.hostname}:${baseUrl.port || '5432'}`,
-        registerProcessHooks: false,
-      }),
+      pool: overrides.pool ?? inertPool,
     }),
   );
   return app;

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { randomBytes } from 'node:crypto';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { delimiter, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -16,30 +16,15 @@ import { acquire as acquireTestMutex, shouldLockForArgs } from '../../../scripts
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(scriptDir, '../../..');
 const backendRoot = resolve(projectRoot, 'packages/backend');
-const contractsEnvPath = resolve(projectRoot, 'packages/contracts/.env');
 const prismaBin = resolve(projectRoot, 'node_modules/prisma/build/index.js');
 const vitestBin = resolve(projectRoot, 'node_modules/vitest/vitest.mjs');
 const schemaPath = resolve(projectRoot, 'packages/contracts/prisma/schema.prisma');
 
-function readEnvValue(filePath, key) {
-  if (!existsSync(filePath)) return undefined;
-  const line = readFileSync(filePath, 'utf8')
-    .split(/\r?\n/)
-    .find((item) => item.trim().startsWith(`${key}=`));
-  if (!line) return undefined;
-  let value = line.trim().slice(`${key}=`.length).trim();
-  if (
-    (value.startsWith('"') && value.endsWith('"'))
-    || (value.startsWith("'") && value.endsWith("'"))
-  ) {
-    value = value.slice(1, -1);
-  }
-  return value || undefined;
-}
-
 function loadBaseDatabaseUrl() {
-  const value = process.env.DATABASE_URL
-    ?? readEnvValue(contractsEnvPath, 'DATABASE_URL');
+  // Test runners must receive an explicit synthetic URL from the root harness.
+  // Reading a developer .env here could silently connect a full regression to
+  // an unrelated local database, so absence is an intentional hard stop.
+  const value = process.env.DATABASE_URL;
   if (!value) throw new Error('SAFETY_BLOCK: DATABASE_URL 未配置');
   const url = new URL(value);
   assertLocalDatabaseUrl(url);

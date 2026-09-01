@@ -41,14 +41,41 @@ const safetyAdaptedPackageFiles = new Set([
   'packages/backend/src/index.ts',
   'packages/backend/src/shared/ai-client/ark-provider.ts',
   'packages/backend/src/shared/ai-client/index.ts',
+  'packages/backend/scripts/run-tests-isolated.mjs',
+  'packages/backend/tests/boundary/test-database-isolation-boundary.test.ts',
+  'packages/backend/tests/functional/admin/feedback-summary.test.ts',
   'packages/backend/tests/functional/provider-usage/provider-usage-wiring.test.ts',
   'packages/backend/tests/boundary/build-runtime-contract-boundary.test.ts',
   'packages/backend/tests/e2e/admin-mount-smoke.test.ts',
   'packages/backend/tests/e2e/llm-line-workflow.test.ts',
+  'packages/backend/tests/e2e/wechat-mount-smoke.test.ts',
   'packages/backend/vitest.config.ts',
   'packages/frontend/vite.config.ts',
+  'packages/ops/tests/runtime-baseline.test.mjs',
   'scripts/smoke-built-backend.mjs',
 ]);
+
+function adaptationReason(path) {
+  if (path.endsWith('vite.config.ts')) {
+    return 'adapted in target to enforce loopback strictPort behavior';
+  }
+  if (
+    path === 'packages/backend/scripts/run-tests-isolated.mjs'
+    || path === 'packages/backend/tests/boundary/test-database-isolation-boundary.test.ts'
+  ) {
+    return 'adapted in target so backend tests require an explicit synthetic database and never read legacy .env';
+  }
+  if (path === 'packages/backend/tests/functional/admin/feedback-summary.test.ts') {
+    return 'adapted in target to remove unrelated database-pool lifecycle from the focused admin route test';
+  }
+  if (path === 'packages/backend/tests/e2e/wechat-mount-smoke.test.ts') {
+    return 'adapted in target so the process smoke timeout covers its two bounded startup and shutdown waits';
+  }
+  if (path === 'packages/ops/tests/runtime-baseline.test.mjs') {
+    return 'adapted in target to replace excluded legacy deploy/CI assertions with the Active workspace test contract';
+  }
+  return 'adapted in target to make local-safe external-provider and credential behavior fail closed';
+}
 
 function sha256(content) {
   return createHash('sha256').update(content).digest('hex');
@@ -73,9 +100,7 @@ function classifySourceA(path) {
     return {
       disposition: 'M1',
       targetPath: path,
-      reason: path.endsWith('vite.config.ts')
-        ? 'adapted in target to enforce loopback strictPort behavior'
-        : 'adapted in target to make local-safe external-provider and credential behavior fail closed',
+      reason: adaptationReason(path),
     };
   }
 

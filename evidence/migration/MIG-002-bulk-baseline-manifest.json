@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "migrationId": "MIG-002",
-  "generatedAt": "2026-09-01T22:40:19.686Z",
+  "generatedAt": "2026-09-01T23:49:14.529Z",
   "target": "/Users/xiaosi/Developer/active/apps/teacher-platform-formal",
   "sources": {
     "A": {
@@ -28,8 +28,8 @@
   "counts": {
     "sourceA": {
       "H": 267,
-      "M1": 16,
-      "T": 878
+      "M1": 21,
+      "T": 873
     },
     "sourceB": {
       "H": 14,
@@ -44,22 +44,22 @@
     {
       "path": "evidence/migration/MIG-002-manifest-parts/source-a-001.jsonl",
       "entries": 400,
-      "sha256": "321fe1289d4d4d179e3cd1a22168a9d83e2b6b2c32d1d023152aa37980a08ede"
+      "sha256": "b2a43e3d152a2bfb1f5ffe5c56b5acba7bb490e026d8cf92555adbab4afdd1a5"
     },
     {
       "path": "evidence/migration/MIG-002-manifest-parts/source-a-002.jsonl",
       "entries": 400,
-      "sha256": "ec202ea35a99354251f27632bde4df7e62ea5058eac3b99b2f952aef4ee321fe"
+      "sha256": "e7cd163a60e26f0c95da7654d862af39f4aabe2f977c2138413956323d42fded"
     },
     {
       "path": "evidence/migration/MIG-002-manifest-parts/source-a-003.jsonl",
       "entries": 361,
-      "sha256": "2ae6c9217182b00bde9071ef3b47964d97737d02fce5a9cda6f786bc967bae2f"
+      "sha256": "724d3b16701a4ccd49497d36994819e2de6dbd27a1c53bdefabab1eb0e82ada9"
     },
     {
       "path": "evidence/migration/MIG-002-manifest-parts/source-b-001.jsonl",
       "entries": 79,
-      "sha256": "61852cf84b9c65a7346cc5f19030324abf056be4f6f95bd4f9f0f089e9be60f6"
+      "sha256": "184642dc113af1f8077dd031d3b215f78a8b008f09244f6089f14d4cae7a2791"
     },
     {
       "path": "evidence/migration/MIG-002-manifest-parts/target-baseline-001.jsonl",
