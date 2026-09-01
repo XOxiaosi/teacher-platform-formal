@@ -1,0 +1,12 @@
+# Private visual-reference binaries have unknown redistribution rights.
+/evidence/ui-reference/*.png
+/evidence/ui-reference/*.jpg
+
+# Local and generated material must not enter the future source repository.
+.DS_Store
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+coverage/
