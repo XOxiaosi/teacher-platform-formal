@@ -1,0 +1,249 @@
+.students-page {
+  display: grid;
+  gap: 1.25rem;
+  --page-hero-bg: linear-gradient(135deg, rgba(44, 92, 255, 0.14), rgba(16, 185, 129, 0.12));
+}
+
+.students-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 1rem;
+  align-items: start;
+}
+
+.students-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.students-card-header h3,
+.students-form h3,
+.students-profile h3 {
+  margin: 0;
+}
+
+.students-card-header span {
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+/* Local spacing for search inside student list card */
+.students-list-card .search-input {
+  margin-bottom: 0.75rem;
+}
+
+.students-toggle-form {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.students-list {
+  list-style: none;
+  display: grid;
+  gap: 0.75rem;
+  padding: 0;
+  margin: 0;
+}
+
+.student-row {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 0.9rem 1rem;
+  background: #ffffff;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.student-row:hover,
+.student-row.selected {
+  border-color: #2563eb;
+  box-shadow: 0 10px 26px rgba(37, 99, 235, 0.12);
+}
+
+.student-row span {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.student-row small {
+  color: #64748b;
+}
+
+.student-row em {
+  font-style: normal;
+  color: #2563eb;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.student-row-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  align-items: flex-end;
+}
+
+.student-detail-link {
+  font-size: 0.8rem;
+  color: #64748b;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.student-detail-link:hover {
+  color: #2563eb;
+}
+
+.students-side-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.students-form {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.students-form label {
+  font-weight: 700;
+  color: #334155;
+}
+
+.students-form input,
+.students-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 0.7rem 0.8rem;
+  font: inherit;
+}
+
+.students-form textarea {
+  min-height: 86px;
+  resize: vertical;
+}
+
+.students-message {
+  margin: 0;
+  font-weight: 700;
+}
+
+.students-message.success {
+  color: #047857;
+}
+
+.students-message.danger {
+  color: #b91c1c;
+}
+
+.muted-profile {
+  color: #64748b;
+}
+
+.students-profile dl {
+  display: grid;
+  gap: 0.8rem;
+  margin: 1rem 0 0;
+}
+
+.students-profile dl div {
+  display: grid;
+  grid-template-columns: 5rem 1fr;
+  gap: 0.75rem;
+}
+
+.students-profile dt {
+  color: #64748b;
+}
+
+.students-profile dd {
+  margin: 0;
+  font-weight: 700;
+}
+
+.student-balance-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.student-balance-metric {
+  border-radius: 16px;
+  background: #f8fafc;
+  padding: 0.85rem;
+}
+
+.student-balance-metric span {
+  display: block;
+  color: #64748b;
+  font-size: 0.8rem;
+  margin-bottom: 0.35rem;
+}
+
+.student-balance-metric strong {
+  color: #172033;
+  font-size: 1.35rem;
+}
+
+@media (max-width: 840px) {
+  .students-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ========================================
+   P2 移动端（≤768px）：学生列表行 → 纵向卡片，触控目标 ≥44px
+   ======================================== */
+@media (max-width: 768px) {
+  .student-row {
+    min-height: 56px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+    border-radius: 12px;
+  }
+
+  .student-row-meta {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .student-detail-link {
+    min-height: 44px;
+    display: grid;
+    align-items: center;
+    padding: 0.5rem 0;
+    color: #2563eb;
+  }
+
+  .students-form input,
+  .students-form textarea,
+  .students-toggle-form,
+  .students-list-card .search-input {
+    min-height: 44px;
+  }
+
+  .students-card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .student-balance-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+}

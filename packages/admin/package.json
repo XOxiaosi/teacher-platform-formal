@@ -1,0 +1,28 @@
+{
+  "name": "@teacher-platform/admin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "后台管理前端（独立 React + vite 构建，与教师端隔离；依据 p7-admin-panel-design.md §1.1 三独立原则）",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5174",
+    "build": "tsc --noEmit && vite build",
+    "lint": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "jsdom": "^27.3.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.1.4",
+    "vitest": "^4.1.10"
+  }
+}

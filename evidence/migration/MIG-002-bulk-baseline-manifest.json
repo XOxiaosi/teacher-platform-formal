@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "migrationId": "MIG-002",
+  "generatedAt": "2026-09-01T20:58:00.749Z",
+  "target": "/Users/xiaosi/Developer/active/apps/teacher-platform-formal",
+  "sources": {
+    "A": {
+      "path": "/Users/xiaosi/Desktop/OH-WorkSpace/teacher-platform",
+      "commit": "8673884f57c9d23abdb26715913d6199b1b4d16b",
+      "entries": 1161
+    },
+    "B": {
+      "path": "/Users/xiaosi/Desktop/OH-WorkSpace/teacher-platform-formal",
+      "entries": 79,
+      "excludedDirectory": "node_modules"
+    },
+    "N": {
+      "path": "/Users/xiaosi/Developer/active/apps/teacher-platform-formal",
+      "baselineCommit": "5d73dd8fc6757aa637084ab88380b6c7003f1cea",
+      "entries": 17
+    }
+  },
+  "rollback": {
+    "backupPath": "/Users/xiaosi/Developer/migration-backups/teacher-platform-formal/pre-mig-2026-09-01.tar.gz",
+    "backupSha256": "e35c17395a93f788e045e67e96982e3f77b83914e6dca9271f5e8cbda59aac56",
+    "baselineCommit": "5d73dd8fc6757aa637084ab88380b6c7003f1cea"
+  },
+  "counts": {
+    "sourceA": {
+      "H": 267,
+      "M1": 16,
+      "T": 878
+    },
+    "sourceB": {
+      "H": 14,
+      "M1": 37,
+      "X": 28
+    },
+    "targetBaseline": {
+      "KEEP": 17
+    }
+  },
+  "parts": [
+    {
+      "path": "evidence/migration/MIG-002-manifest-parts/source-a-001.jsonl",
+      "entries": 400,
+      "sha256": "321fe1289d4d4d179e3cd1a22168a9d83e2b6b2c32d1d023152aa37980a08ede"
+    },
+    {
+      "path": "evidence/migration/MIG-002-manifest-parts/source-a-002.jsonl",
+      "entries": 400,
+      "sha256": "ec202ea35a99354251f27632bde4df7e62ea5058eac3b99b2f952aef4ee321fe"
+    },
+    {
+      "path": "evidence/migration/MIG-002-manifest-parts/source-a-003.jsonl",
+      "entries": 361,
+      "sha256": "2ae6c9217182b00bde9071ef3b47964d97737d02fce5a9cda6f786bc967bae2f"
+    },
+    {
+      "path": "evidence/migration/MIG-002-manifest-parts/source-b-001.jsonl",
+      "entries": 79,
+      "sha256": "d1be370caff5d579a032f3fc0fcfe85183f20263e2a14bb0bdce4761b9fabf12"
+    },
+    {
+      "path": "evidence/migration/MIG-002-manifest-parts/target-baseline-001.jsonl",
+      "entries": 17,
+      "sha256": "2b7a2500f8b97ad4f4fddcdd7d1fcc300eb84e9872928d964c1258904e3ad2da"
+    }
+  ],
+  "invariants": [
+    "Every source A tracked file occurs exactly once across source-a parts.",
+    "Source A content is identified by Git blob at the fixed commit, never by the working tree.",
+    "Source B node_modules and all dist entries are excluded from migration.",
+    "Temporary legacy assets require exit tasks and are not formal product completion.",
+    "Every targetPath records whether the target is present and whether its current content still matches the source.",
+    "The target baseline remains recoverable by local commit and external backup."
+  ]
+}

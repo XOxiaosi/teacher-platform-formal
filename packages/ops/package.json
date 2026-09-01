@@ -1,0 +1,18 @@
+{
+  "name": "@teacher-platform/ops",
+  "version": "0.1.0",
+  "private": true,
+  "description": "运维工具：数据库安全校验 / db-provision / db-migrate-all / db-health-check / 备份恢复",
+  "scripts": {
+    "db-provision": "node scripts/db-provision.mjs",
+    "db-migrate-all": "node scripts/db-migrate-all.mjs",
+    "db-health-check": "node scripts/db-health-check.mjs",
+    "db-backup": "node scripts/db-backup.mjs",
+    "db-restore": "node scripts/db-restore.mjs",
+    "metrics-aggregate": "node scripts/metrics-aggregate.mjs",
+    "alert-check": "node scripts/alert-check.mjs",
+    "export-teacher-data": "node scripts/export-teacher-data.mjs",
+    "deactivate-teacher": "node scripts/deactivate-teacher.mjs",
+    "test": "node scripts/run-tests.mjs"
+  }
+}

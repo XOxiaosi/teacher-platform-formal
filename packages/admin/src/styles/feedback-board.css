@@ -1,0 +1,419 @@
+/* ========================================
+   反馈看板（packages/admin）
+   复用 admin.css 令牌与 patterns.css（status-badge / secondary-action）；
+   桌面表格 + 移动端卡片 + 汇总分布 chips
+   ======================================== */
+
+.feedback-board-page {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.feedback-toast {
+  position: sticky;
+  z-index: 20;
+  top: 64px;
+}
+
+/* ---------- 汇总区（指标卡 + 三分布 chips） ---------- */
+
+.feedback-summary {
+  display: grid;
+  grid-template-columns: minmax(120px, 180px) repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.feedback-summary-metric,
+.feedback-distribution {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  padding: 0.85rem 1rem;
+}
+
+.feedback-summary-metric span {
+  display: block;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  margin-bottom: 0.35rem;
+}
+
+.feedback-summary-metric strong {
+  font-size: 1.6rem;
+  color: var(--color-text);
+}
+
+.feedback-distribution h3 {
+  margin: 0 0 0.5rem;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  letter-spacing: 0.03em;
+}
+
+.feedback-distribution ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.feedback-chip {
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface-muted);
+  padding: 0.2rem 0.65rem;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.feedback-chip strong {
+  color: var(--color-text);
+}
+
+.feedback-chip:hover {
+  border-color: var(--color-primary);
+}
+
+.feedback-chip.active {
+  border-color: var(--color-primary);
+  background: rgb(140 75 50 / 12%);
+  color: var(--color-primary-dark);
+}
+
+.feedback-chip.active strong {
+  color: var(--color-primary-dark);
+}
+
+.feedback-distribution-empty {
+  font-size: 12px;
+}
+
+/* ---------- 列表卡片 / 过滤 ---------- */
+
+.feedback-list-card {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.feedback-toolbar {
+  align-items: center;
+}
+
+.feedback-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+}
+
+.feedback-filters label {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.feedback-filters select {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  padding: 0.5rem 0.7rem;
+  font: inherit;
+}
+
+.feedback-reset {
+  padding: 0.5rem 0.9rem;
+  font-size: 13px;
+}
+
+/* ---------- 表格 ---------- */
+
+.feedback-table-wrap {
+  overflow-x: auto;
+}
+
+.feedback-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.feedback-table th,
+.feedback-table td {
+  padding: 0.7rem 0.8rem;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.feedback-table th {
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.feedback-quote-cell {
+  max-width: 300px;
+}
+
+.feedback-intent-cell {
+  max-width: 200px;
+  color: var(--color-text-secondary);
+}
+
+.feedback-category {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.feedback-toggle {
+  padding: 0.45rem 0.9rem;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.feedback-status--new,
+.feedback-priority--urgent {
+  background: rgb(220 38 38 / 10%);
+  color: var(--color-error);
+}
+
+.feedback-status--triaged,
+.feedback-priority--high {
+  background: rgb(217 119 6 / 10%);
+  color: var(--color-warning);
+}
+
+.feedback-status--in_progress,
+.feedback-priority--normal {
+  background: rgb(37 99 235 / 10%);
+  color: #1d4ed8;
+}
+
+.feedback-status--done,
+.feedback-priority--low {
+  background: rgb(22 163 74 / 12%);
+  color: var(--color-success);
+}
+
+.feedback-status--archived {
+  background: var(--color-surface-muted);
+  color: var(--color-text-secondary);
+}
+
+/* ---------- 展开详情 ---------- */
+
+.feedback-detail-row td {
+  background: var(--color-surface-muted);
+}
+
+.feedback-detail {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.feedback-detail-dl {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0;
+}
+
+.feedback-detail-dl div {
+  display: grid;
+  grid-template-columns: 6.5rem minmax(0, 1fr);
+  gap: 0.75rem;
+}
+
+.feedback-detail-dl dt {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.feedback-detail-dl dd {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.feedback-verbatim {
+  border-left: 3px solid var(--color-primary);
+  background: var(--color-surface);
+  padding: 0.5rem 0.75rem;
+  font-weight: 600;
+}
+
+.feedback-flow-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  border-top: 1px dashed var(--color-border);
+  padding-top: var(--space-3);
+}
+
+.feedback-flow-actions .secondary-action {
+  padding: 0.45rem 1rem;
+  font-size: 13px;
+}
+
+/* ---------- 关联工件编辑器 ---------- */
+
+.feedback-link-editor {
+  display: grid;
+  gap: 0.7rem;
+  border-top: 1px dashed var(--color-border);
+  padding-top: var(--space-3);
+}
+
+.feedback-link-editor h4 {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.feedback-link-fields {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.feedback-link-fields label {
+  display: grid;
+  grid-template-columns: 6.5rem minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.feedback-link-fields input {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  padding: 0.45rem 0.6rem;
+  font: inherit;
+  font-weight: 400;
+  color: var(--color-text);
+}
+
+.feedback-link-fields input:focus {
+  outline: 2px solid rgb(140 75 50 / 35%);
+  border-color: var(--color-primary);
+}
+
+.feedback-link-fields input:disabled {
+  opacity: 0.6;
+}
+
+.feedback-link-save {
+  justify-self: start;
+  padding: 0.45rem 1rem;
+  font-size: 13px;
+}
+
+.feedback-link-save:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.feedback-action-error {
+  margin: 0;
+}
+
+/* ---------- 移动端（≤768px）：表格转卡片 + 汇总堆叠 ---------- */
+
+@media (max-width: 768px) {
+  .feedback-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .feedback-summary-metric {
+    grid-column: 1 / -1;
+  }
+
+  .feedback-table-wrap {
+    overflow: visible;
+  }
+
+  .feedback-table thead {
+    display: none;
+  }
+
+  .feedback-table,
+  .feedback-table tbody,
+  .feedback-table tr,
+  .feedback-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .feedback-table tr {
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    background: var(--color-surface);
+    margin-bottom: 0.6rem;
+    padding: 0.25rem 0.85rem;
+  }
+
+  .feedback-table tr:last-child {
+    margin-bottom: 0;
+  }
+
+  .feedback-table td {
+    display: grid;
+    grid-template-columns: 5.5rem minmax(0, 1fr);
+    gap: 0.5rem;
+    align-items: baseline;
+    border-bottom: 0;
+    padding: 0.55rem 0;
+  }
+
+  .feedback-table td::before {
+    content: attr(data-label);
+    color: var(--color-text-secondary);
+    font-size: 0.82rem;
+  }
+
+  .feedback-quote-cell,
+  .feedback-intent-cell {
+    max-width: none;
+  }
+
+  /* 展开详情与主行同卡（detail-row 独立边框） */
+  .feedback-detail-row {
+    border: 1px dashed var(--color-border);
+    border-radius: 10px;
+    margin-top: 0.4rem;
+  }
+
+  .feedback-detail-row td {
+    background: var(--color-surface-muted);
+  }
+
+  .feedback-detail-dl div {
+    grid-template-columns: 5.5rem minmax(0, 1fr);
+  }
+
+  .feedback-link-fields label {
+    grid-template-columns: 5.5rem minmax(0, 1fr);
+  }
+
+  /* 触控目标 ≥44px */
+  .feedback-toggle,
+  .feedback-reset,
+  .feedback-flow-actions .secondary-action,
+  .feedback-link-save,
+  .feedback-filters select {
+    min-height: 44px;
+  }
+
+  .feedback-link-fields input {
+    min-height: 44px;
+  }
+}

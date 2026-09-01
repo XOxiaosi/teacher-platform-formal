@@ -1,0 +1,68 @@
+.agenda-item {
+  display: flex;
+  gap: var(--space-4);
+  align-items: flex-start;
+  justify-content: space-between;
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-text-secondary);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  padding: var(--space-4);
+}
+
+.agenda-item--lesson {
+  border-left-color: var(--color-primary);
+}
+
+.agenda-item--pending_action {
+  border-left-color: var(--color-warning);
+}
+
+.agenda-item--memo {
+  border-left-color: var(--color-accent);
+}
+
+.agenda-item--focused {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.agenda-item__body,
+.agenda-item__meta {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.agenda-item__body {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.agenda-item__meta {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+}
+
+.agenda-item__time,
+.agenda-item__student,
+.agenda-item__status {
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+}
+
+.agenda-item__time {
+  min-width: 7rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.agenda-item__title {
+  overflow-wrap: anywhere;
+}
+
+.agenda-item__actions a {
+  color: var(--color-primary-dark);
+  font-size: 0.875rem;
+  font-weight: 700;
+  text-underline-offset: 0.18em;
+}

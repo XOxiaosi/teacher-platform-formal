@@ -1,0 +1,563 @@
+/* ========================================
+   P8 LLM 配置页（/settings/llm）
+   复用 globals/patterns 令牌：page-card、page-hero、
+   primary-action、secondary-action、--color-* 变量
+   ======================================== */
+
+.llm-config-page {
+  display: grid;
+  gap: 1rem;
+  --page-hero-bg: linear-gradient(135deg, rgb(140 75 50 / 12%), rgb(187 112 76 / 8%));
+}
+
+/* ---------- 全局操作错误横幅 ---------- */
+.llm-action-error {
+  border: 1px solid var(--color-error);
+  border-radius: var(--radius-md);
+  background: rgb(166 75 67 / 8%);
+  padding: 0.75rem 1rem;
+  color: var(--color-error);
+}
+
+/* ---------- 用量卡片 ---------- */
+.llm-usage-card {
+  display: grid;
+  gap: 1rem;
+}
+
+.llm-usage-card h3,
+.llm-list-card h3,
+.llm-create-form h3 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 1.05rem;
+}
+
+/* 看板头部：标题 + 时间段切换 */
+.llm-usage-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem 1rem;
+}
+
+.llm-range-switch {
+  display: inline-flex;
+  gap: 0.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+  padding: 0.2rem;
+}
+
+.llm-range-switch button {
+  border: 0;
+  border-radius: calc(var(--radius-md) - 2px);
+  background: transparent;
+  padding: 0.45rem 0.9rem;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.llm-range-switch button.active {
+  background: var(--color-surface);
+  color: var(--color-primary-dark);
+  box-shadow: var(--shadow-card);
+}
+
+/* 看板加载/错误/空态 */
+.llm-usage-error {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  border: 1px solid var(--color-error);
+  border-radius: var(--radius-md);
+  background: rgb(166 75 67 / 8%);
+  padding: 0.75rem 1rem;
+  color: var(--color-error);
+}
+
+.llm-usage-error p {
+  margin: 0;
+}
+
+.llm-usage-error .secondary-action {
+  padding: 0.45rem 0.9rem;
+  font-size: 0.85rem;
+}
+
+.llm-usage-empty {
+  padding: 0.5rem 0;
+}
+
+.llm-usage-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.llm-usage-metric {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+  padding: 0.9rem 1rem;
+}
+
+.llm-usage-metric span {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: var(--color-text-secondary);
+  font-size: 0.8rem;
+}
+
+.llm-usage-metric strong {
+  color: var(--color-primary-dark);
+  font-size: 1.35rem;
+}
+
+/* ---------- 趋势简图（纯 CSS 柱状） ---------- */
+.llm-trend {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.llm-trend h4 {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+}
+
+.llm-trend-empty {
+  padding: 0.25rem 0;
+}
+
+.llm-trend-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.4rem;
+  height: 150px;
+  padding-top: 1.4rem; /* 为柱顶数值留位 */
+  border-bottom: 1px solid var(--color-border);
+}
+
+.llm-trend-col {
+  display: grid;
+  flex: 1 1 0;
+  grid-template-rows: auto 1fr auto;
+  gap: 0.3rem;
+  align-items: end;
+  min-width: 0;
+  height: 100%;
+  text-align: center;
+}
+
+.llm-trend-value {
+  color: var(--color-text-secondary);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.llm-trend-track {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  height: calc(100% - 2.6rem);
+  min-height: 40px;
+  border-radius: 4px;
+  background: var(--color-surface-muted);
+}
+
+.llm-trend-bar {
+  width: 100%;
+  border-radius: 4px 4px 0 0;
+  background: linear-gradient(180deg, var(--color-primary), var(--color-accent));
+  min-height: 4px;
+  transition: height 0.3s ease;
+}
+
+.llm-trend-label {
+  color: var(--color-text-secondary);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+/* ---------- Provider 维度条形分布 ---------- */
+.llm-provider-bars {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.llm-provider-bar-row {
+  display: grid;
+  grid-template-columns: 7rem minmax(0, 1fr) auto;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.llm-provider-bar-name {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.llm-provider-bar-track {
+  height: 0.7rem;
+  border-radius: 999px;
+  background: var(--color-surface-muted);
+  overflow: hidden;
+}
+
+.llm-provider-bar {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--color-accent);
+  min-width: 4px;
+  transition: width 0.3s ease;
+}
+
+.llm-provider-bar-value {
+  color: var(--color-text-secondary);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.llm-usage-breakdown h4 {
+  margin: 0 0 0.5rem;
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+}
+
+.llm-usage-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.llm-usage-table th,
+.llm-usage-table td {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+}
+
+.llm-usage-table th {
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+}
+
+/* ---------- 新增表单 ---------- */
+.llm-create-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.llm-first-hint {
+  border: 1px dashed var(--color-primary);
+  border-radius: var(--radius-md);
+  background: rgb(140 75 50 / 6%);
+  padding: 0.6rem 0.9rem;
+  color: var(--color-primary-dark);
+  font-size: 0.9rem;
+}
+
+.llm-form-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.llm-create-form label,
+.llm-edit-form label {
+  display: grid;
+  gap: 0.4rem;
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.llm-create-form input,
+.llm-create-form select,
+.llm-edit-form input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 0.7rem 0.8rem;
+  color: var(--color-text);
+  background: var(--color-surface);
+  font: inherit;
+}
+
+.llm-form-error {
+  color: var(--color-error);
+}
+
+/* ---------- Provider 列表 ---------- */
+.llm-list-card {
+  display: grid;
+  gap: 1rem;
+}
+
+.llm-provider-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.llm-provider-card {
+  display: grid;
+  gap: 0.9rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  padding: 1rem 1.25rem;
+}
+
+.llm-provider-card.disabled {
+  opacity: 0.65;
+}
+
+.llm-provider-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.llm-provider-head h4 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 1.05rem;
+}
+
+.llm-provider-meta {
+  margin: 0.2rem 0 0;
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+}
+
+.llm-provider-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.llm-badge {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 0.15rem 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.llm-badge.primary {
+  background: rgb(140 75 50 / 14%);
+  color: var(--color-primary-dark);
+}
+
+.llm-badge.active {
+  background: rgb(80 115 91 / 14%);
+  color: var(--color-success);
+}
+
+.llm-badge.disabled {
+  background: var(--color-surface-muted);
+  color: var(--color-text-secondary);
+}
+
+.llm-provider-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.5rem 1.5rem;
+  margin: 0;
+}
+
+.llm-provider-details div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.llm-provider-details dt {
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.llm-provider-details dd {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.llm-provider-details code {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.85rem;
+}
+
+/* ---------- 编辑表单 ---------- */
+.llm-edit-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.9rem;
+  border-top: 1px dashed var(--color-border);
+  padding-top: 0.9rem;
+}
+
+.llm-edit-actions {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  grid-column: 1 / -1;
+}
+
+.llm-edit-actions .primary-action,
+.llm-edit-actions .secondary-action {
+  padding: 0.55rem 1rem;
+}
+
+/* ---------- 测试结果 ---------- */
+.llm-test-result {
+  border-radius: var(--radius-md);
+  padding: 0.6rem 0.9rem;
+  font-size: 0.9rem;
+}
+
+.llm-test-result.ok {
+  background: rgb(80 115 91 / 12%);
+  color: var(--color-success);
+}
+
+.llm-test-result.fail {
+  background: rgb(166 75 67 / 10%);
+  color: var(--color-error);
+}
+
+/* ---------- 操作按钮 ---------- */
+.llm-provider-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.llm-provider-actions .secondary-action,
+.llm-provider-actions .danger-action {
+  padding: 0.55rem 1rem;
+  font-size: 0.88rem;
+}
+
+.danger-action {
+  border: 1px solid var(--color-error);
+  border-radius: var(--radius-md);
+  background: transparent;
+  padding: 0.8rem 1rem;
+  color: var(--color-error);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.danger-action:hover:not(:disabled) {
+  background: rgb(166 75 67 / 10%);
+}
+
+.danger-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* ---------- 移动端（≤768px，沿用既有 tokens） ---------- */
+@media (max-width: 768px) {
+  .llm-usage-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .llm-range-switch {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .llm-range-switch button {
+    min-height: 44px;
+  }
+
+  .llm-trend-bars {
+    height: 120px;
+  }
+
+  .llm-provider-bar-row {
+    grid-template-columns: 5.5rem minmax(0, 1fr);
+  }
+
+  .llm-provider-bar-value {
+    grid-column: 2;
+  }
+
+  .llm-usage-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .llm-usage-table-wrap {
+    overflow-x: auto;
+  }
+
+  .llm-usage-table thead {
+    display: none;
+  }
+
+  .llm-usage-table,
+  .llm-usage-table tbody,
+  .llm-usage-table tr,
+  .llm-usage-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .llm-usage-table tr {
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    background: var(--color-surface);
+    margin-bottom: 0.6rem;
+    padding: 0.2rem 0.8rem;
+  }
+
+  .llm-usage-table tr:last-child {
+    margin-bottom: 0;
+  }
+
+  .llm-usage-table td {
+    display: grid;
+    grid-template-columns: 5.5rem minmax(0, 1fr);
+    gap: 0.5rem;
+    align-items: baseline;
+    border-bottom: 0;
+    padding: 0.55rem 0;
+  }
+
+  .llm-usage-table td::before {
+    content: attr(data-label);
+    color: var(--color-text-secondary);
+    font-size: 0.82rem;
+  }
+
+  /* 触控目标 ≥44px */
+  .llm-provider-actions .secondary-action,
+  .llm-provider-actions .danger-action,
+  .llm-edit-actions .primary-action,
+  .llm-edit-actions .secondary-action,
+  .llm-create-form .primary-action {
+    min-height: 44px;
+  }
+}

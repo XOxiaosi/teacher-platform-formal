@@ -1,0 +1,238 @@
+/* ========================================
+   平台级用量费用看板（/admin/usage，backend5 t28）
+   复用 admin.css 令牌；时段切换 + 教师钻取 + 移动端
+   ======================================== */
+
+.admin-usage-page {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.admin-usage-card {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.admin-usage-toolbar {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.admin-usage-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.admin-usage-ranges {
+  display: inline-flex;
+  gap: 0.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+  padding: 0.2rem;
+}
+
+.admin-usage-ranges button {
+  border: 0;
+  border-radius: calc(var(--radius-md) - 2px);
+  background: transparent;
+  padding: 0.45rem 0.9rem;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.admin-usage-ranges button.active {
+  background: var(--color-surface);
+  color: var(--color-primary-dark);
+  box-shadow: var(--shadow-card);
+}
+
+.admin-usage-teacher-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.admin-usage-teacher-filter label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.admin-usage-teacher-filter input {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  padding: 0.5rem 0.7rem;
+  font: inherit;
+  color: var(--color-text);
+  min-width: 14rem;
+}
+
+.admin-usage-teacher-filter .secondary-action {
+  padding: 0.5rem 0.9rem;
+  font-size: 13px;
+}
+
+/* 错误 / 空态 */
+.admin-usage-error {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  border: 1px solid var(--color-error);
+  border-radius: var(--radius-md);
+  background: rgb(166 75 67 / 8%);
+  padding: 0.75rem 1rem;
+  color: var(--color-error);
+}
+
+.admin-usage-error p {
+  margin: 0;
+}
+
+.admin-usage-error .secondary-action {
+  padding: 0.45rem 0.9rem;
+  font-size: 0.85rem;
+}
+
+.admin-usage-empty {
+  padding: 0.5rem 0;
+}
+
+/* 指标卡 */
+.admin-usage-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.admin-usage-metric {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+  padding: 0.9rem 1rem;
+}
+
+.admin-usage-metric span {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.admin-usage-metric strong {
+  color: var(--color-primary-dark);
+  font-size: 1.35rem;
+}
+
+/* byProvider 明细表 */
+.admin-usage-breakdown {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.admin-usage-breakdown h3 {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+}
+
+.admin-usage-table-wrap {
+  overflow-x: auto;
+}
+
+.admin-usage-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.admin-usage-table th,
+.admin-usage-table td {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+}
+
+.admin-usage-table th {
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+}
+
+/* ---------- 移动端（≤768px） ---------- */
+@media (max-width: 768px) {
+  .admin-usage-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-usage-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .admin-usage-ranges {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .admin-usage-ranges button,
+  .admin-usage-teacher-filter .secondary-action,
+  .admin-usage-teacher-filter input {
+    min-height: 44px;
+  }
+
+  .admin-usage-teacher-filter input {
+    min-width: 0;
+    flex: 1 1 100%;
+  }
+
+  .admin-usage-table-wrap {
+    overflow: visible;
+  }
+
+  .admin-usage-table thead {
+    display: none;
+  }
+
+  .admin-usage-table,
+  .admin-usage-table tbody,
+  .admin-usage-table tr,
+  .admin-usage-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .admin-usage-table tr {
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    background: var(--color-surface);
+    margin-bottom: 0.6rem;
+    padding: 0.2rem 0.8rem;
+  }
+
+  .admin-usage-table tr:last-child {
+    margin-bottom: 0;
+  }
+
+  .admin-usage-table td {
+    display: grid;
+    grid-template-columns: 5.5rem minmax(0, 1fr);
+    gap: 0.5rem;
+    align-items: baseline;
+    border-bottom: 0;
+    padding: 0.55rem 0;
+  }
+
+  .admin-usage-table td::before {
+    content: attr(data-label);
+    color: var(--color-text-secondary);
+    font-size: 0.82rem;
+  }
+}

@@ -1,0 +1,158 @@
+.confirmation-card {
+  border: 1px solid rgb(151 105 44 / 34%);
+  border-left: 3px solid #9a6a2c;
+  border-radius: var(--radius-md);
+  background: #fbf6e9;
+  padding: 16px 18px;
+}
+
+.confirmation-card--consumed {
+  border-color: rgb(60 117 82 / 30%);
+  border-left-color: var(--color-success);
+  background: rgb(60 117 82 / 5%);
+}
+
+.confirmation-card--cancelled,
+.confirmation-card--expired {
+  border-color: var(--color-border);
+  border-left-color: var(--color-text-secondary);
+  background: var(--color-surface);
+}
+
+.confirmation-card__header,
+.confirmation-target,
+.confirmation-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.confirmation-card h3 {
+  margin: 3px 0;
+  font-family: var(--font-body);
+  font-size: 16px;
+}
+
+.confirmation-card code {
+  color: var(--color-text-secondary);
+  font-size: 10px;
+}
+
+.confirmation-status {
+  flex: none;
+  border: 1px solid currentcolor;
+  border-radius: 999px;
+  padding: 3px 8px;
+  color: #8a5c20;
+  font-size: 10px;
+}
+
+.confirmation-status--consumed {
+  color: var(--color-success);
+}
+
+.confirmation-status--cancelled,
+.confirmation-status--expired {
+  color: var(--color-text-secondary);
+}
+
+.confirmation-target {
+  margin-top: 14px;
+  border-top: 1px solid var(--color-border);
+  padding-top: 12px;
+  font-size: 12px;
+}
+
+.confirmation-target span,
+.confirmation-change span,
+.confirmation-expiry {
+  color: var(--color-text-secondary);
+}
+
+.confirmation-target strong {
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.confirmation-change {
+  display: grid;
+  gap: 5px;
+  margin-top: 10px;
+}
+
+.confirmation-change p {
+  display: grid;
+  grid-template-columns: 54px 1fr;
+  gap: 8px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.confirmation-parameters {
+  display: grid;
+  gap: 5px;
+  margin: 12px 0 0;
+  border-radius: var(--radius-sm);
+  background: rgb(255 255 255 / 52%);
+  padding: 9px 11px;
+}
+
+.confirmation-parameters div {
+  display: grid;
+  grid-template-columns: minmax(90px, 140px) 1fr;
+  gap: 10px;
+  font-size: 11px;
+}
+
+.confirmation-parameters dt {
+  color: var(--color-text-secondary);
+}
+
+.confirmation-parameters dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.confirmation-expiry {
+  margin-top: 10px !important;
+  font-size: 10px;
+}
+
+.confirmation-error {
+  border-radius: var(--radius-sm);
+  background: rgb(166 75 67 / 8%);
+  padding: 8px 10px;
+  color: var(--color-error);
+  font-size: 12px;
+}
+
+.confirmation-actions {
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.confirmation-actions button {
+  border-radius: var(--radius-sm);
+  padding: 8px 13px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.confirmation-confirm {
+  border: 1px solid #8a5c20;
+  background: #8a5c20;
+  color: #fffdf8;
+}
+
+.confirmation-cancel {
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-secondary);
+}
+
+.confirmation-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}

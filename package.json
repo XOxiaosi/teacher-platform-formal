@@ -1,0 +1,42 @@
+{
+  "name": "teacher-platform-formal",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "教师平台正式版：受控迁移运行基线",
+  "packageManager": "npm@10.9.2",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "legacy:frontend": "npm -w @teacher-platform/frontend run dev",
+    "dev:backend": "npm run start:local-safe",
+    "build": "npm -w @teacher-platform/api-contracts run build && npm -w @teacher-platform/domain run build && npm -w @teacher-platform/contracts run build && npm -w @teacher-platform/backend run build && npm -w @teacher-platform/frontend run build && npm -w @teacher-platform/admin run build",
+    "typecheck": "npm -w @teacher-platform/api-contracts run build && npm -w @teacher-platform/domain run typecheck && npm -w @teacher-platform/contracts run build && npm -w @teacher-platform/backend run build && npm -w @teacher-platform/frontend run lint && npm -w @teacher-platform/admin run lint",
+    "test:local-safe": "node --test scripts/start-local-safe.test.mjs scripts/smoke-built-backend.test.mjs",
+    "test": "npm run test:local-safe && npm -w @teacher-platform/api-contracts run test && npm -w @teacher-platform/domain run test && npm -w @teacher-platform/contracts run build && npm -w @teacher-platform/backend run test && npm -w @teacher-platform/frontend run test && npm -w @teacher-platform/admin run test && npm -w @teacher-platform/ops run test",
+    "lint": "npm -w @teacher-platform/backend run lint && npm -w @teacher-platform/frontend run lint && npm -w @teacher-platform/admin run lint",
+    "smoke:backend": "node scripts/smoke-built-backend.mjs",
+    "start:local-safe": "node scripts/start-local-safe.mjs",
+    "check:file-size": "node scripts/check-file-size.mjs",
+    "check": "npm run check:file-size && npm run typecheck && npm run lint && npm run test && npm run build"
+  },
+  "devDependencies": {
+    "jsdom": "^27.3.0",
+    "typescript": "^6.0.3"
+  },
+  "engines": {
+    "node": ">=22.13.0 <23",
+    "npm": "10.9.2"
+  },
+  "teacherPlatformMigration": {
+    "sourceCommit": "8673884f57c9d23abdb26715913d6199b1b4d16b",
+    "legacyOnlyPackages": [
+      "@teacher-platform/admin",
+      "@teacher-platform/backend",
+      "@teacher-platform/contracts",
+      "@teacher-platform/frontend",
+      "@teacher-platform/ops"
+    ]
+  }
+}

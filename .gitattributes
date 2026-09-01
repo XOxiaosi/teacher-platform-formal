@@ -1,0 +1,10 @@
+* text=auto eol=lf
+
+# Windows command scripts keep their native line endings.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Reference evidence is binary and must never be line-ending normalized.
+*.jpg binary
+*.jpeg binary
+*.png binary

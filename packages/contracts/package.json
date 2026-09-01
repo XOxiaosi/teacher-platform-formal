@@ -1,0 +1,27 @@
+{
+  "name": "@teacher-platform/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "共享类型定义和 Prisma schema",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "npm run db:generate && tsc -p tsconfig.json",
+    "prepare": "npm run build",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy --schema prisma/schema.prisma",
+    "db:verify-empty-migration": "node scripts/verify-empty-migration.mjs",
+    "db:verify-existing-baseline": "node scripts/verify-existing-baseline.mjs",
+    "env:verify": "node scripts/verify-env-example.mjs",
+    "db:studio": "prisma studio"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.3"
+  },
+  "devDependencies": {
+    "prisma": "^6.19.3",
+    "typescript": "^6.0.3"
+  }
+}

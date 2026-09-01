@@ -1,0 +1,35 @@
+{
+  "name": "@teacher-platform/backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "后端项目",
+  "main": "./src/index.ts",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "node scripts/run-tests-isolated.mjs",
+    "lint": "eslint src/ tests/"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.3",
+    "@teacher-platform/contracts": "*",
+    "express": "^5.2.1",
+    "formidable": "^3.5.4"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.1.1",
+    "@types/supertest": "^7.2.0",
+    "@typescript-eslint/eslint-plugin": "^8.63.0",
+    "@typescript-eslint/parser": "^8.63.0",
+    "eslint": "^10.6.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.9.4",
+    "supertest": "^7.2.2",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.23.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
+  }
+}

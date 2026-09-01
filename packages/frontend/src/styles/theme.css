@@ -1,0 +1,24 @@
+:root {
+  --color-primary: #8c4b32;
+  --color-primary-dark: #653321;
+  --color-accent: #bb704c;
+  --color-bg: #f2eee6;
+  --color-surface: #fbf9f4;
+  --color-surface-muted: #eee7dc;
+  --color-text: #292722;
+  --color-text-secondary: #706b62;
+  --color-border: #d9d2c5;
+  --color-success: #50735b;
+  --color-warning: #9b6a2f;
+  --color-error: #a64b43;
+  --shadow-card: 0 12px 30px rgb(70 57 42 / 7%);
+  --radius-lg: 10px;
+  --radius-md: 7px;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --font-body: Inter, "Noto Sans SC", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-heading: "Noto Serif SC", "Songti SC", Georgia, serif;
+}

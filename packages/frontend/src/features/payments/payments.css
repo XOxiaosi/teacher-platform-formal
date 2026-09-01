@@ -1,0 +1,155 @@
+.payments-page {
+  display: grid;
+  gap: 1rem;
+  --page-hero-bg: linear-gradient(135deg, rgba(37, 99, 235, 0.12), rgba(14, 165, 233, 0.08));
+}
+
+.payment-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.payment-form-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.payment-form label {
+  display: grid;
+  gap: 0.4rem;
+  color: #334155;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.payment-form input,
+.payment-form select,
+.payment-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.75rem;
+  padding: 0.7rem 0.8rem;
+  color: #0f172a;
+  background: #ffffff;
+  font: inherit;
+}
+
+.payment-form textarea {
+  min-height: 5rem;
+  resize: vertical;
+}
+
+.payments-form-error,
+.payments-error {
+  color: #b91c1c;
+}
+
+.payment-balance-preview {
+  border: 1px solid #dbeafe;
+  border-radius: 16px;
+  background: #eff6ff;
+  padding: 1rem;
+}
+
+.payment-balance-preview h4 {
+  margin: 0 0 0.75rem;
+  color: #1e3a8a;
+}
+
+.payment-balance-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.payment-balance-metric {
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 0.8rem;
+}
+
+.payment-balance-metric span {
+  display: block;
+  color: #64748b;
+  font-size: 0.8rem;
+  margin-bottom: 0.35rem;
+}
+
+.payment-balance-metric strong {
+  color: #172033;
+  font-size: 1.3rem;
+}
+
+.payments-table-wrap {
+  overflow-x: auto;
+}
+
+.payments-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.payments-table th,
+.payments-table td {
+  padding: 0.75rem;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: left;
+}
+
+.payments-table th {
+  color: #475569;
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+}
+
+/* ========================================
+   P2 移动端：缴费表格 → 卡片列表（≤768px）
+   依赖 JSX 的 td data-label 属性；卡片复用 .page-card 视觉语言
+   ======================================== */
+@media (max-width: 768px) {
+  .payments-table-wrap {
+    overflow: visible;
+  }
+
+  .payments-table thead {
+    display: none;
+  }
+
+  .payments-table,
+  .payments-table tbody,
+  .payments-table tr,
+  .payments-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .payments-table tr {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #ffffff;
+    margin-bottom: 0.75rem;
+    padding: 0.25rem 0.85rem;
+  }
+
+  .payments-table tr:last-child {
+    margin-bottom: 0;
+  }
+
+  .payments-table td {
+    display: grid;
+    grid-template-columns: 6rem minmax(0, 1fr);
+    gap: 0.5rem;
+    align-items: baseline;
+    border-bottom: 0;
+    padding: 0.6rem 0;
+    min-height: 44px;
+  }
+
+  .payments-table td::before {
+    content: attr(data-label);
+    color: #64748b;
+    font-size: 0.85rem;
+  }
+}

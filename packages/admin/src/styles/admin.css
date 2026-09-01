@@ -1,0 +1,646 @@
+/* ========================================
+   后台管理前端布局（packages/admin，独立构建）
+   复用 theme.css/patterns.css tokens；登录页与总览骨架
+   ======================================== */
+
+.admin-shell {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  gap: var(--space-8);
+  padding: var(--space-8);
+}
+
+.admin-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-brand h1 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.admin-card {
+  width: min(420px, 100%);
+}
+
+.admin-card h2 {
+  margin: 0.25rem 0;
+  font-size: 26px;
+}
+
+.admin-subtitle {
+  margin: 0 0 var(--space-6);
+  color: var(--color-text-secondary);
+  line-height: 1.7;
+}
+
+.admin-form {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.admin-form label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--color-text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.admin-form input {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 0.6rem 0.8rem;
+  font: inherit;
+  color: var(--color-text);
+}
+
+.admin-error {
+  margin: 0;
+  border: 1px solid rgb(166 75 67 / 30%);
+  border-radius: var(--radius-md);
+  background: rgb(166 75 67 / 8%);
+  padding: 0.6rem 0.8rem;
+  color: var(--color-error);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* 总览占位骨架 */
+.admin-overview {
+  display: grid;
+  gap: var(--space-6);
+  padding: var(--space-8);
+}
+
+.admin-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: var(--space-4);
+}
+
+.admin-topbar .admin-identity {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+/* ========================================
+   后台外壳（A3：顶栏导航 + 内容区）
+   ======================================== */
+
+.admin-shell-frame {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-height: 100vh;
+}
+
+.admin-topbar {
+  position: sticky;
+  z-index: 10;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg);
+  padding: 10px 20px;
+}
+
+.admin-topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.admin-topbar-brand h1 {
+  margin: 0;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-topbar-nav {
+  display: flex;
+  gap: 4px;
+  margin-left: var(--space-4);
+}
+
+.admin-nav-item {
+  min-height: 40px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  padding: 0.5rem 0.9rem;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.admin-nav-item:hover,
+.admin-nav-item.active {
+  background: var(--color-surface-muted);
+  color: var(--color-primary-dark);
+}
+
+.admin-main {
+  padding: 24px;
+  min-width: 0;
+}
+
+.admin-page {
+  display: grid;
+  gap: var(--space-6);
+}
+
+/* ========================================
+   教师总览列表
+   ======================================== */
+
+.admin-teachers-card {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.admin-list-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.admin-list-toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.admin-list-toolbar select {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  padding: 0.5rem 0.7rem;
+  font: inherit;
+}
+
+.admin-list-total {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.admin-teacher-list {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-teacher-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) auto minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: center;
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  padding: 0.75rem 1rem;
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.admin-teacher-row:hover {
+  border-color: var(--color-primary);
+}
+
+.admin-teacher-main {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.admin-teacher-main small {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-teacher-db,
+.admin-teacher-time {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.admin-status--active {
+  background: rgb(22 163 74 / 12%);
+  color: var(--color-success);
+}
+
+.admin-status--disabled {
+  background: rgb(100 116 139 / 10%);
+  color: var(--color-text-secondary);
+}
+
+.admin-pagination {
+  display: flex;
+  gap: var(--space-4);
+  align-items: center;
+  justify-content: flex-end;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.admin-pagination button {
+  min-height: 40px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  padding: 0.4rem 0.9rem;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.admin-pagination button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* ========================================
+   教师详情
+   ======================================== */
+
+.admin-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.admin-detail-actions button {
+  min-height: 40px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  padding: 0.5rem 0.9rem;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 13px;
+  cursor: not-allowed;
+}
+
+.admin-detail-actions button:not(:disabled) {
+  cursor: pointer;
+}
+
+.admin-detail-actions button:disabled {
+  opacity: 0.55;
+}
+
+.admin-action-tip {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.admin-teacher-meta,
+.admin-aggregates {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.admin-teacher-meta h3,
+.admin-aggregates h3 {
+  margin: 0;
+}
+
+.admin-detail-dl {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0;
+}
+
+.admin-detail-dl div {
+  display: grid;
+  grid-template-columns: 6rem 1fr;
+  gap: 0.75rem;
+}
+
+.admin-detail-dl dt {
+  color: var(--color-text-secondary);
+}
+
+.admin-detail-dl dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.admin-aggregate-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.75rem;
+}
+
+.admin-aggregate-metric {
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+  padding: 0.85rem;
+}
+
+.admin-aggregate-metric span {
+  display: block;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  margin-bottom: 0.35rem;
+}
+
+.admin-aggregate-metric strong {
+  font-size: 1.4rem;
+  color: var(--color-text);
+}
+
+.admin-aggregate-last {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.admin-degraded {
+  margin: 0;
+  border-left: 3px solid var(--color-warning);
+  background: rgb(217 119 6 / 8%);
+  padding: 0.6rem 0.8rem;
+  color: var(--color-warning);
+  font-size: 13px;
+}
+
+.admin-recent-executions h4 {
+  margin: 0 0 0.5rem;
+}
+
+.admin-recent-executions ul {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-recent-executions li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: center;
+  border-bottom: 1px solid var(--color-border);
+  padding: 0.4rem 0;
+  font-size: 13px;
+}
+
+.admin-exec-status {
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.admin-exec-status--succeeded {
+  background: rgb(22 163 74 / 12%);
+  color: var(--color-success);
+}
+
+.admin-exec-status--failed {
+  background: rgb(220 38 38 / 10%);
+  color: var(--color-error);
+}
+
+.admin-exec-status--partial,
+.admin-exec-status--waiting_confirmation {
+  background: rgb(217 119 6 / 12%);
+  color: var(--color-warning);
+}
+
+/* 移动端：教师行纵向堆叠 */
+@media (max-width: 768px) {
+  .admin-topbar {
+    flex-wrap: wrap;
+    padding: 8px 12px;
+  }
+
+  .admin-topbar-nav {
+    order: 3;
+    width: 100%;
+    overflow-x: auto;
+    margin-left: 0;
+  }
+
+  .admin-main {
+    padding: 12px;
+  }
+
+  .admin-teacher-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .admin-teacher-db {
+    grid-column: 1;
+  }
+
+  .admin-teacher-time {
+    grid-column: 1 / -1;
+  }
+
+  .admin-detail-actions button {
+    flex: 1 1 auto;
+  }
+}
+
+/* ========================================
+   A5 管理动作 + 交互/健康看板
+   ======================================== */
+
+.admin-action-toast {
+  margin: 0;
+  border-left: 3px solid var(--color-success);
+  background: rgb(80 115 91 / 8%);
+  padding: 0.6rem 0.8rem;
+  color: var(--color-text);
+  font-size: 13px;
+}
+
+.admin-action-progress {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.admin-create-form {
+  display: grid;
+  gap: var(--space-3);
+  border-top: 1px dashed var(--color-border);
+  padding-top: var(--space-4);
+}
+
+.admin-create-form h4 {
+  margin: 0;
+}
+
+.admin-create-form label {
+  display: grid;
+  gap: 0.3rem;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.admin-create-form input[type="email"],
+.admin-create-form input[type="password"],
+.admin-create-form input:not([type]) {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  padding: 0.55rem 0.8rem;
+  font: inherit;
+  color: var(--color-text);
+}
+
+.admin-create-provision {
+  display: flex !important;
+  flex-direction: row;
+  gap: 0.5rem !important;
+  align-items: center;
+}
+
+.admin-create-form .primary-action {
+  width: fit-content;
+}
+
+.admin-restore-card {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.admin-restore-card h3 {
+  margin: 0;
+}
+
+.admin-restore-hint {
+  margin: 0;
+  color: var(--color-warning);
+  font-size: 13px;
+}
+
+.admin-restore-form {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+}
+
+.admin-restore-form label {
+  display: grid;
+  gap: 0.3rem;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.admin-restore-form input {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  padding: 0.55rem 0.8rem;
+  font: inherit;
+  color: var(--color-text);
+}
+
+/* 健康看板 */
+.admin-health-section {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.admin-health-section h3 {
+  margin: 0;
+}
+
+.admin-health-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+
+.admin-health-metric {
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+  padding: 0.85rem;
+}
+
+.admin-health-metric span {
+  display: block;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  margin-bottom: 0.35rem;
+}
+
+.admin-health-metric strong {
+  font-size: 1.3rem;
+  color: var(--color-text);
+}
+
+.admin-status-distribution h4 {
+  margin: 0 0 0.5rem;
+}
+
+.admin-status-distribution ul {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-status-distribution li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.admin-health-last {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.admin-ready {
+  margin: 0;
+  border-radius: var(--radius-md);
+  padding: 0.6rem 0.8rem;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.admin-ready--ok {
+  background: rgb(22 163 74 / 12%);
+  color: var(--color-success);
+}
+
+.admin-ready--bad {
+  background: rgb(220 38 38 / 10%);
+  color: var(--color-error);
+}
