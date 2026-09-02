@@ -8,7 +8,7 @@
 >
 > 后续关闭：同日正式迁移阶段 0 已关闭 T-029/T-030；当前完整验证 Gate 通过，见第 8 节与 `evidence/validation/BASELINE-FAILURES.md`
 >
-> 产品状态：`DRAFT`，不得据此宣称 V1、生产或上线完成
+> MIG-002 执行时产品状态：`DRAFT`；2026-09-01 后续已发布纯网页端 `V001`，但仍不得据此宣称产品、生产或上线完成
 
 ## 1. 本轮结果
 
@@ -106,4 +106,4 @@ MIG-002 当次报告中的失败保持为历史快照，没有用定向测试覆
 - 教师端 45/45 文件、361/361 用例，管理端 13/13 文件、89/89 用例通过；api-contracts、domain、local-safe 同时通过。
 - `npm ci` 前后 lock SHA-256 均为 `66025d5240b8bde503ea88a370041fa503ee418ee743db5c2668040f7d214067`；typecheck、lint、build、file-size 与 built backend smoke 均退出 0；临时端口和目录已清理。
 
-因此 T-029/T-030 当前为通过，但结论仍不扩张为“产品完成”“严格 500 行通过”“生产就绪”或“可以上线”。`PRODUCT.md` 仍为 DRAFT，873 个原样 legacy-only 项、5 个 M1 安全适配 legacy 项、27 个精确超长例外、Windows 11 子进程树、local-safe 非生产身份 fallback 的错误信息卫生、外部服务、云端、容量和供应链 audit 告警仍由后续 Gate 处理。
+因此 T-029/T-030 当前为通过，但结论仍不扩张为“产品完成”“严格 500 行通过”“生产就绪”或“可以上线”。MIG-002 执行时 `PRODUCT.md` 仍为 DRAFT，现已发布纯网页端 V001；873 个原样 legacy-only 项、5 个 M1 安全适配 legacy 项、27 个精确超长例外、Windows 11 子进程树、local-safe 非生产身份 fallback 的错误信息卫生、外部服务、云端、容量和供应链 audit 告警仍由后续 Gate 处理。
