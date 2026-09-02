@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "migrationId": "MIG-002",
-  "generatedAt": "2026-09-01T23:49:14.529Z",
+  "generatedAt": "2026-09-02T00:06:54.457Z",
   "target": "/Users/xiaosi/Developer/active/apps/teacher-platform-formal",
   "sources": {
     "A": {
@@ -59,7 +59,7 @@
     {
       "path": "evidence/migration/MIG-002-manifest-parts/source-b-001.jsonl",
       "entries": 79,
-      "sha256": "184642dc113af1f8077dd031d3b215f78a8b008f09244f6089f14d4cae7a2791"
+      "sha256": "3a2dd640b7e82c844de5745846896a987e12c567fd2779ac88f476fdff42b560"
     },
     {
       "path": "evidence/migration/MIG-002-manifest-parts/target-baseline-001.jsonl",
