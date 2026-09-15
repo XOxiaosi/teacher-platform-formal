@@ -1,0 +1,24 @@
+{
+  "logSha256": "74c2df9c2484f9dcae169d7922bbb70709980e0fb53f4d0d46345c9700949ad1",
+  "logParts": [
+    "evidence/project-history/baseline-through-20260914.md",
+    "evidence/project-history/journal-through-20260914.md"
+  ],
+  "files": [
+    {
+      "path": "evidence/project-history/baseline-through-20260914.md",
+      "prefixLines": 4,
+      "sha256": "2507eeabb408abf25208c816da601998543f8c439c86d192d6d271a5a6a6fdd2"
+    },
+    {
+      "path": "evidence/project-history/journal-through-20260914.md",
+      "prefixLines": 4,
+      "sha256": "a0b8ab6b285e13154bae9098c3c886c0cbc78f09eb8a7cd5c9809f8b1766ba62"
+    },
+    {
+      "path": "evidence/project-history/agent-rules-through-20260914.md",
+      "prefixLines": 4,
+      "sha256": "3a2411ac51e9310efe8516fddc8d15f00260a828b3bc5013bc2161f4672c544b"
+    }
+  ]
+}
