@@ -251,6 +251,10 @@ describe('Conversation API 契约', () => {
     expect(response.body.data.items[1]).toEqual({
       id: toolTurn.id,
       conversationId: conversation.id,
+      taskId: null,
+      executionId: null,
+      seq: null,
+      eventKind: null,
       kind: 'tool',
       createdAt: toolTurn.createdAt.toISOString(),
       toolCallId: 'call-1',

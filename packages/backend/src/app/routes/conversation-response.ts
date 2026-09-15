@@ -40,6 +40,10 @@ export interface ConversationDetailDto extends ConversationSummaryDto {
 interface BaseTurnDto {
   id: string;
   conversationId: string;
+  taskId: string | null;
+  executionId: string | null;
+  seq: number | null;
+  eventKind: string | null;
   createdAt: string;
 }
 
@@ -58,7 +62,7 @@ interface AssistantTurnDto extends BaseTurnDto {
 
 interface ErrorTurnDto extends BaseTurnDto {
   kind: 'error';
-  executionId: string;
+  executionId: string | null;
   stage: 'conversation' | 'model' | 'tool' | 'persistence';
   error: CommonError;
   retryable: boolean;
@@ -131,9 +135,12 @@ function toErrorTurnDto(turn: ConversationTurnData): ErrorTurnDto {
   return {
     id: turn.id,
     conversationId: turn.conversationId,
+    taskId: turn.taskId ?? null,
+    executionId: turn.executionId ?? (typeof data.executionId === 'string' ? data.executionId : null),
+    seq: turn.seq ?? null,
+    eventKind: turn.eventKind ?? null,
     kind: 'error',
     createdAt: turn.createdAt.toISOString(),
-    executionId: typeof data.executionId === 'string' ? data.executionId : '',
     stage: data.stage === 'model' || data.stage === 'tool' || data.stage === 'persistence'
       ? data.stage
       : 'conversation',
@@ -167,6 +174,10 @@ function toToolTurnDto(
   return {
     id: turn.id,
     conversationId: turn.conversationId,
+    taskId: turn.taskId ?? null,
+    executionId: turn.executionId ?? null,
+    seq: turn.seq ?? null,
+    eventKind: turn.eventKind ?? null,
     kind: 'tool',
     createdAt: turn.createdAt.toISOString(),
     toolCallId,
@@ -224,6 +235,10 @@ export function toAgentTurnDtos(
     const base = {
       id: turn.id,
       conversationId: turn.conversationId,
+      taskId: turn.taskId ?? null,
+      executionId: turn.executionId ?? null,
+      seq: turn.seq ?? null,
+      eventKind: turn.eventKind ?? null,
       content: turn.content,
       createdAt: turn.createdAt.toISOString(),
     };
@@ -244,6 +259,8 @@ export function toAgentTurnDtos(
     }
     if (turn.role === 'error') return toErrorTurnDto(turn);
     const pending = pendingByToolCallId.get(toolCallIdOf(turn.toolResults));
-    return pending ? toConfirmationTurnDto(pending) : toToolTurnDto(turn, callsById);
+    return pending
+      ? { ...toConfirmationTurnDto(pending), taskId: turn.taskId ?? null, executionId: turn.executionId ?? null, seq: turn.seq ?? null, eventKind: turn.eventKind ?? null }
+      : toToolTurnDto(turn, callsById);
   });
 }

@@ -3,6 +3,7 @@ import type { PrismaClient } from '@prisma/client';
 import { createCoreRouteDependencies } from '../composition/core-route-dependencies.js';
 import type { CoreRouterOptions } from '../composition/types.js';
 import { createConversationRouter } from './conversation.routes.js';
+import { createTeachingTaskRouter } from './teaching-tasks.routes.js';
 import { createPendingActionRouter } from './pending-action.routes.js';
 import { createStudentRouter } from './students.routes.js';
 import { createScheduleRouter } from './schedules.routes.js';
@@ -65,6 +66,7 @@ export function createCoreRouter(prisma: PrismaClient, options?: CoreRouterOptio
     dependencies.conversations.pendingActions,
   ));
   router.use(createStudentRouter(dependencies.students));
+  if (dependencies.teachingTasks) router.use(createTeachingTaskRouter(dependencies.teachingTasks));
   router.use(createStudentRecordsRouter(dependencies.studentRecords));
   router.use(createScheduleRouter(dependencies.schedules));
   router.use(createPaymentRouter(dependencies.payments));

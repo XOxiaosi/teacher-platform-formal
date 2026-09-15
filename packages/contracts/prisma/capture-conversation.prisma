@@ -108,12 +108,15 @@ model Conversation {
   teacherId   String
   status      String   @default("active") // active | archived
   summary     String?
+  runtimeOwner String?
+  nextEventSeq Int @default(0)
   createdAtTs DateTime @default(now()) @db.Timestamptz(3)
   updatedAtTs DateTime @updatedAt @db.Timestamptz(3)
 
   turns          ConversationTurn[]
   pendingActions PendingAction[]
   executions     AgentExecution[]
+  tasks          TaskRuntime[]
 
   // 状态机：active -> archived
   // 归档后不可追加 turn
@@ -130,6 +133,13 @@ model ConversationTurn {
   toolCalls      Json?
   toolResults    Json?
   audioFileRef   String?
+  taskId         String?
+  executionId    String?
+  seq            Int?
+  eventKey       String?
+  eventKind      String?
+  invalidatedAtTs DateTime? @db.Timestamptz(3)
+  redactedAtTs   DateTime? @db.Timestamptz(3)
   createdAtTs    DateTime @default(now()) @db.Timestamptz(3)
 
   conversation Conversation @relation(fields: [conversationId], references: [id])
@@ -139,12 +149,15 @@ model ConversationTurn {
   // role 允许：user | assistant | tool | error
 
   @@index([conversationId])
+  @@unique([conversationId, seq])
+  @@unique([conversationId, eventKey])
 }
 
 model AgentExecution {
   id                   String    @id @default(cuid())
   teacherId            String
   conversationId       String
+  taskId               String?
   clientRequestId      String
   requestFingerprint   String
   userTurnId           String?   @unique
@@ -159,9 +172,12 @@ model AgentExecution {
   updatedAtTs          DateTime  @updatedAt @db.Timestamptz(3)
 
   conversation Conversation @relation(fields: [conversationId], references: [id])
+  task         TaskRuntime? @relation(fields: [taskId], references: [id])
+  steps        StepReceipt[]
 
   @@unique([teacherId, clientRequestId])
   @@index([conversationId, createdAtTs])
+  @@index([teacherId, taskId, createdAtTs, id])
 }
 
 model PendingAction {

@@ -80,7 +80,7 @@ export function createAgentExecutionService(
 
   async function owned(teacherId: string, executionId: string) {
     const prisma = await getClient();
-    const record = await prisma.agentExecution.findFirst({ where: { id: executionId, teacherId } });
+    const record = await prisma.agentExecution.findFirst({ where: { id: executionId, teacherId, taskId: null } });
     return record ? ok(mapExecution(record, cipher)) : err(notFound('Agent 执行不存在'));
   }
 
@@ -101,6 +101,7 @@ export function createAgentExecutionService(
         } },
       });
       if (existing) {
+        if (existing.taskId) return err(validationError('该消息属于新版教学任务，不能交给旧助手执行', 'runtimeOwner'));
         if (existing.requestFingerprint !== requestFingerprint) {
           return err(validationError('clientRequestId 已绑定其他请求', 'clientRequestId'));
         }
@@ -112,11 +113,17 @@ export function createAgentExecutionService(
 
       try {
         const execution = await prisma.$transaction(async (tx) => {
+          // Serialize ownership with task reception and conversation archival.
+          await tx.$queryRaw(Prisma.sql`SELECT id FROM "Conversation" WHERE id = ${input.conversationId} AND "teacherId" = ${input.teacherId} FOR UPDATE`);
           const conversation = await tx.conversation.findFirst({
             where: { id: input.conversationId, teacherId: input.teacherId },
           });
           if (!conversation) throw new Error('AGENT_EXECUTION_CONVERSATION_NOT_FOUND');
           if (conversation.status !== 'active') throw new Error('AGENT_EXECUTION_CONVERSATION_ARCHIVED');
+          if (conversation.runtimeOwner && conversation.runtimeOwner !== 'legacy') throw new Error('AGENT_EXECUTION_RUNTIME_OWNER');
+          if (!conversation.runtimeOwner) {
+            await tx.conversation.update({ where: { id: conversation.id }, data: { runtimeOwner: 'legacy' } });
+          }
           const created = await tx.agentExecution.create({
             data: {
               teacherId: input.teacherId,
@@ -145,6 +152,9 @@ export function createAgentExecutionService(
         });
         return ok({ kind: 'claimed' as const, execution: mapExecution(execution, cipher) });
       } catch (caught) {
+        if (caught instanceof Error && caught.message === 'AGENT_EXECUTION_RUNTIME_OWNER') {
+          return err(validationError('该会话属于新版教学助手', 'runtimeOwner'));
+        }
         if (caught instanceof Error && caught.message === 'AGENT_EXECUTION_CONVERSATION_NOT_FOUND') {
           return err(notFound('会话不存在'));
         }
@@ -158,7 +168,7 @@ export function createAgentExecutionService(
               clientRequestId: input.clientRequestId,
             } },
           });
-          if (raced && raced.requestFingerprint === requestFingerprint) {
+          if (raced && !raced.taskId && raced.requestFingerprint === requestFingerprint) {
             return ok({ kind: 'existing' as const, execution: mapExecution(raced, cipher) });
           }
           return err(validationError('clientRequestId 已绑定其他请求', 'clientRequestId'));
@@ -175,7 +185,7 @@ export function createAgentExecutionService(
 
       const updated = await prisma.$transaction(async (tx) => {
         const { count } = await tx.agentExecution.updateMany({
-          where: { id: input.executionId, teacherId: input.teacherId, status: 'running' },
+          where: { id: input.executionId, teacherId: input.teacherId, status: 'running', taskId: null },
           data: {
             status: input.status,
             stage: input.stage,
@@ -203,7 +213,7 @@ export function createAgentExecutionService(
         });
         if (!execution) return null;
         const { count } = await tx.agentExecution.updateMany({
-          where: { id: input.executionId, teacherId: input.teacherId, status: 'running' },
+          where: { id: input.executionId, teacherId: input.teacherId, status: 'running', taskId: null },
           data: {
             status: input.status,
             stage: input.stage,
@@ -249,6 +259,7 @@ export function createAgentExecutionService(
         where: { id: input.executionId, teacherId: input.teacherId },
       });
       if (!execution) return err(notFound('Agent 执行不存在'));
+      if (execution.taskId) return err(validationError('新版教学任务必须通过原任务继续', 'executionId'));
       if (execution.status !== 'failed' || !execution.userTurnId) {
         return err(validationError('该 Agent 执行不可回放', 'executionId'));
       }

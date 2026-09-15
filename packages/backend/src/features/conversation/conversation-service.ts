@@ -163,6 +163,9 @@ export function createConversationService(options: CreateConversationServiceOpti
       if (conversation.status !== 'active') {
         return err(validationError('已归档的会话不能追加轮次', 'status'));
       }
+      if (conversation.runtimeOwner && conversation.runtimeOwner !== 'legacy') {
+        return err(validationError('新版任务消息必须通过教学任务入口保存', 'runtimeOwner'));
+      }
 
       const VALID_ROLES = ['user', 'assistant', 'tool', 'error'];
       if (!VALID_ROLES.includes(input.role)) {
@@ -241,6 +244,9 @@ export function createConversationService(options: CreateConversationServiceOpti
       if (!conversation) {
         return err(notFound('会话不存在'));
       }
+      if (conversation.runtimeOwner && conversation.runtimeOwner !== 'legacy') {
+        return err(validationError('新版任务上下文不能交给旧助手', 'runtimeOwner'));
+      }
 
       if (conversation.teacherId !== input.teacherId) {
         return err(permissionDenied('无权访问该会话'));
@@ -318,6 +324,9 @@ export function createConversationService(options: CreateConversationServiceOpti
 
       if (!conversation) {
         return err(notFound('会话不存在'));
+      }
+      if (conversation.runtimeOwner && conversation.runtimeOwner !== 'legacy') {
+        return err(validationError('新版任务不能通过旧入口更新摘要', 'runtimeOwner'));
       }
 
       if (conversation.teacherId !== input.teacherId) {

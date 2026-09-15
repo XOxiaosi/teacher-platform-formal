@@ -164,6 +164,13 @@ export const D48_HISTORICAL_TIME_SOURCE_MATRIX: readonly D48HistoricalTimeSource
   { key: 'TeacherWorkspacePreference.updatedAtTs', rowCount: 0, source: 'N_A', invariant: 'N_A', anomaly: null, migrationConversion: 'NONE' },
   { key: 'WebMutationReceipt.createdAtTs', rowCount: 0, source: 'N_A', invariant: 'N_A', anomaly: null, migrationConversion: 'NONE' },
   { key: 'SchedulingWebMutationReceipt.createdAtTs', rowCount: 0, source: 'N_A', invariant: 'N_A', anomaly: null, migrationConversion: 'NONE' },
+  { key: 'TaskRuntime.leaseExpiresAtTs', rowCount: 0, source: 'N_A', invariant: 'N_A', anomaly: null, migrationConversion: 'NONE' },
+  { key: 'TaskRuntime.createdAtTs', rowCount: 0, source: 'N_A', invariant: 'N_A', anomaly: null, migrationConversion: 'NONE' },
+  { key: 'TaskRuntime.updatedAtTs', rowCount: 0, source: 'N_A', invariant: 'N_A', anomaly: null, migrationConversion: 'NONE' },
+  { key: 'StepReceipt.createdAtTs', rowCount: 0, source: 'N_A', invariant: 'N_A', anomaly: null, migrationConversion: 'NONE' },
+  { key: 'StepReceipt.updatedAtTs', rowCount: 0, source: 'N_A', invariant: 'N_A', anomaly: null, migrationConversion: 'NONE' },
+  { key: 'ConversationTurn.invalidatedAtTs', rowCount: 0, source: 'N_A', invariant: 'N_A', anomaly: null, migrationConversion: 'NONE' },
+  { key: 'ConversationTurn.redactedAtTs', rowCount: 0, source: 'N_A', invariant: 'N_A', anomaly: null, migrationConversion: 'NONE' },
 ] as const satisfies readonly D48HistoricalTimeSourceEntry[];
 
 /** LOS_ANGELES_WALL 字段列表（需显式时区转换） */

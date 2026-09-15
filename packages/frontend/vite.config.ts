@@ -12,6 +12,8 @@ export default defineConfig({
     },
   },
   test: {
+    // Bound concurrent jsdom suites so DOM-heavy flows retain their 5s deadline.
+    maxWorkers: 2,
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
   },

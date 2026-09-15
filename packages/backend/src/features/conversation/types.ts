@@ -87,6 +87,11 @@ export interface ConversationTurnData {
   toolCalls: unknown | null;
   toolResults: unknown | null;
   audioFileRef: string | null;
+  /** A01 runtime association; legacy conversation turns remain null. */
+  taskId?: string | null;
+  executionId?: string | null;
+  seq?: number | null;
+  eventKind?: string | null;
   createdAt: Date;
 }
 

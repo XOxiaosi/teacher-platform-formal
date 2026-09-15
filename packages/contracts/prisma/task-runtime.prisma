@@ -1,0 +1,57 @@
+// A01 platform task identity and receipts. Text/JSON payloads use FieldCipher.
+// DSH checkpoint and confirmed writes remain disabled until their later gates.
+model TaskRuntime {
+  id                   String @id @default(cuid())
+  teacherId            String
+  conversationId       String
+  originExecutionId    String? @unique
+  currentExecutionId   String?
+  status               String @default("queued")
+  title                String?
+  runtimeVersion       String @default("dsh-v1")
+  dshSessionRef        String? @unique
+  dshCheckpoint       Json?
+  contextEpoch         Int @default(0)
+  version              Int @default(0)
+  leaseToken           String?
+  leaseEpoch           Int @default(0)
+  leaseExpiresAtTs     DateTime? @db.Timestamptz(3)
+  attemptCount         Int @default(0)
+  lastError            Json?
+  resumeFromVersion    Int?
+  resumeExecutionId    String?
+  createdAtTs          DateTime @default(now()) @db.Timestamptz(3)
+  updatedAtTs          DateTime @updatedAt @db.Timestamptz(3)
+
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+  executions   AgentExecution[]
+  steps        StepReceipt[]
+
+  @@index([teacherId, conversationId, updatedAtTs, id])
+  @@index([status, leaseExpiresAtTs])
+}
+
+model StepReceipt {
+  id                  String @id @default(cuid())
+  teacherId           String
+  taskId              String
+  executionId         String
+  stepKey             String
+  kind                String
+  inputFingerprint    String
+  status              String @default("prepared")
+  attemptCount        Int @default(0)
+  leaseEpoch          Int
+  pendingActionId     String? @unique
+  resultRef           Json?
+  sourceRefs          Json @default("[]")
+  error               Json?
+  createdAtTs         DateTime @default(now()) @db.Timestamptz(3)
+  updatedAtTs         DateTime @updatedAt @db.Timestamptz(3)
+
+  task      TaskRuntime @relation(fields: [taskId], references: [id])
+  execution AgentExecution @relation(fields: [executionId], references: [id])
+
+  @@unique([teacherId, taskId, stepKey])
+  @@index([taskId, executionId])
+}

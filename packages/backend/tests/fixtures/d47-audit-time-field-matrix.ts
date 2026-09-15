@@ -154,6 +154,13 @@ export const D47_AUDIT_TIME_FIELD_MATRIX = [
   { key: 'TeacherWorkspacePreference.updatedAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
   { key: 'WebMutationReceipt.createdAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
   { key: 'SchedulingWebMutationReceipt.createdAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'TaskRuntime.leaseExpiresAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'TaskRuntime.createdAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'TaskRuntime.updatedAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'StepReceipt.createdAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'StepReceipt.updatedAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'ConversationTurn.invalidatedAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'ConversationTurn.redactedAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
 ] as const satisfies readonly D47AuditTimeFieldEntry[];
 
 export interface D47AuditTimeFieldEvidence {

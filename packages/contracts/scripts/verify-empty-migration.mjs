@@ -126,7 +126,7 @@ async function verify() {
       'CaptureEvent', 'CaptureTask', 'CaptureCandidate', 'CaptureDeletionReceipt',
       'LessonLedgerEntry', 'LessonLedgerAdjustmentConfirmation',
       'RecurrenceRule', 'RecurrenceRuleParticipant', 'ScheduleRevision', 'ScheduleCompletionSnapshot',
-      'TeacherWorkspacePreference', 'WebMutationReceipt', 'SchedulingWebMutationReceipt',
+      'TeacherWorkspacePreference', 'WebMutationReceipt', 'SchedulingWebMutationReceipt', 'TaskRuntime', 'StepReceipt',
       '_prisma_migrations',
     ];
     const missing = expectedTables.filter((table) => !tables.has(table));

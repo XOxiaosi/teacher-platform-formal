@@ -12,6 +12,7 @@ import { createPaymentService } from '../../features/payments/index.js';
 import { createAiNoteService } from '../../features/ai-notes/index.js';
 import { createConversationService } from '../../features/conversation/index.js';
 import { createAgentExecutionService } from '../../features/agent-execution/index.js';
+import { createTeachingTaskService } from '../../features/teaching-tasks/index.js';
 import { createMemoService } from '../../features/memos/index.js';
 import { createFeedbackService } from '../../features/feedback/index.js';
 import {
@@ -111,6 +112,8 @@ export function createCoreRouteDependencies(
   const clientProvider = createClientProvider(prisma);
   // P8 phase-3 批1：字段加密 cipher 统一装配（ENCRYPTION_KEY env；未配置 → undefined 惰性 SAFETY_BLOCK）
   const fieldCipher = createFieldCipherFromEnv();
+  // Persist messages independently; no HTTP/environment flag enables a test executor.
+  const teachingTasks = createTeachingTaskService({ prisma, getClient: clientProvider.getClient, cipher: fieldCipher });
   const students = createStudentService({ getClient: clientProvider.getClient });
   const studentRecords = createStudentRecordsService({ getClient: clientProvider.getClient, cipher: fieldCipher });
   const studentSources = createStudentSourceRecordService({ getClient: clientProvider.getClient, cipher: fieldCipher });
@@ -393,6 +396,7 @@ export function createCoreRouteDependencies(
 
   return {
     agenda: { agenda },
+    teachingTasks,
     edits,
     conversations: {
       conversations,

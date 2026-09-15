@@ -58,19 +58,19 @@ describe('D47 audit-time field matrix boundary', () => {
     expect(extractDateTimeFieldKeys(schema)).toEqual(['Probe.occurredAt', 'Probe.optionalAt']);
   });
 
-  it('手工矩阵与Prisma schema的121个DateTime字段双向完全一致', () => {
+  it('手工矩阵与Prisma schema的128个DateTime字段双向完全一致', () => {
     const schemaKeys = extractDateTimeFieldKeys(readPrismaSchema());
     const matrixKeys = D47_AUDIT_TIME_FIELD_MATRIX.map((entry) => entry.key);
     const uniqueMatrixKeys = new Set(matrixKeys);
 
-    expect(schemaKeys).toHaveLength(121);
-    expect(matrixKeys).toHaveLength(121);
+    expect(schemaKeys).toHaveLength(128);
+    expect(matrixKeys).toHaveLength(128);
     expect(uniqueMatrixKeys.size).toBe(matrixKeys.length);
     expect(schemaKeys.filter((key) => !uniqueMatrixKeys.has(key))).toEqual([]);
     expect(matrixKeys.filter((key) => !schemaKeys.includes(key))).toEqual([]);
   });
 
-  it('冻结117个instant、四个业务日期与零本地墙上时间', () => {
+  it('冻结124个instant、四个业务日期与零本地墙上时间', () => {
     const instantKeys = D47_AUDIT_TIME_FIELD_MATRIX
       .filter((entry) => entry.semantics === 'INSTANT')
       .map((entry) => entry.key);
@@ -81,7 +81,7 @@ describe('D47 audit-time field matrix boundary', () => {
       .filter((entry) => entry.semantics === 'LOCAL_WALL_TIME')
       .map((entry) => entry.key);
 
-    expect(instantKeys).toHaveLength(117);
+    expect(instantKeys).toHaveLength(124);
     expect(businessDateKeys).toEqual(['DailyReview.dateTs', 'Schedule.recurrenceDay', 'RecurrenceRule.startDate', 'RecurrenceRule.endDate']);
     expect(localWallTimeKeys).toEqual([]);
   });

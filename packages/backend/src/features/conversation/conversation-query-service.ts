@@ -45,6 +45,10 @@ function toTurnData(turn: ConversationRecord['turns'][number], cipher: FieldCiph
     toolCalls: decryptJsonFieldValue(cipher, turn.toolCalls),
     toolResults: decryptJsonFieldValue(cipher, turn.toolResults),
     audioFileRef: turn.audioFileRef,
+    taskId: turn.taskId,
+    executionId: turn.executionId,
+    seq: turn.seq,
+    eventKind: turn.eventKind,
     createdAt: turn.createdAtTs,
   };
 }

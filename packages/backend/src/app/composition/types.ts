@@ -13,6 +13,7 @@ import type { ScheduleService } from '../../features/scheduling/types.js';
 import type { PaymentService } from '../../features/payments/types.js';
 import type { ConversationService } from '../../features/conversation/types.js';
 import type { AgentExecutionService } from '../../features/agent-execution/types.js';
+import type { TeachingTaskService } from '../../features/teaching-tasks/index.js';
 import type {
   ActionTokenSigner,
   PendingActionService,
@@ -155,6 +156,7 @@ export interface ProviderRouteDependencies {
 }
 
 export interface CoreRouteDependencies {
+  teachingTasks?: TeachingTaskService;
   agenda: AgendaRouteDependencies;
   edits?: EditRouteDependencies;
   conversations: ConversationRouteDependencies;
