@@ -91,7 +91,7 @@ export async function createIsolatedPostgres(): Promise<IsolatedPostgres> {
   const testUrl = new URL(baseUrl);
   testUrl.pathname = `/${databaseName}`;
   const prismaBin = resolve(__dirname, '../../../../node_modules/prisma/build/index.js');
-  const schemaPath = resolve(__dirname, '../../../contracts/prisma/schema.prisma');
+  const schemaPath = resolve(__dirname, '../../../contracts/prisma');
 
   try {
     run(process.execPath, [prismaBin, 'migrate', 'deploy', '--schema', schemaPath], {

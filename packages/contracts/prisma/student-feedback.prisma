@@ -1,0 +1,163 @@
+model ParentFeedback {
+  id         String    @id @default(cuid())
+  teacherId  String
+  studentId  String
+  lessonId   String?
+  title      String
+  content    String
+  status     String    @default("draft") // draft | reviewed | sent | archived
+  channel    String? // wechat | phone | offline | other
+  parentName String?
+  sentAtTs    DateTime? @db.Timestamptz(3)
+  moderationFlagged Boolean?
+  moderationReasons Json?
+  createdAtTs DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAtTs DateTime  @updatedAt @db.Timestamptz(3)
+
+  student Student @relation(fields: [studentId], references: [id])
+  lesson  Lesson? @relation(fields: [lessonId], references: [id])
+  contextSnapshot FeedbackContextSnapshot?
+
+  @@index([studentId])
+  @@index([lessonId])
+}
+
+// D40 学生长期资料库：原始证据
+// 职责：记录某条学生信息从哪里来，不负责声明内容已经可信。
+// 同一 (teacherId, sourceEntityType, sourceEntityId) 只允许捕获一次（幂等）；
+// 手工/导入等无实体来源允许重复（NULL 不参与唯一约束）。
+model StudentSourceRecord {
+  id               String    @id @default(cuid())
+  teacherId        String
+  studentId        String?
+  sourceType       String // agent_text | manual | lesson | assessment | audio | image | screenshot | import
+  sourceEntityType String? // ConversationTurn | AINote | Lesson | MediaAsset | Upload
+  sourceEntityId   String?
+  occurredAtTs     DateTime  @db.Timestamptz(3)
+  rawText          String?
+  contentHash      String?
+  captureStatus    String    @default("captured") // captured | unresolved | failed | archived
+  createdAtTs      DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAtTs      DateTime  @updatedAt @db.Timestamptz(3)
+
+  student Student?                 @relation(fields: [studentId], references: [id])
+  records StudentRecord[]
+
+  @@unique([teacherId, sourceEntityType, sourceEntityId])
+  @@index([studentId])
+}
+
+// D40 学生长期资料库：学生长期时间线记录
+// 统一承载老师可检索、可审核、可用于反馈的记录；summary 是事实摘要，不是对家长的话术。
+model StudentRecord {
+  id             String    @id @default(cuid())
+  teacherId      String
+  studentId      String
+  sourceRecordId String?
+  category       String // assessment | lesson_observation | parent_communication | learning_state | homework | goal | achievement | concern | agreement | follow_up | general_note
+  occurredAtTs   DateTime  @db.Timestamptz(3)
+  summary        String
+  structuredData Json?
+  confidence     String    @default("medium") // high | medium | low
+  reviewStatus   String    @default("candidate") // candidate | confirmed | rejected | superseded
+  visibility     String    @default("needs_review") // internal_only | parent_shareable | needs_review
+  importance     String    @default("normal") // normal | important | critical
+  supersedesId   String?
+  createdAtTs    DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAtTs    DateTime  @updatedAt @db.Timestamptz(3)
+
+  student      Student?                 @relation(fields: [studentId], references: [id])
+  sourceRecord StudentSourceRecord?     @relation(fields: [sourceRecordId], references: [id])
+  supersedes   StudentRecord?           @relation("StudentRecordSupersede", fields: [supersedesId], references: [id])
+  supersededBy StudentRecord[]          @relation("StudentRecordSupersede")
+  assessment   AssessmentDetail?
+  communicationDetail CommunicationDetail?
+
+  @@index([studentId, occurredAtTs])
+  @@index([sourceRecordId])
+}
+
+// D40 学生长期资料库：成绩结构
+// 成绩必须可计算；只允许知道部分字段，未知值保持 null，不由模型补默认值。
+model AssessmentDetail {
+  id              String    @id @default(cuid())
+  teacherId       String
+  studentRecordId String    @unique
+  examName        String?
+  subject         String?
+  examDateTs      DateTime? @db.Timestamptz(3)
+  score           Float?
+  fullScore       Float?
+  classRank       Int?
+  gradeRank       Int?
+  percentile      Float?
+  previousScore   Float?
+  note            String?
+  createdAtTs     DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAtTs     DateTime  @updatedAt @db.Timestamptz(3)
+
+  studentRecord StudentRecord @relation(fields: [studentRecordId], references: [id])
+}
+
+// D40 学生长期资料库：家长沟通结构化
+// "已经发生的沟通"明细，1:1 挂在 StudentRecord（category='parent_communication'）上；
+// 与对外 ParentFeedback 草稿分开。方向/渠道/家长类型用注释枚举；列表字段为 jsonb 数组。
+model CommunicationDetail {
+  id               String    @id @default(cuid())
+  teacherId        String
+  studentRecordId  String    @unique
+  direction        String // inbound | outbound | two_way
+  channel          String? // phone | wechat | offline | other
+  parentType       String? // normal | scores | sensitive（普通/只认分/玻璃心）
+  parentConcerns   Json      @default("[]")
+  teacherResponses Json      @default("[]")
+  agreements       Json      @default("[]")
+  followUps        Json      @default("[]")
+  nextContactAtTs  DateTime? @db.Timestamptz(3)
+  moderationFlagged Boolean?
+  moderationReasons Json?
+  createdAtTs      DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAtTs      DateTime  @updatedAt @db.Timestamptz(3)
+
+  studentRecord StudentRecord @relation(fields: [studentRecordId], references: [id])
+}
+
+// D40 依据快照落库：把「生成反馈时引用的证据」永久存下来，历史反馈依据可还原。
+// FeedbackContextSnapshot 1:1 挂在 ParentFeedback；FeedbackEvidence 是快照下的明细行。
+// evidence 明细只来自已确认 + 可对外（confirmed + parent_shareable）的记录/课程。
+model FeedbackContextSnapshot {
+  id             String    @id @default(cuid())
+  teacherId      String
+  feedbackId     String    @unique
+  windowStartTs  DateTime? @db.Timestamptz(3)
+  windowEndTs    DateTime? @db.Timestamptz(3)
+  assembledAtTs  DateTime  @db.Timestamptz(3) // 快照生成时刻（TrustedClock）
+  createdAtTs    DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAtTs    DateTime  @updatedAt @db.Timestamptz(3)
+
+  feedback ParentFeedback @relation(fields: [feedbackId], references: [id])
+  evidence FeedbackEvidence[]
+}
+
+model FeedbackEvidence {
+  id             String    @id @default(cuid())
+  teacherId      String
+  snapshotId     String
+  recordId       String? // 引用的源 StudentRecord id（若适用）
+  type           String // assessment | record | lesson | media（media=多媒体证据，S3 线扩展）
+  occurredAtTs   DateTime  @db.Timestamptz(3)
+  category       String?
+  summary        String?
+  examName       String?
+  subject        String?
+  score          Float?
+  fullScore      Float?
+  previousScore  Float?
+  parentConcerns Json      @default("[]")
+  followUps      Json      @default("[]")
+  mediaAssetId   String? // media 类型：引用的 MediaAsset（快照只引用不复制文件本体）
+  sortOrder      Int
+  createdAtTs    DateTime  @default(now()) @db.Timestamptz(3)
+
+  snapshot FeedbackContextSnapshot @relation(fields: [snapshotId], references: [id])
+}

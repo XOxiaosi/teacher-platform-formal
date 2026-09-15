@@ -1,9 +1,9 @@
-import { readFileSync } from 'node:fs';
+import { readPrismaSchema } from '../helpers/prisma-schema.js';
+import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { D47_AUDIT_TIME_FIELD_MATRIX } from '../fixtures/d47-audit-time-field-matrix.js';
+import { D47_AUDIT_TIME_FIELD_MATRIX, D47_NEW_TIME_FIELD_EVIDENCE } from '../fixtures/d47-audit-time-field-matrix.js';
 
-const SCHEMA_PATH = resolve(process.cwd(), '../contracts/prisma/schema.prisma');
 const SEMANTICS = new Set(['INSTANT', 'BUSINESS_DATE', 'LOCAL_WALL_TIME']);
 const CURRENT_SOURCES = new Set([
   'DDL_DEFAULT_PENDING_QUERY_EVIDENCE',
@@ -58,19 +58,19 @@ describe('D47 audit-time field matrix boundary', () => {
     expect(extractDateTimeFieldKeys(schema)).toEqual(['Probe.occurredAt', 'Probe.optionalAt']);
   });
 
-  it('手工矩阵与Prisma schema的84个DateTime字段双向完全一致', () => {
-    const schemaKeys = extractDateTimeFieldKeys(readFileSync(SCHEMA_PATH, 'utf8'));
+  it('手工矩阵与Prisma schema的121个DateTime字段双向完全一致', () => {
+    const schemaKeys = extractDateTimeFieldKeys(readPrismaSchema());
     const matrixKeys = D47_AUDIT_TIME_FIELD_MATRIX.map((entry) => entry.key);
     const uniqueMatrixKeys = new Set(matrixKeys);
 
-    expect(schemaKeys).toHaveLength(84);
-    expect(matrixKeys).toHaveLength(84);
+    expect(schemaKeys).toHaveLength(121);
+    expect(matrixKeys).toHaveLength(121);
     expect(uniqueMatrixKeys.size).toBe(matrixKeys.length);
     expect(schemaKeys.filter((key) => !uniqueMatrixKeys.has(key))).toEqual([]);
     expect(matrixKeys.filter((key) => !schemaKeys.includes(key))).toEqual([]);
   });
 
-  it('冻结83个instant、唯一业务日期与零本地墙上时间', () => {
+  it('冻结117个instant、四个业务日期与零本地墙上时间', () => {
     const instantKeys = D47_AUDIT_TIME_FIELD_MATRIX
       .filter((entry) => entry.semantics === 'INSTANT')
       .map((entry) => entry.key);
@@ -81,9 +81,21 @@ describe('D47 audit-time field matrix boundary', () => {
       .filter((entry) => entry.semantics === 'LOCAL_WALL_TIME')
       .map((entry) => entry.key);
 
-    expect(instantKeys).toHaveLength(83);
-    expect(businessDateKeys).toEqual(['DailyReview.dateTs']);
+    expect(instantKeys).toHaveLength(117);
+    expect(businessDateKeys).toEqual(['DailyReview.dateTs', 'Schedule.recurrenceDay', 'RecurrenceRule.startDate', 'RecurrenceRule.endDate']);
     expect(localWallTimeKeys).toEqual([]);
+  });
+
+  it('新增11个字段逐项登记来源、用途和真实代码路径', () => {
+    const evidenceKeys = D47_NEW_TIME_FIELD_EVIDENCE.map((entry) => entry.key);
+    const schemaKeys = extractDateTimeFieldKeys(readPrismaSchema());
+    expect(evidenceKeys).toHaveLength(11);
+    expect(new Set(evidenceKeys).size).toBe(11);
+    for (const entry of D47_NEW_TIME_FIELD_EVIDENCE) {
+      expect(schemaKeys).toContain(entry.key);
+      expect(entry.purpose.length).toBeGreaterThan(4);
+      expect(existsSync(resolve(process.cwd(), '../..', entry.path))).toBe(true);
+    }
   });
 
   it('每项四维分类均使用冻结枚举，Student创建时刻反映query-event实证', () => {

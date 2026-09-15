@@ -1,8 +1,8 @@
+import { readPrismaSchema } from '../helpers/prisma-schema.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const schemaPath = resolve(__dirname, '../../../contracts/prisma/schema.prisma');
 const migrationPath = resolve(
   __dirname,
   '../../../contracts/prisma/migrations/00000000000002_add_agent_execution/migration.sql',
@@ -11,7 +11,7 @@ const servicePath = resolve(__dirname, '../../src/features/agent-execution/agent
 
 describe('P5.3 AgentExecution schema/migration boundary', () => {
   it('schema 声明执行账本、teacher 幂等键与 Conversation relation', () => {
-    const schema = readFileSync(schemaPath, 'utf8');
+    const schema = readPrismaSchema();
     expect(schema).toContain('model AgentExecution');
     expect(schema).toMatch(/executions\s+AgentExecution\[\]/);
     expect(schema).toContain('@@unique([teacherId, clientRequestId])');

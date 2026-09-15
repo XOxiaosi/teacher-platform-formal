@@ -24,6 +24,8 @@ export const D47_AUDIT_TIME_FIELD_MATRIX = [
   { key: 'Schedule.scheduledEndTs', semantics: 'INSTANT', currentSource: 'INPUT', newWriteRisk: 'HIGH', migrationRisk: 'HIGH' },
   { key: 'Schedule.createdAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'HIGH' },
   { key: 'Schedule.updatedAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'HIGH' },
+  { key: 'ScheduleParticipant.createdAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'ScheduleParticipant.updatedAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
   { key: 'Lesson.dateTs', semantics: 'INSTANT', currentSource: 'INPUT', newWriteRisk: 'HIGH', migrationRisk: 'HIGH' },
   { key: 'Lesson.createdAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'HIGH' },
   { key: 'Lesson.updatedAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'HIGH' },
@@ -82,6 +84,12 @@ export const D47_AUDIT_TIME_FIELD_MATRIX = [
   // P7 认证地基（新表，无历史数据；注册表/会话时间为系统可信时间）
   { key: 'TeacherRegistry.createdAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
   { key: 'TeacherRegistry.updatedAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  // T-014 邀请制入口（新表，无历史数据；到期、接受、撤销及审计时间均来自数据库可信时间）
+  { key: 'TeacherInvitation.expiresAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'TeacherInvitation.acceptedAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'TeacherInvitation.revokedAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'TeacherInvitation.createdAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'TeacherInvitation.updatedAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
   { key: 'SessionStore.expiresAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
   { key: 'SessionStore.createdAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
   { key: 'SessionStore.updatedAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
@@ -113,4 +121,58 @@ export const D47_AUDIT_TIME_FIELD_MATRIX = [
   { key: 'ChannelConversation.createdAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
   { key: 'ChannelConversation.updatedAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
   { key: 'ChannelConversation.lastMessageAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  // T-015 原始捕获链（新表，无历史数据；所有事件时刻由数据库可信时间写入）
+  { key: 'CaptureEvent.occurredAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'CaptureEvent.createdAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'CaptureEvent.redactedAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'CaptureTask.startedAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'CaptureTask.completedAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'CaptureTask.createdAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'CaptureTask.updatedAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'CaptureCandidate.createdAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'CaptureCandidate.updatedAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'CaptureCandidate.redactedAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'CaptureCandidate.confirmedAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'CaptureDeletionReceipt.createdAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'CaptureDeletionReceipt.updatedAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'CaptureDeletionReceipt.completedAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'CaptureDeletionReceipt.claimExpiresAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  // T-017 lesson ledger and adjustment confirmation timestamps
+  { key: 'LessonLedgerEntry.createdAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'LessonLedgerAdjustmentConfirmation.confirmedAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'LessonLedgerAdjustmentConfirmation.createdAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'LessonLedgerAdjustmentConfirmation.updatedAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  // T-016/T-017/T-020 新增排课、快照、工作区状态与幂等收据字段；来源与用途见下方证据表。
+  { key: 'Schedule.recurrenceDay', semantics: 'BUSINESS_DATE', currentSource: 'INPUT', newWriteRisk: 'HIGH', migrationRisk: 'LOW' },
+  { key: 'RecurrenceRule.startDate', semantics: 'BUSINESS_DATE', currentSource: 'INPUT', newWriteRisk: 'HIGH', migrationRisk: 'LOW' },
+  { key: 'RecurrenceRule.endDate', semantics: 'BUSINESS_DATE', currentSource: 'INPUT', newWriteRisk: 'HIGH', migrationRisk: 'LOW' },
+  { key: 'RecurrenceRule.createdAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'RecurrenceRule.updatedAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'RecurrenceRuleParticipant.createdAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'ScheduleRevision.createdAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'ScheduleCompletionSnapshot.createdAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'TeacherWorkspacePreference.updatedAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'WebMutationReceipt.createdAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'SchedulingWebMutationReceipt.createdAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
 ] as const satisfies readonly D47AuditTimeFieldEntry[];
+
+export interface D47AuditTimeFieldEvidence {
+  key: `${string}.${string}`;
+  source: 'INPUT' | 'TRUSTED_DB';
+  purpose: string;
+  path: string;
+}
+
+export const D47_NEW_TIME_FIELD_EVIDENCE = [
+  { key: 'Schedule.recurrenceDay', source: 'INPUT', purpose: '按重复规则物化例外所属业务日', path: 'packages/backend/src/features/scheduling-web/scheduling-web-service.ts' },
+  { key: 'RecurrenceRule.startDate', source: 'INPUT', purpose: '重复规则投影的起始业务日', path: 'packages/backend/src/features/scheduling-web/scheduling-web-service.ts' },
+  { key: 'RecurrenceRule.endDate', source: 'INPUT', purpose: '重复规则投影的结束业务日', path: 'packages/backend/src/features/scheduling-web/scheduling-web-service.ts' },
+  { key: 'RecurrenceRule.createdAtTs', source: 'TRUSTED_DB', purpose: '规则审计创建时刻', path: 'packages/contracts/prisma/teaching-schedule.prisma' },
+  { key: 'RecurrenceRule.updatedAtTs', source: 'TRUSTED_DB', purpose: '规则版本并发控制时刻', path: 'packages/contracts/prisma/teaching-schedule.prisma' },
+  { key: 'RecurrenceRuleParticipant.createdAtTs', source: 'TRUSTED_DB', purpose: '重复规则参与人关系创建时刻', path: 'packages/contracts/prisma/teaching-schedule.prisma' },
+  { key: 'ScheduleRevision.createdAtTs', source: 'TRUSTED_DB', purpose: '已完成课程修订审计时刻', path: 'packages/backend/src/features/scheduling-web/scheduling-web-service.ts' },
+  { key: 'ScheduleCompletionSnapshot.createdAtTs', source: 'TRUSTED_DB', purpose: '完课余额快照写入时刻', path: 'packages/backend/src/features/scheduling-web/scheduling-web-service.ts' },
+  { key: 'TeacherWorkspacePreference.updatedAtTs', source: 'TRUSTED_DB', purpose: '教师工作区偏好版本时刻', path: 'packages/backend/src/app/routes/workspace-web.service.ts' },
+  { key: 'WebMutationReceipt.createdAtTs', source: 'TRUSTED_DB', purpose: '工作区变更幂等收据创建时刻', path: 'packages/backend/src/app/routes/workspace-web.service.ts' },
+  { key: 'SchedulingWebMutationReceipt.createdAtTs', source: 'TRUSTED_DB', purpose: '排课变更幂等收据创建时刻', path: 'packages/backend/src/features/scheduling-web/scheduling-web-service.ts' },
+] as const satisfies readonly D47AuditTimeFieldEvidence[];

@@ -1,0 +1,49 @@
+// P8 S3 多媒体证据链阶段一（p7-media-evidence-design.md §阶段一）+ 阶段二（§阶段二）：
+// 媒体资产元数据。
+// 原文件存 .data/media/<teacherId>/<assetId>/original（不入 git），DB 只存元数据 + 相对路径；
+// 证据关联：StudentSourceRecord.sourceEntityType='MediaAsset'（复用既有 @@unique 幂等）；
+// privacyLevel 保守默认 S1（含未成年影像/成绩截图/家庭沟通，PIPL 28 条）；scanStatus 阶段二启用病毒扫描（阶段一 skipped）。
+// mediaType 与 StudentSourceRecord.sourceType 映射：image→image，screenshot→screenshot，audio→audio。
+// 阶段二（t3）：encryptionVersion=文件级 AES-256-GCM 加密（MEDIA_ENCRYPTION_KEY 独立 env，与字段加密
+// ENCRYPTION_KEY 分轨；null=阶段一遗留明文，读路径双读直通）；transcriptionStatus=ASR 转写状态占位
+// （阶段三真实 ASR 接入，平台预配 shared/platform-services，不进教师配置）；orphanStatus/orphanMarkedAtTs=
+// 孤儿回收标记（引用保护 + 保留期后清理，§6.2）。
+// 阶段二续（t6）：transcriptionText=转写结果文本（占位：真实 ASR 阶段三接入）；transcriptionJobId=最近一次
+// 转写作业的内存 jobId（background-jobs 心智，瞬态进度关联；DB transcriptionStatus 为权威状态）。
+// P11 平台预配线 A2（OCR/MediaAnalysis）：ocrStatus=图片 OCR 状态占位流转（none|pending|completed|failed，
+// 真实 OCR 阶段三-B 接入，平台预配 shared/platform-services，不进教师配置）；ocrText=OCR 识别文本；
+// ocrLayoutBlocks=MediaAnalysis.layoutBlocks 输入（{text,bbox}[]，jsonb，区域证据 D40 §5.5）；
+// ocrJobId=最近一次 OCR 作业的内存 jobId（同 transcriptionJobId 心智）。
+model MediaAsset {
+  id                   String    @id @default(cuid())
+  teacherId            String // owner 隔离键
+  mediaType            String // image | screenshot | audio | document
+  sourceEntityType     String? // 预留：来源实体类型（如 ConversationTurn；阶段二）
+  sourceEntityId       String? // 预留：来源实体 id（阶段二）
+  sha256               String // 内容指纹（明文哈希；幂等去重键，加密不改变指纹语义）
+  duplicateOf          String? // sha256 命中的已有资产 id（去重引用）
+  mimeType             String // 服务端嗅探后的真实类型（不信客户端 Content-Type）
+  sizeBytes            Int // 明文大小（加密前）
+  privacyLevel         String    @default("S1") // S1 | S2 | S3（保守默认 S1）
+  scanStatus           String    @default("skipped") // pending | clean | infected | error | skipped
+  transcriptionStatus  String    @default("none") // none | pending | completed | failed（阶段三真实 ASR 占位流转）
+  transcriptionText    String? // 转写结果文本（t6 占位；阶段三真实 ASR 结果写入）
+  transcriptionConfidence Float? // 供应商返回的置信度（0..1）；null=未提供/未完成
+  transcriptionJobId   String? // 最近转写作业 jobId（内存作业瞬态关联；重启即失效，以 DB 状态为准）
+  ocrStatus            String    @default("none") // none | pending | completed | failed（阶段三-B 真实 OCR 占位流转）
+  ocrText              String? // OCR 识别文本（P11 A2 占位；阶段三-B 真实 OCR 结果写入）
+  ocrConfidence        Float? // 供应商返回的置信度（0..1）；null=未提供/未完成
+  ocrLayoutBlocks      Json? // MediaAnalysis.layoutBlocks 输入：{ text, bbox }[]（jsonb；区域证据 D40 §5.5）
+  ocrJobId             String? // 最近 OCR 作业 jobId（内存作业瞬态关联；重启即失效，以 DB 状态为准）
+  scanJobId            String? // 最近扫描作业 jobId（P12 A3/C 内存作业瞬态关联；重启即失效，以 DB 状态为准）
+  scanThreatName       String? // infected 时命中威胁名（ScanResponse.threatName；管理端可查看，人工复核依据）
+  encryptionVersion    String? // 'aes-256-gcm' | null（阶段二加密；null=阶段一明文遗留）
+  orphanStatus         String    @default("active") // active | orphan（孤儿回收标记）
+  orphanMarkedAtTs     DateTime? @db.Timestamptz(3) // 标记 orphan 时刻（TrustedClock；保留期从此刻起算）
+  originalPath         String // 相对存储根路径：media/<teacherId>/<assetId>/original
+  createdAtTs          DateTime  @default(now()) @db.Timestamptz(3)
+
+  @@index([teacherId])
+  @@index([sha256])
+  @@index([orphanStatus, orphanMarkedAtTs])
+}

@@ -1,8 +1,9 @@
+import { readPrismaSchema } from '../helpers/prisma-schema.js';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const schema = readFileSync(resolve(__dirname, '../../../contracts/prisma/schema.prisma'), 'utf8');
+const schema = readPrismaSchema();
 const stateTools = readFileSync(resolve(__dirname, '../../src/app/tools/register-p0-state-tools.ts'), 'utf8');
 
 function modelBody(modelName: string): string {

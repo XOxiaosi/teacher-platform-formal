@@ -1,0 +1,189 @@
+model AINote {
+  id             String   @id @default(cuid())
+  teacherId      String
+  inputType      String // voice | text
+  rawInput       String
+  audioFileRef   String?
+  intent         String? // schedule_create | schedule_modify | schedule_query | lesson_record | student_update | review_input | general_note
+  extractedData  Json?
+  confidence     String? // high | medium | low
+  pendingFields  Json?
+  routedTo       String?
+  routedModuleId String?
+  status         String   @default("pending") // processed | pending | failed
+  createdAtTs    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAtTs    DateTime @updatedAt @db.Timestamptz(3)
+}
+
+// T-015 原始捕获链：原始事件、确定性候选、处理任务与删除回执分离。
+// rawText / payload 均由应用层 FieldCipher 加密；删除只做可审计的脱敏（不物理删除行）。
+model CaptureEvent {
+  id              String   @id @default(cuid())
+  teacherId       String
+  clientRequestId String
+  sourceType      String   // text；image/audio 在真实识别能力验收前拒绝
+  sourceChannel   String   @default("web")
+  rawText         String?
+  occurredAtTs    DateTime @db.Timestamptz(3)
+  createdAtTs     DateTime @db.Timestamptz(3)
+  redactedAtTs    DateTime? @db.Timestamptz(3)
+
+  tasks           CaptureTask[]
+  candidate       CaptureCandidate?
+  deletionReceipt CaptureDeletionReceipt?
+
+  @@unique([teacherId, clientRequestId])
+  @@index([teacherId, createdAtTs])
+}
+
+model CaptureTask {
+  id               String   @id @default(cuid())
+  teacherId        String
+  eventId          String
+  taskType         String   @default("text_verbatim_candidate")
+  processorVersion String   @default("text-verbatim-v1")
+  status           String   @default("queued") // queued | running | completed | failed | unavailable | cancelled
+  attemptCount     Int      @default(0)
+  retryable        Boolean  @default(false)
+  lastErrorCode    String?
+  startedAtTs      DateTime? @db.Timestamptz(3)
+  completedAtTs    DateTime? @db.Timestamptz(3)
+  createdAtTs      DateTime @db.Timestamptz(3)
+  updatedAtTs      DateTime @db.Timestamptz(3)
+
+  event            CaptureEvent @relation(fields: [eventId], references: [id])
+  candidate        CaptureCandidate?
+
+  @@unique([eventId, taskType, processorVersion])
+  @@index([teacherId, status])
+}
+
+model CaptureCandidate {
+  id               String   @id @default(cuid())
+  teacherId        String
+  eventId          String   @unique
+  taskId           String   @unique
+  candidateType    String   @default("verbatim_note")
+  payload          Json?
+  reviewStatus     String   @default("pending")
+  confidence       String?
+  candidateVersion String   @default("text-verbatim-v1")
+  confirmationRequestId String?
+  confirmedRecordId String?
+  confirmedAtTs    DateTime? @db.Timestamptz(3)
+  createdAtTs      DateTime @db.Timestamptz(3)
+  updatedAtTs      DateTime @db.Timestamptz(3)
+  redactedAtTs     DateTime? @db.Timestamptz(3)
+
+  event            CaptureEvent @relation(fields: [eventId], references: [id])
+  task             CaptureTask  @relation(fields: [taskId], references: [id])
+
+  @@index([teacherId, reviewStatus])
+  @@unique([teacherId, confirmationRequestId])
+}
+
+model CaptureDeletionReceipt {
+  id              String   @id @default(cuid())
+  teacherId       String
+  eventId         String   @unique
+  clientRequestId String
+  status          String   @default("pending") // pending | completed | failed
+  attemptCount    Int      @default(0)
+  retryable       Boolean  @default(false)
+  lastErrorCode   String?
+  claimToken      String?
+  claimExpiresAtTs DateTime? @db.Timestamptz(3)
+  createdAtTs     DateTime @db.Timestamptz(3)
+  updatedAtTs     DateTime @db.Timestamptz(3)
+  completedAtTs   DateTime? @db.Timestamptz(3)
+
+  event           CaptureEvent @relation(fields: [eventId], references: [id])
+
+  @@unique([teacherId, clientRequestId])
+  @@index([teacherId, status])
+}
+
+model Conversation {
+  id          String   @id @default(cuid())
+  teacherId   String
+  status      String   @default("active") // active | archived
+  summary     String?
+  createdAtTs DateTime @default(now()) @db.Timestamptz(3)
+  updatedAtTs DateTime @updatedAt @db.Timestamptz(3)
+
+  turns          ConversationTurn[]
+  pendingActions PendingAction[]
+  executions     AgentExecution[]
+
+  // 状态机：active -> archived
+  // 归档后不可追加 turn
+  // 归档不删除数据，只标记状态
+
+}
+
+model ConversationTurn {
+  id             String   @id @default(cuid())
+  conversationId String
+  teacherId      String
+  role           String // user | assistant | tool | error
+  content        String
+  toolCalls      Json?
+  toolResults    Json?
+  audioFileRef   String?
+  createdAtTs    DateTime @default(now()) @db.Timestamptz(3)
+
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+
+  // ConversationTurn 无 updatedAt：对话轮次是不可修改追加日志
+  // 如需修正内容，只能追加新 turn，不修改历史 turn
+  // role 允许：user | assistant | tool | error
+
+  @@index([conversationId])
+}
+
+model AgentExecution {
+  id                   String    @id @default(cuid())
+  teacherId            String
+  conversationId       String
+  clientRequestId      String
+  requestFingerprint   String
+  userTurnId           String?   @unique
+  status               String    @default("running") // running | succeeded | failed | partial | waiting_confirmation
+  stage                String    @default("conversation") // conversation | model | tool | persistence | confirmation
+  reply                String?
+  error                Json?
+  completedToolCallIds Json      @default("[]")
+  startedAtTs          DateTime  @default(now()) @db.Timestamptz(3)
+  finishedAtTs         DateTime? @db.Timestamptz(3)
+  createdAtTs          DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAtTs          DateTime  @updatedAt @db.Timestamptz(3)
+
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+
+  @@unique([teacherId, clientRequestId])
+  @@index([conversationId, createdAtTs])
+}
+
+model PendingAction {
+  id             String    @id @default(cuid())
+  teacherId      String
+  conversationId String
+  toolCallId     String
+  actionName     String
+  targetType     String
+  targetId       String
+  parameters     Json
+  beforeSummary  String?
+  afterSummary   String
+  status         String    @default("pending") // pending | executing | consumed | cancelled | expired
+  expiresAtTs    DateTime  @db.Timestamptz(3)
+  consumedAtTs   DateTime? @db.Timestamptz(3)
+  cancelledAtTs  DateTime? @db.Timestamptz(3)
+  createdAtTs    DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAtTs    DateTime  @updatedAt @db.Timestamptz(3)
+
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+
+  @@unique([teacherId, toolCallId])
+  @@index([conversationId])
+}

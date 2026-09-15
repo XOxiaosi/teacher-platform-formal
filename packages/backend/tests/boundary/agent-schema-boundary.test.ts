@@ -1,9 +1,7 @@
+import { readPrismaSchema } from '../helpers/prisma-schema.js';
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 
-const SCHEMA_PATH = resolve(__dirname, '../../../contracts/prisma/schema.prisma');
-const schema = readFileSync(SCHEMA_PATH, 'utf8');
+const schema = readPrismaSchema();
 
 function modelBody(modelName: string): string {
   const match = schema.match(new RegExp(`model ${modelName} \\{([\\s\\S]*?)\\n\\}`));

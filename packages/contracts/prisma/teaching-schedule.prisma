@@ -1,0 +1,225 @@
+model Student {
+  id            String   @id @default(cuid())
+  teacherId     String
+  name          String
+  grade         String
+  source        String?
+  currentStatus String   @default("active") // active | paused | finished
+  stageGoal     String?
+  createdAtTs   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAtTs   DateTime @updatedAt @db.Timestamptz(3)
+
+  schedules       Schedule[]
+  scheduleParticipants ScheduleParticipant[]
+  recurrenceRuleParticipants RecurrenceRuleParticipant[]
+  lessons         Lesson[]
+  payments        Payment[]
+  lessonLedgerEntries LessonLedgerEntry[]
+  lessonLedgerAdjustmentConfirmations LessonLedgerAdjustmentConfirmation[]
+  completionSnapshots ScheduleCompletionSnapshot[]
+  parentFeedbacks ParentFeedback[]
+  studentRecords  StudentRecord[]
+  studentSourceRecords StudentSourceRecord[]
+}
+
+model Schedule {
+  id               String   @id @default(cuid())
+  teacherId        String
+  studentId        String?
+  type             String // lesson | prep | meeting | call | other
+  title            String
+  // T-016 正式课程工作字段；title 仅保留旧数据兼容，绝不进入新排课/Agenda 输出。
+  locationCiphertext String?
+  classFormat      String? // one_to_one | small_group
+  operationalNoteCiphertext String?
+  clientRequestId  String?
+  scheduledStartTs DateTime @db.Timestamptz(3)
+  scheduledEndTs   DateTime @db.Timestamptz(3)
+  status           String   @default("planned") // planned | completed | cancelled | missed | rescheduled | extra
+  confidence       String? // high | medium | low
+  pendingFields    Json?
+  sourceInput      String?
+  parentId         String?
+  // Scheduling Web keeps weekly rules separate from materialized one-off
+  // occurrences.  A materialized row is also the existing Schedule row used
+  // by completion/Lesson/Ledger, so no parallel course ledger is introduced.
+  recurrenceRuleId String?
+  recurrenceDay    DateTime? @db.Date
+  createdAtTs      DateTime @default(now()) @db.Timestamptz(3)
+  updatedAtTs      DateTime @updatedAt @db.Timestamptz(3)
+
+  student  Student?   @relation(fields: [studentId], references: [id])
+  participants ScheduleParticipant[]
+  lessons  Lesson[]
+  parent   Schedule?  @relation("ScheduleReschedule", fields: [parentId], references: [id])
+  children Schedule[] @relation("ScheduleReschedule")
+  recurrenceRule RecurrenceRule? @relation(fields: [recurrenceRuleId], references: [id], onDelete: Restrict)
+  revisions ScheduleRevision[]
+  completionSnapshots ScheduleCompletionSnapshot[]
+
+  @@index([studentId])
+  @@index([teacherId, scheduledStartTs])
+  @@unique([teacherId, clientRequestId])
+  @@unique([teacherId, recurrenceRuleId, recurrenceDay])
+  @@index([teacherId, recurrenceRuleId, recurrenceDay])
+}
+
+// Weekly rule is intentionally distinct from concrete Schedule rows.  It
+// projects only inside a requested calendar window; exceptions, cancellations
+// and completed lessons are materialized as Schedule rows above.
+model RecurrenceRule {
+  id                         String   @id @default(cuid())
+  teacherId                  String
+  clientRequestId            String?
+  startDate                  DateTime @db.Date
+  endDate                    DateTime? @db.Date
+  weekdays                   Json
+  enabled                    Boolean @default(true)
+  startTime                  String
+  endTime                    String
+  locationCiphertext         String
+  classFormat                String
+  operationalNoteCiphertext  String?
+  createdAtTs                DateTime @default(now()) @db.Timestamptz(3)
+  updatedAtTs                DateTime @updatedAt @db.Timestamptz(3)
+
+  participants RecurrenceRuleParticipant[]
+  schedules    Schedule[]
+
+  @@unique([teacherId, clientRequestId])
+  @@index([teacherId, enabled, startDate, endDate])
+}
+
+model RecurrenceRuleParticipant {
+  id               String @id @default(cuid())
+  teacherId        String
+  recurrenceRuleId String
+  studentId        String
+  createdAtTs      DateTime @default(now()) @db.Timestamptz(3)
+
+  recurrenceRule RecurrenceRule @relation(fields: [recurrenceRuleId], references: [id], onDelete: Cascade)
+  student        Student        @relation(fields: [studentId], references: [id])
+
+  @@unique([recurrenceRuleId, studentId])
+  @@index([teacherId, recurrenceRuleId])
+  @@index([teacherId, studentId])
+}
+
+// Completed lesson corrections append encrypted snapshots.  They deliberately
+// have no relation to LessonLedgerEntry: editing display/course fields never
+// creates, reverses, or alters the original credit ledger transaction.
+model ScheduleRevision {
+  id               String   @id @default(cuid())
+  teacherId        String
+  scheduleId       String
+  clientRequestId  String?
+  beforeCiphertext String
+  afterCiphertext  String
+  createdAtTs      DateTime @default(now()) @db.Timestamptz(3)
+
+  schedule Schedule @relation(fields: [scheduleId], references: [id], onDelete: Restrict)
+
+  @@unique([teacherId, scheduleId, clientRequestId])
+  @@index([teacherId, scheduleId, createdAtTs])
+}
+
+// Immutable evidence for the exact credit effect already committed in the
+// existing lesson ledger. This never becomes a second balance source.
+model ScheduleCompletionSnapshot {
+  id                  String   @id @default(cuid())
+  teacherId           String
+  scheduleId          String
+  studentId           String
+  lessonId            String
+  lessonLedgerEntryId String
+  balanceBefore       Int
+  balanceAfter        Int
+  createdAtTs         DateTime @default(now()) @db.Timestamptz(3)
+
+  schedule          Schedule          @relation(fields: [scheduleId], references: [id], onDelete: Restrict)
+  student           Student           @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  lesson            Lesson            @relation(fields: [lessonId], references: [id], onDelete: Restrict)
+  lessonLedgerEntry LessonLedgerEntry @relation(fields: [lessonLedgerEntryId], references: [id], onDelete: Restrict)
+
+  @@unique([scheduleId, studentId])
+  @@unique([lessonLedgerEntryId])
+  @@index([teacherId, scheduleId])
+}
+
+// Preferences are teacher-local and never turn on real provider/WeChat use.
+model TeacherWorkspacePreference {
+  teacherId     String   @id
+  studioName    String   @default("教师工作室")
+  modelChoice   String   @default("default")
+  wechatChannel String   @default("personal")
+  updatedAtTs   DateTime @updatedAt @db.Timestamptz(3)
+}
+
+// Separate idempotency receipt for workspace-web mutations. Response is
+// encrypted by its service; it is intentionally not shared with scheduling.
+model WebMutationReceipt {
+  id                 String   @id @default(cuid())
+  teacherId          String
+  clientRequestId    String
+  fingerprint        String
+  ciphertext         String
+  createdAtTs        DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([teacherId, clientRequestId])
+}
+
+// Scheduling commands have different payload and replay semantics from
+// workspace mutations, so their idempotency key space is deliberately split.
+model SchedulingWebMutationReceipt {
+  id              String   @id @default(cuid())
+  teacherId       String
+  clientRequestId String
+  fingerprint     String
+  createdAtTs     DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([teacherId, clientRequestId])
+}
+
+// T-016 小班正式参与人关系。teacherId 冗余保存，应用层在每次写入前同时校验
+// Schedule 与 Student 的 owner，避免仅靠普通外键产生跨教师引用。
+model ScheduleParticipant {
+  id          String   @id @default(cuid())
+  teacherId   String
+  scheduleId  String
+  studentId   String
+  createdAtTs DateTime @default(now()) @db.Timestamptz(3)
+  updatedAtTs DateTime @updatedAt @db.Timestamptz(3)
+
+  schedule Schedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  student  Student  @relation(fields: [studentId], references: [id])
+
+  @@unique([scheduleId, studentId])
+  @@index([teacherId, scheduleId])
+  @@index([teacherId, studentId])
+}
+
+model Lesson {
+  id           String   @id @default(cuid())
+  teacherId    String
+  studentId    String
+  scheduleId   String
+  dateTs       DateTime @db.Timestamptz(3)
+  status       String   @default("pending") // attended | absent | pending
+  progress     String?
+  studentState String?
+  homework     String?
+  teacherNote  String?
+  sourceNoteId String?
+  createdAtTs  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAtTs  DateTime @updatedAt @db.Timestamptz(3)
+
+  student         Student          @relation(fields: [studentId], references: [id])
+  schedule        Schedule         @relation(fields: [scheduleId], references: [id])
+  parentFeedbacks ParentFeedback[]
+  lessonLedgerEntries LessonLedgerEntry[]
+  completionSnapshots ScheduleCompletionSnapshot[]
+
+  @@index([studentId])
+  @@index([studentId, status])
+  @@unique([scheduleId, studentId])
+}

@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
+import { countMigrationFiles } from './migration-count.mjs';
 import {
   assertSafeBaseUrl,
   assertSafeTestDatabaseName,
@@ -185,8 +186,8 @@ async function verify() {
     const diff = spawnSync(process.execPath, [
       prismaBin,
       'migrate', 'diff',
-      '--from-schema-datasource', 'prisma/schema.prisma',
-      '--to-schema-datamodel', 'prisma/schema.prisma',
+      '--from-schema-datasource', 'prisma',
+      '--to-schema-datamodel', 'prisma',
       '--script',
     ], {
       cwd: contractsRoot,
@@ -211,11 +212,12 @@ async function verify() {
       testUrl,
       'SELECT COUNT(*) FROM "_prisma_migrations" WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL',
     );
-    if (appliedCount !== '15') throw new Error(`expected 15 applied migrations, got ${appliedCount}`);
+    const expectedMigrationCount = countMigrationFiles(resolve(contractsRoot, 'prisma/migrations'));
+    if (appliedCount !== String(expectedMigrationCount)) throw new Error(`expected ${expectedMigrationCount} applied migrations, got ${appliedCount}`);
 
     console.log(`source table counts preserved: ${SOURCE_TABLES.length}`);
     console.log(`relation checks preserved: ${Object.keys(afterOrphans).length}`);
-    console.log('applied migrations verified: 15');
+    console.log(`applied migrations verified: ${expectedMigrationCount}`);
     console.log('existing database copy verification: PASS');
   } finally {
     if (created) {

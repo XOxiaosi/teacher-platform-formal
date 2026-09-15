@@ -18,7 +18,7 @@ const projectRoot = resolve(scriptDir, '../../..');
 const backendRoot = resolve(projectRoot, 'packages/backend');
 const prismaBin = resolve(projectRoot, 'node_modules/prisma/build/index.js');
 const vitestBin = resolve(projectRoot, 'node_modules/vitest/vitest.mjs');
-const schemaPath = resolve(projectRoot, 'packages/contracts/prisma/schema.prisma');
+const schemaPath = resolve(projectRoot, 'packages/contracts/prisma');
 
 function loadBaseDatabaseUrl() {
   // Test runners must receive an explicit synthetic URL from the root harness.

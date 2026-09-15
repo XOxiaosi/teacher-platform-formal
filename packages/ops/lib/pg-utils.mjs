@@ -14,7 +14,7 @@ export const projectRoot = resolve(opsRoot, '../..');
 export const contractsRoot = resolve(projectRoot, 'packages/contracts');
 export const contractsEnvPath = resolve(contractsRoot, '.env');
 export const prismaBin = resolve(projectRoot, 'node_modules/prisma/build/index.js');
-export const schemaPath = resolve(contractsRoot, 'prisma/schema.prisma');
+export const schemaPath = resolve(contractsRoot, 'prisma');
 
 /** 读取 packages/contracts/.env 中的键值（沿用 run-tests-isolated.mjs 解析）。 */
 export function readEnvValue(filePath, key) {

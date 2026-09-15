@@ -1,0 +1,214 @@
+// P7 认证地基：教师注册表（阶段一与业务表同库；数据库路由落地后再拆共享库）
+// TeacherRegistry 自身无 teacherId 列：它是身份/租户的根，业务表才带 teacherId。
+model TeacherRegistry {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  displayName  String
+  status       String   @default("active") // active | disabled
+  databaseName String   @default("teacher_platform")
+  createdAtTs  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAtTs  DateTime @updatedAt @db.Timestamptz(3)
+
+  sessions SessionStore[]
+  requirements UserRequirement[]
+  providerConfigs ProviderConfig[]
+  providerUsages ProviderUsage[]
+  channelIdentities ChannelIdentity[]
+
+  @@index([status])
+}
+
+// T-014 邀请制账号入口：原始 token 只在管理员创建响应中返回一次，数据库只保留 sha256(token)。
+// status: pending | accepted | revoked；过期由 expiresAtTs 判定，不需要后台扫描改状态。
+// 邀请与教师账号不建外键：接受成功后保留邀请审计记录，且邮箱已足以关联。
+model TeacherInvitation {
+  id           String   @id @default(cuid())
+  tokenHash    String   @unique
+  email        String
+  status       String   @default("pending")
+  expiresAtTs  DateTime @db.Timestamptz(3)
+  acceptedAtTs DateTime? @db.Timestamptz(3)
+  revokedAtTs  DateTime? @db.Timestamptz(3)
+  createdAtTs  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAtTs  DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([email, status])
+  @@index([status, expiresAtTs])
+}
+
+// P7 认证地基：会话存储（token 只存哈希，不存明文）
+model SessionStore {
+  id          String   @id @default(cuid())
+  tokenHash   String   @unique
+  teacherId   String
+  expiresAtTs DateTime @db.Timestamptz(3)
+  createdAtTs DateTime @default(now()) @db.Timestamptz(3)
+  updatedAtTs DateTime @updatedAt @db.Timestamptz(3)
+
+  teacher TeacherRegistry @relation(fields: [teacherId], references: [id])
+
+  @@index([teacherId])
+}
+
+// P2 用户发言需求追溯（D50 §5.1）：共享库表，需求可回查原始对话/来源/时间戳，并与设计/任务/提交追溯。
+// owner 语义：teacherId 可空（平台级/匿名需求无 owner）；有 owner 时按 owner 隔离（路由层校验）。
+// verbatimQuote 不可修改（原话留证）；其余可编辑（PATCH 乐观锁 expectedUpdatedAt 复用 edit 模式）。
+model UserRequirement {
+  id             String   @id @default(cuid())
+  teacherId      String? // 提出需求的教师（可空：平台级需求）
+  verbatimQuote  String // 原话（不可修改，追溯留证）
+  sourceType     String? // agent_conversation | wechat | manual | import | ...
+  sourceDbName   String? // 来源库（教师库名）
+  sourceTurnId   String? // 来源会话轮次 id
+  contextSummary String? // 上下文摘要
+  occurredAtTs   DateTime @db.Timestamptz(3) // 发言时间
+  parsedIntent   String? // 解析意图
+  category       String // 分类白名单（D51 §九）
+  priority       String @default("normal") // low | normal | high | urgent
+  status         String @default("new") // new | triaged | in_progress | done | archived
+  linkedDesignDoc String? // 关联设计文档路径
+  linkedTaskId   String? // 关联任务 id
+  linkedCommitSha String? // 关联提交 sha
+  moderationFlagged Boolean? // P14 D 切片：本地审核命中标记（review 心智——不阻断写库，人工复核依据）
+  moderationReasons Json? // 命中原因（规则组 id + 中文描述数组，jsonb；未命中/未配置 null）
+  createdAtTs    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAtTs    DateTime @updatedAt @db.Timestamptz(3)
+
+  teacher TeacherRegistry? @relation(fields: [teacherId], references: [id])
+
+  @@index([teacherId])
+  @@index([status])
+  @@index([category])
+}
+
+// P7 渠道线：教师 LLM Provider 配置（D51 §五，t57 设计 §2.1）。共享库表——路由需在
+// 访问教师库之前解析 provider；owner 隔离按 teacherId（requireAuth 后路由层强制）。
+// apiKey 只存加密密文（apiKeyEnc，AES-256-GCM，密钥 env 注入），任何响应/日志不回明文。
+model ProviderConfig {
+  id           String   @id @default(cuid())
+  teacherId    String // 归属教师（owner 隔离键）
+  providerKind String // openai | anthropic（协议族）
+  providerName String // deepseek | qwen | zhipu | ark | kimi | siliconflow | openrouter | anthropic ...
+  displayName  String? // 教师自定义名（可空）
+  baseUrl      String // 厂商 endpoint（不含 /chat/completions 后缀）
+  apiKeyEnc    String // apiKey 加密存储（AES-256-GCM；禁明文）
+  model        String // 主模型名（如 deepseek-chat）
+  isPrimary    Boolean  @default(false) // 主 LLM 标记（每教师至多一个）
+  status       String   @default("active") // active | disabled
+  createdAtTs  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAtTs  DateTime @updatedAt @db.Timestamptz(3)
+
+  teacher TeacherRegistry @relation(fields: [teacherId], references: [id])
+
+  @@index([teacherId, isPrimary])
+  @@index([teacherId, providerKind])
+}
+
+// P7 渠道线：Provider 用量追踪（t57 设计 §4）。共享库表（用量汇总按教师查询）。
+// providerConfigId 无 FK（配置删除后置 null 保留用量，历史可追溯）；
+// estimatedCostUsd 阶段一预留（单价表阶段二）；requestAt = 请求发生时刻（INSTANT/INPUT）。
+model ProviderUsage {
+  id               String   @id @default(cuid())
+  teacherId        String
+  providerConfigId String? // 关联配置（删除后置 null 保留用量）
+  providerName     String
+  model            String
+  promptTokens     Int      @default(0)
+  completionTokens Int      @default(0)
+  estimatedCostUsd Float? // 阶段一留空（单价表阶段二）
+  conversationId   String?
+  requestAt        DateTime @db.Timestamptz(3)
+  createdAtTs      DateTime @default(now()) @db.Timestamptz(3)
+
+  teacher TeacherRegistry @relation(fields: [teacherId], references: [id])
+
+  @@index([teacherId, requestAt])
+  @@index([providerConfigId])
+}
+
+// P8 微信接入线（t9，设计 p7-wechat-ilink-design.md §3/§8.2）：渠道身份绑定（共享库表）。
+// 一微信号（externalUserId）至多绑定一个教师（@@unique([platform, externalUserId])）——
+// 「一个微信号一个 Agent」；teacherId 索引保留（共享库多教师共存，R5 白名单表）。
+// 解绑 = 删除行（unbind）；业务写入仍按 teacherId 校验（纵深防御）。
+model ChannelIdentity {
+  id                String   @id @default(cuid())
+  teacherId         String // 归属教师（owner 隔离键）
+  platform          String // 渠道平台：wechat（iLink 个人号）| 未来可扩展
+  externalUserId    String // 微信侧用户标识（ilink_user_id / wxid）
+  providerChannelId String? // 供应商渠道标识（ilink_bot_id；未获取时可空）
+  createdAtTs       DateTime @default(now()) @db.Timestamptz(3)
+  updatedAtTs       DateTime @updatedAt @db.Timestamptz(3)
+
+  teacher TeacherRegistry @relation(fields: [teacherId], references: [id])
+
+  @@unique([platform, externalUserId])
+  @@index([teacherId])
+}
+
+// P8 微信接入线（t13，设计 p7-wechat-ilink-design.md §4/§8）：入站消息持久化（共享库表）。
+// 幂等键：@@unique([channel, externalMessageId])——同一供应商消息重投只 claim 一行（重放防护持久层）；
+// teacherId 可空：未绑定消息挂起（status='new' 不处理，绑定后由 S3 恢复扫描再处理）；
+// processedAtTs 由服务层 TrustedClock 写入（业务时间纪律）；status: new | queued | processed | failed。
+model ChannelMessage {
+  id                 String    @id @default(cuid())
+  teacherId          String? // 未绑定挂起为 null；绑定解析后填充
+  channel            String // 渠道平台：wechat
+  externalMessageId  String // 供应商消息 ID（幂等键）
+  fromExternalUserId String // 发送方微信用户标识（ilink_user_id / wxid）
+  toExternalUserId   String? // 接收方（bot/机器人标识；可空）
+  direction          String    @default("inbound") // inbound（S2 仅入站）
+  contentType        String    @default("text") // text（S2 仅文本；voice 等 S6）
+  contentText        String // 消息文本（展示层/Agent 输入源）
+  status             String    @default("new") // new | queued | processed | failed
+  errorMsg           String? // 处理失败原因（Agent/出站失败记录；可重试依据）
+  processedAtTs      DateTime? @db.Timestamptz(3) // TrustedClock 写入（处理完成时刻）
+  createdAtTs        DateTime  @default(now()) @db.Timestamptz(3)
+
+  @@unique([channel, externalMessageId])
+  @@index([teacherId, createdAtTs])
+}
+
+// P8 微信接入线（t23 S5，设计 p7-wechat-ilink-design.md §4.3）：渠道会话映射（共享库表）。
+// 一教师多发送方（私聊=发送方 wxid；群聊=群 ID）→ 各自平台 Conversation（教师库）——
+// S3 简化「复用首个 active Conversation」补全为按 externalConversationId 独立映射；
+// lastMessageAtTs 由服务层 TrustedClock 写入（业务时间纪律）；@@unique([channel, teacherId, externalConversationId])。
+model ChannelConversation {
+  id                     String    @id @default(cuid())
+  teacherId              String // 归属教师（owner 隔离键）
+  channel                String // 渠道平台：wechat
+  externalConversationId String // 外部会话标识（私聊=发送方 wxid；群聊=群 ID）
+  conversationId         String // 平台 Conversation id（教师库）
+  status                 String    @default("active") // active | archived
+  lastMessageAtTs        DateTime? @db.Timestamptz(3) // TrustedClock 写入（最后消息时刻）
+  createdAtTs            DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAtTs            DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@unique([channel, teacherId, externalConversationId], map: "ChannelConversation_channel_teacherId_externalConversationId_ke")
+  @@index([teacherId, status])
+}
+
+// P7 渠道线：后台管理员账号（t72 A6 阶段二，设计 §3.3）。共享库表（多管理员共存）。
+// 阶段一认证仍走 env（ADMIN_EMAIL/ADMIN_PASSWORD_HASH），本表为阶段二账号管理落位（additive，不替换现状）。
+model AdminAccount {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String // scrypt$salt$derived（与教师同算法/格式）
+  status       String   @default("active") // active | disabled
+  createdAtTs  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAtTs  DateTime @updatedAt @db.Timestamptz(3)
+}
+
+// P7 渠道线：管理员操作审计（t72 A6，设计 §5）。共享库表；只 append 不 update/delete（应用层纪律）。
+model AdminAuditLog {
+  id          String   @id @default(cuid())
+  actorEmail  String // 操作者（adminToken 会话 email）
+  action      String // teacher.create / teacher.disable / backup.run / restore.run ...
+  objectType  String // teacher / backup / system
+  objectId    String?
+  detail      Json?
+  ip          String?
+  createdAtTs DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([actorEmail, createdAtTs])
+}

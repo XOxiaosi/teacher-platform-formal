@@ -26,7 +26,7 @@ export const SYSTEM_ENV_ALLOWLIST = [
 ];
 
 const prismaBin = resolve(PROJECT_ROOT, 'node_modules/prisma/build/index.js');
-const schemaPath = resolve(PROJECT_ROOT, 'packages/contracts/prisma/schema.prisma');
+const schemaPath = resolve(PROJECT_ROOT, 'packages/contracts/prisma');
 
 function systemEnvironment(source = process.env) {
   return Object.fromEntries(
@@ -39,6 +39,12 @@ export function buildHarnessEnvironment({ source = process.env, databaseUrl, tem
   assertSafeTemporaryDirectory(tempDirectory);
   return {
     ...systemEnvironment(source),
+    // PostgreSQL on macOS can abort during startup when a completely clean
+    // environment leaves locale resolution to multithreaded system APIs.
+    // The C locale is always available and keeps the synthetic harness
+    // deterministic across developer machines and CI.
+    LANG: 'C',
+    LC_ALL: 'C',
     // npm must not consult the developer's HOME/.npmrc (which can contain a
     // registry token).  Its home and user config are owned by this run.
     HOME: join(tempDirectory, 'home'),
@@ -282,6 +288,7 @@ export async function runTestsWithPostgres({
   const port = allocatePort();
   const databaseUrl = makeDatabaseUrl(port);
   const environment = buildHarnessEnvironment({ databaseUrl, tempDirectory });
+  let clusterStartAttempted = false;
   let clusterStarted = false;
   let activeChild = null;
   let signal = null;
@@ -297,10 +304,9 @@ export async function runTestsWithPostgres({
     const status = await runLifecycle({
       setup: () => {
         runRequired('initdb', ['--no-locale', '--encoding=UTF8', '--auth=trust', '--username=postgres', '--pgdata', dataDirectory], { env: environment }, 'initdb', execute);
-        // Mark before executing start so cleanup also handles a partially-started
-        // server if pg_ctl reports an error after launching postgres.
-        clusterStarted = true;
+        clusterStartAttempted = true;
         runRequired('pg_ctl', ['start', '--wait', '--timeout', '30', '--pgdata', dataDirectory, '--options', `-h 127.0.0.1 -p ${port}`, '--silent'], { env: environment }, 'pg_ctl start', execute);
+        clusterStarted = true;
         runRequired('createdb', [BASE_DATABASE], { env: pgEnvironment(environment, port) }, 'createdb teacher_platform', execute);
         runRequired(process.execPath, [prismaBin, 'migrate', 'deploy', '--schema', schemaPath], { env: environment }, 'prisma migrate deploy', execute);
       },
@@ -314,13 +320,20 @@ export async function runTestsWithPostgres({
         activeChild = null;
         return result.code;
       },
-      cleanup: () => {
-        if (clusterStarted) {
+      cleanup: async () => {
+        // pg_ctl can fail before a postmaster exists. Only issue stop when the
+        // successful start flag or the owned port proves a server may exist;
+        // otherwise remove the failed synthetic cluster instead of leaking it.
+        const portIsListening = clusterStartAttempted && await isPortListening(port);
+        if (clusterStarted || portIsListening) {
           const result = execute('pg_ctl', ['stop', '--wait', '--timeout', '30', '--pgdata', dataDirectory, '--mode', 'fast', '--silent'], { env: environment });
           // Never remove a data directory while PostgreSQL may still be using
           // it. Keep this strict-prefix directory for diagnosis instead.
           if (result.error || result.status !== 0) {
             throw new Error('CLEANUP_FAILED: PostgreSQL 临时集群停止失败；已保留临时目录');
+          }
+          if (await isPortListening(port)) {
+            throw new Error('CLEANUP_FAILED: PostgreSQL 临时端口仍在监听；已保留临时目录');
           }
         }
         removeTemporaryDirectory(tempDirectory, remove);

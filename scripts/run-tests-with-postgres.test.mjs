@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import test from 'node:test';
+import { existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -16,6 +17,7 @@ import {
   makeDatabaseUrl,
   removeTemporaryDirectory,
   runLifecycle,
+  runTestsWithPostgres,
   startManagedChild,
 } from './run-tests-with-postgres.mjs';
 
@@ -37,6 +39,8 @@ test('white-list environment removes ambient database, provider, webhook, storag
     tempDirectory: temporaryDirectory,
   });
   assert.equal(environment.PATH, '/safe/bin');
+  assert.equal(environment.LANG, 'C');
+  assert.equal(environment.LC_ALL, 'C');
   assert.equal(environment.DATABASE_URL, `postgresql://postgres@127.0.0.1:55439/${BASE_DATABASE}`);
   assert.equal(environment.ARK_API_KEY, undefined);
   assert.equal(environment.NODE_OPTIONS, undefined);
@@ -110,6 +114,20 @@ test('lifecycle does not hide a cleanup error after an otherwise successful chil
     runChild: () => 0,
     cleanup: () => { throw new Error('pg_ctl stop failed'); },
   }), /pg_ctl stop failed/);
+});
+
+test('failed PostgreSQL start removes a cluster that never began listening', async () => {
+  const temporaryDirectory = mkdtempSync(join(tmpdir(), TEMP_PREFIX));
+  const execute = (command, args) => {
+    if (args[0] === '--version') return { status: 0, stdout: `${command} (PostgreSQL) 17.10\n`, stderr: '' };
+    if (command === 'pg_ctl' && args[0] === 'start') return { status: 1 };
+    return { status: 0 };
+  };
+  await assert.rejects(() => runTestsWithPostgres({
+    execute,
+    makeTempDirectory: () => temporaryDirectory,
+  }), /SETUP_FAILED: pg_ctl start/);
+  assert.equal(existsSync(temporaryDirectory), false);
 });
 
 test('managed child receives SIGTERM and exits without remaining alive', async () => {

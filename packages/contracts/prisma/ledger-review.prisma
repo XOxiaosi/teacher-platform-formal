@@ -1,0 +1,136 @@
+model Payment {
+  id          String   @id @default(cuid())
+  teacherId   String
+  studentId   String
+  amount      Float
+  lessonCount Int
+  clientRequestId String?
+  paidAtTs    DateTime @db.Timestamptz(3)
+  note        String?
+  createdAtTs DateTime @default(now()) @db.Timestamptz(3)
+  updatedAtTs DateTime @updatedAt @db.Timestamptz(3)
+
+  student Student @relation(fields: [studentId], references: [id])
+  lessonLedgerEntries LessonLedgerEntry[]
+
+  @@index([studentId])
+  @@unique([teacherId, clientRequestId])
+}
+
+// T-017 课时账本：余额只从本表的正式流水与尚未迁移的历史 Payment 派生，
+// 不保存可直接修改的余额。paymentId / adjustmentConfirmationId 为单一来源约束；
+// 同一课次可以发生多次 attended <-> absent 更正，每次均保留独立流水。
+model LessonLedgerEntry {
+  id                       String   @id @default(cuid())
+  teacherId                String
+  studentId                String
+  entryType                String   // purchase | attendance_deduction | attendance_reversal | refund | gift | manual_adjustment
+  lessonDelta              Int
+  amount                   Float?
+  reasonCiphertext         String?
+  paymentId                String?  @unique
+  lessonId                 String?
+  adjustmentConfirmationId String?  @unique
+  clientRequestId          String?
+  createdAtTs              DateTime @default(now()) @db.Timestamptz(3)
+
+  student                  Student                            @relation(fields: [studentId], references: [id])
+  payment                  Payment?                           @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  lesson                   Lesson?                            @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  adjustmentConfirmation   LessonLedgerAdjustmentConfirmation? @relation(fields: [adjustmentConfirmationId], references: [id], onDelete: Cascade)
+  completionSnapshot ScheduleCompletionSnapshot?
+
+  @@unique([teacherId, clientRequestId])
+  @@index([teacherId, studentId, createdAtTs])
+  @@index([studentId])
+  @@index([lessonId, createdAtTs])
+}
+
+// 人工退款、赠课和调整必须先创建待确认请求，再由教师明确确认生成不可变流水。
+model LessonLedgerAdjustmentConfirmation {
+  id                String   @id @default(cuid())
+  teacherId         String
+  studentId         String
+  entryType         String   // refund | gift | manual_adjustment
+  lessonDelta       Int
+  reasonCiphertext  String
+  clientRequestId   String
+  status            String   @default("pending") // pending | confirmed | expired
+  confirmedAtTs     DateTime? @db.Timestamptz(3)
+  createdAtTs       DateTime @default(now()) @db.Timestamptz(3)
+  updatedAtTs       DateTime @updatedAt @db.Timestamptz(3)
+
+  student           Student            @relation(fields: [studentId], references: [id])
+  ledgerEntry       LessonLedgerEntry?
+
+  @@unique([teacherId, clientRequestId], map: "LessonLedgerAdjustmentConfirmation_teacherId_clientRequestId_ke")
+  @@index([teacherId, studentId, createdAtTs], map: "LessonLedgerAdjustmentConfirmation_teacherId_studentId_createdA")
+}
+
+model DailyReview {
+  id                 String   @id @default(cuid())
+  teacherId          String
+  dateTs             DateTime @db.Date
+  plannedCount       Int      @default(0)
+  actualCount        Int      @default(0)
+  cancelledCount     Int      @default(0)
+  missedCount        Int      @default(0)
+  rescheduledCount   Int      @default(0)
+  pendingCount       Int      @default(0)
+  deviations         Json?
+  corrections        Json?
+  tomorrowSuggestion String?
+  createdAtTs        DateTime @default(now()) @db.Timestamptz(3)
+  updatedAtTs        DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([teacherId, dateTs])
+}
+
+model PushRecord {
+  id             String    @id @default(cuid())
+  teacherId      String
+  type           String // morning_brief | evening_review
+  scheduledAtTs  DateTime  @db.Timestamptz(3)
+  sentAtTs       DateTime? @db.Timestamptz(3)
+  channel        String // wechat-bot | wecom | telegram
+  content        String
+  status         String    @default("pending") // pending | sent | failed | read
+  errorMsg       String?
+  createdAtTs    DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAtTs    DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@index([status])
+}
+
+model ChangeLog {
+  id          String   @id @default(cuid())
+  teacherId   String
+  timestampTs DateTime @default(now()) @db.Timestamptz(3)
+  module      String
+  action      String // create | update | delete | cancel | restore
+  targetType  String
+  targetId    String
+  before      Json?
+  after       Json?
+  diff        Json?
+  source      String // ai-note | manual | system | push
+  operatorId  String?
+  createdAtTs DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([module])
+  @@index([targetType, targetId])
+  @@index([timestampTs])
+}
+
+model Memo {
+  id          String    @id @default(cuid())
+  teacherId   String
+  title       String
+  content     String
+  status      String    @default("active") // active | done | archived
+  dueAtTs     DateTime? @db.Timestamptz(3)
+  tags        Json?
+  source      String?
+  createdAtTs DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAtTs DateTime  @updatedAt @db.Timestamptz(3)
+}

@@ -1,9 +1,10 @@
+import { readPrismaSchema } from '../helpers/prisma-schema.js';
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const root = resolve(__dirname, '../../../contracts');
-const schema = readFileSync(resolve(root, 'prisma/schema.prisma'), 'utf8');
+const schema = readPrismaSchema();
 const migration = readFileSync(resolve(root, 'prisma/migrations/20260912000000_add_communication_moderation/migration.sql'), 'utf8');
 
 describe('communication moderation additive schema boundary', () => {

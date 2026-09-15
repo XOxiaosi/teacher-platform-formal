@@ -94,10 +94,14 @@ export interface MediaAssetDto {
   transcriptionStatus: string;
   /** 转写文本（t6 占位：作业完成写入占位文本；阶段三真实 ASR 结果）。 */
   transcriptionText: string | null;
+  /** 转写置信度（0..1；供应商未提供或未完成时为 null）。 */
+  transcriptionConfidence: number | null;
   /** OCR 识别状态（none | pending | completed | failed；P11 A2 占位流转，阶段三-B 真实 OCR）。 */
   ocrStatus: string;
   /** OCR 识别文本（P11 A2：作业完成写入占位文本；阶段三-B 真实 OCR 结果）。 */
   ocrText: string | null;
+  /** OCR 置信度（0..1；供应商未提供或未完成时为 null）。 */
+  ocrConfidence: number | null;
   /** OCR 版面块（MediaAnalysis.layoutBlocks 输入；jsonb 存储；completed 时非空数组或 []）。 */
   ocrLayoutBlocks: OcrLayoutBlock[] | null;
   /** 最近扫描作业 jobId（内存作业瞬态关联；重启即失效，以 DB 状态为准）。 */
@@ -189,6 +193,7 @@ export interface MediaAssetService {
     assetId: string;
     transcriptionStatus: string;
     transcriptionText: string | null;
+    transcriptionConfidence: number | null;
     job: { jobId: string; status: string; error: string | null } | null;
   }, CommonError>>;
   /**
@@ -219,6 +224,7 @@ export interface MediaAssetService {
     assetId: string;
     ocrStatus: string;
     ocrText: string | null;
+    ocrConfidence: number | null;
     ocrLayoutBlocks: OcrLayoutBlock[] | null;
     job: { jobId: string; status: string; error: string | null } | null;
   }, CommonError>>;

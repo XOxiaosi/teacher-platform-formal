@@ -4,6 +4,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { PrismaClient } from '@prisma/client';
+import { countMigrationFiles } from './migration-count.mjs';
 
 const TEST_DB_PREFIX = 'teacher_platform_migration_test_';
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
@@ -102,7 +103,7 @@ async function verify() {
     });
     created = true;
 
-    run(process.execPath, [prismaBin, 'migrate', 'deploy', '--schema', 'prisma/schema.prisma'], {
+    run(process.execPath, [prismaBin, 'migrate', 'deploy', '--schema', 'prisma'], {
       cwd: contractsRoot,
       env: { ...process.env, DATABASE_URL: testUrl.toString() },
     });
@@ -116,12 +117,16 @@ async function verify() {
     ], { env: psqlEnvironment(testUrl) });
     const tables = new Set(tableOutput.split(/\r?\n/).filter(Boolean));
     const expectedTables = [
-      'Student', 'Schedule', 'Lesson', 'AINote', 'Conversation', 'ConversationTurn', 'PendingAction', 'AgentExecution',
+      'Student', 'Schedule', 'ScheduleParticipant', 'Lesson', 'AINote', 'Conversation', 'ConversationTurn', 'PendingAction', 'AgentExecution',
       'Payment', 'DailyReview', 'PushRecord', 'ChangeLog', 'Memo', 'ParentFeedback',
       'StudentSourceRecord', 'StudentRecord', 'AssessmentDetail', 'CommunicationDetail',
       'FeedbackContextSnapshot', 'FeedbackEvidence',
-      'TeacherRegistry', 'SessionStore', 'UserRequirement', 'ProviderConfig', 'ProviderUsage',
+      'TeacherRegistry', 'TeacherInvitation', 'SessionStore', 'UserRequirement', 'ProviderConfig', 'ProviderUsage',
       'AdminAccount', 'AdminAuditLog', 'ChannelIdentity', 'MediaAsset', 'ChannelMessage', 'ChannelConversation',
+      'CaptureEvent', 'CaptureTask', 'CaptureCandidate', 'CaptureDeletionReceipt',
+      'LessonLedgerEntry', 'LessonLedgerAdjustmentConfirmation',
+      'RecurrenceRule', 'RecurrenceRuleParticipant', 'ScheduleRevision', 'ScheduleCompletionSnapshot',
+      'TeacherWorkspacePreference', 'WebMutationReceipt', 'SchedulingWebMutationReceipt',
       '_prisma_migrations',
     ];
     const missing = expectedTables.filter((table) => !tables.has(table));
@@ -134,7 +139,8 @@ async function verify() {
       '-c',
       'SELECT COUNT(*) FROM "_prisma_migrations" WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL',
     ], { env: psqlEnvironment(testUrl) });
-    if (migrationCount !== '27') throw new Error(`expected 27 applied migrations, got ${migrationCount}`);
+    const expectedMigrationCount = countMigrationFiles(resolve(contractsRoot, 'prisma/migrations'));
+    if (migrationCount !== String(expectedMigrationCount)) throw new Error(`expected ${expectedMigrationCount} applied migrations, got ${migrationCount}`);
 
     prisma = new PrismaClient({ datasources: { db: { url: testUrl.toString() } } });
     const student = await prisma.student.create({
@@ -186,7 +192,7 @@ async function verify() {
     await prisma.student.delete({ where: { id: student.id } });
 
     console.log(`tables verified: ${expectedTables.length}`);
-    console.log('applied migrations verified: 27');
+    console.log(`applied migrations verified: ${expectedMigrationCount}`);
     console.log('Prisma CRUD smoke: PASS');
     console.log('empty database migrate deploy: PASS');
   } finally {

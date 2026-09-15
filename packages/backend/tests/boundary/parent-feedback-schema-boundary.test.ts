@@ -1,13 +1,13 @@
+import { readPrismaSchema } from '../helpers/prisma-schema.js';
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const SCHEMA_PATH = resolve(__dirname, '../../../contracts/prisma/schema.prisma');
 const MIGRATION_PATH = resolve(
   __dirname,
   '../../../contracts/prisma/migrations/20260911000000_add_parent_feedback_moderation/migration.sql',
 );
-const schema = readFileSync(SCHEMA_PATH, 'utf8');
+const schema = readPrismaSchema();
 const migration = readFileSync(MIGRATION_PATH, 'utf8');
 
 function modelBody(modelName: string): string {

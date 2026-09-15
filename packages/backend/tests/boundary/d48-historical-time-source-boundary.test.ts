@@ -9,7 +9,7 @@ import {
 } from '../fixtures/d48-historical-time-source-matrix.js';
 
 describe('D48 historical time source matrix boundary', () => {
-  it('分群矩阵覆盖 D47 全部 84 字段，无遗漏无多余', () => {
+  it('分群矩阵覆盖 D47 全部时间字段，无遗漏无多余', () => {
     const d47Keys = new Set(D47_AUDIT_TIME_FIELD_MATRIX.map((e) => e.key));
     const d48Keys = new Set(D48_HISTORICAL_TIME_SOURCE_MATRIX.map((e) => e.key));
 
@@ -23,7 +23,7 @@ describe('D48 historical time source matrix boundary', () => {
       expect(d47Keys.has(key)).toBe(true);
     }
 
-    expect(D48_HISTORICAL_TIME_SOURCE_MATRIX).toHaveLength(84);
+    expect(D48_HISTORICAL_TIME_SOURCE_MATRIX).toHaveLength(D47_AUDIT_TIME_FIELD_MATRIX.length);
   });
 
   it('每个来源分类使用冻结枚举', () => {
@@ -99,6 +99,44 @@ describe('D48 historical time source matrix boundary', () => {
       expect(entry.invariant).toBe('N_A');
       expect(entry.anomaly).toBeNull();
       expect(entry.migrationConversion).toBe('NONE');
+    }
+  });
+
+  it('新增字段的历史范围与业务日期语义保持严格登记', () => {
+    const recurrenceDay = D48_HISTORICAL_TIME_SOURCE_MATRIX.find(
+      (e) => e.key === 'Schedule.recurrenceDay',
+    )!;
+    expect(recurrenceDay).toEqual({
+      key: 'Schedule.recurrenceDay',
+      rowCount: 0,
+      source: 'BUSINESS_DATE',
+      invariant: 'N_A',
+      anomaly: null,
+      migrationConversion: 'NONE',
+    });
+
+    const newTableFields = [
+      'RecurrenceRule.startDate',
+      'RecurrenceRule.endDate',
+      'RecurrenceRule.createdAtTs',
+      'RecurrenceRule.updatedAtTs',
+      'RecurrenceRuleParticipant.createdAtTs',
+      'ScheduleRevision.createdAtTs',
+      'ScheduleCompletionSnapshot.createdAtTs',
+      'TeacherWorkspacePreference.updatedAtTs',
+      'WebMutationReceipt.createdAtTs',
+      'SchedulingWebMutationReceipt.createdAtTs',
+    ];
+    for (const key of newTableFields) {
+      const entry = D48_HISTORICAL_TIME_SOURCE_MATRIX.find((e) => e.key === key)!;
+      expect(entry).toEqual({
+        key,
+        rowCount: 0,
+        source: 'N_A',
+        invariant: 'N_A',
+        anomaly: null,
+        migrationConversion: 'NONE',
+      });
     }
   });
 
