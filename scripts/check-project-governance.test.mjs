@@ -36,9 +36,10 @@ test('reject silent approval of pending business semantics', () => {
 });
 test('reject completed tasks when delivery verification is still failing', () => {
   const bundle = structuredClone(baseline);
+  const currentTask = bundle.files['PROJECT_LOG.md'].match(/\| 当前任务 \| (GOV-\d+|A\d{2}|P\d+)/)[1];
   bundle.files['PROJECT_LOG.md'] = bundle.files['PROJECT_LOG.md']
     .replace(/\| 当前任务状态 \|[^\n]+/, '| 当前任务状态 | 已完成 |')
-    .replace(/(\| GOV-001 \|[^\n]*\| )被阻塞( \|)/, '$1已完成$2')
+    .replace(new RegExp(`(\\| ${currentTask} \\|[^\\n]*\\| )(?:未开始|进行中|等待确认|被阻塞|已完成|已取消)( \\|)`), '$1已完成$2')
     .replace(/\| 交付门禁 \|[^\n]+/, '| 交付门禁 | 失败 |');
   rejects(bundle, /未通过交付门禁/);
 });
@@ -85,4 +86,24 @@ test('reject a tampered manifest even if its matching content is supplied', () =
   forged.manifest.files[0].sha256 = 'replacement';
   forged.manifest.logSha256 = 'replacement';
   rejects(forged, /原始指纹/);
+});
+
+test('reject removal of interaction rules while the interaction heading remains', () => {
+  for (const rule of [
+    '默认用中文和产品语言沟通',
+    '直接推进已授权的工作',
+    '只追问会实质改变产品目标、验收或授权边界的问题',
+    '回答状态问题后继续原任务',
+    '用户明确要求停止时，立即停止当前任务及其子任务的执行',
+  ]) rejects(changed('AGENTS.md', rule, '可自行省略'), /缺少必要约束/);
+});
+
+test('reject weakening of new-project Git requirements and repository boundaries', () => {
+  for (const rule of [
+    '每个新项目从创建开始必须纳入 Git 版本管理',
+    '先确认项目目录和仓库归属',
+    '不重复初始化或随意创建嵌套仓库',
+    '完成首批验证后创建初始 commit',
+    '不得把依赖、构建产物、密钥或真实教学资料提交到 Git',
+  ]) rejects(changed('AGENTS.md', rule, '可自行省略'), /缺少必要约束/);
 });
