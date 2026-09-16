@@ -30,4 +30,4 @@
 
 ## Gate 复核
 
-首次在新增路由契约之后运行完整 `npm run check` 时，后端 322 个文件中 321 个通过、2782 个测试中 2781 个通过；唯一失败是 `tests/e2e/teaching-tasks.routes.test.ts` 的一次 `socket hang up`。随后用同一隔离 PostgreSQL 17 harness 单独重跑该文件，5/5 通过，原始日志为 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/teaching-tasks-rerun-11.log`。完整 Gate 仍需在这次复核后重跑并以最终退出码为准。
+首次在新增路由契约之后运行完整 `npm run check` 时，后端 322 个文件中 321 个通过、2782 个测试中 2781 个通过；唯一失败是 `tests/e2e/teaching-tasks.routes.test.ts` 的一次 `socket hang up`。随后用同一隔离 PostgreSQL 17 harness 单独重跑该文件，5/5 通过，原始日志为 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/teaching-tasks-rerun-11.log`。第二次完整 Gate 已退出 0，最终日志为 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/check-12-a06-final.log`：后端 322/2782、前端 47/296、管理端 13/84 全部通过，运维 149/151 通过且 2 项 Windows 专属跳过。
