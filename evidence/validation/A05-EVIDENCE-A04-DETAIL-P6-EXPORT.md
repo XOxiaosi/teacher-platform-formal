@@ -96,3 +96,11 @@
 - 新增后端端到端回归串联“当前课次依据 → mock AI 草稿 → 显式保存 → 手工编辑 → 确认 → 快照读取”，并验证同请求编号重放不重复写入。专项 1/1 通过，证据 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/a05-feedback-draft-save-e2e.log`。
 - 完整门禁 `check-06.log` 退出 0：后端 322/2781、前端 47/294、管理端 13/84 通过；运维 151 中 149 通过，2 项 Windows 专属跳过。
 - 仅验证隔离 PostgreSQL 与合成/mock 路径，不声称真实模型、真实资料、实际渠道发送、Windows、跨设备或用户验收已完成。
+
+## A06-REVIEW / P2-ACCEPTANCE
+
+- A03 Owner 独立只读审阅发现：正式 ConnectedWorkspace 未透传生成结果的课次、依据版本、窗口与请求编号；原型反馈暂存只在页面组件内；A05 E2E 缺少生成不落库、依据变化和发送分离断言。未发现 P0。
+- 主 Agent 修复并提交 `2122aa5`、`a50e94e`：正式入口接入生成 API 与显式 `/feedback` 保存，携带 `lessonId`、依据快照、时间窗口和稳定 `clientRequestId`；预览原型将 `localDrafts` 提升到 App 会话级并补离页回归；E2E 增加零写、版本冲突和 `sentAt=null` 断言。预览隔离边界同步保持无 API 依赖。
+- 定向前端 `ConnectedWorkspace`、V009 原型和 preview isolation 共 22/22 通过；完整 `npm run check` 证据为 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/check-10-a06-final.log`，退出 0：后端322文件/2782项、前端47文件/296项、管理端13文件/84项通过；运维151项中149项通过、2项 Windows 专属跳过；治理、文件长度、类型、lint、隔离 PostgreSQL 17 与构建通过。
+- 浏览器合成验收证据：`/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/a06-browser-feedback.log`。本地页面完成三条可分享记录逐项确认、反馈准备、正文修改、学生切换返回、显式保存和复制；375×844 截图可见编辑区/依据/底部导航，`scrollWidth=375`。未发送任何真实消息。
+- 尚未关闭的 Gate：真实模型效果、正式认证 HTTP 的真实登录浏览器验收、真实 Windows/手机、跨设备草稿恢复、真实教师资料、渠道发送和用户体验验收；不能用本地合成证据替代。
