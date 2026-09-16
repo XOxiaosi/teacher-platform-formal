@@ -55,6 +55,13 @@ describe('privacy API client（契约 backend privacy.routes：导出 jobId 轮�
     expect(JSON.parse(String(init.body))).not.toHaveProperty('teacherId');
   });
 
+  it('P6-READABLE：exportPrivacy({format:"readable"}) 请求可读完整 ZIP', async () => {
+    const fetchMock = mockSuccess({ jobId: 'job_readable1' });
+    await expect(exportPrivacy({ format: 'readable' })).resolves.toEqual({ jobId: 'job_readable1' });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual({ format: 'readable' });
+  });
+
   it('exportStatus 发 GET /api/v1/privacy/export/status?jobId=（URL 编码，不带教师标识）', async () => {
     const fetchMock = mockSuccess({ jobId: 'job_1', status: 'running' });
 

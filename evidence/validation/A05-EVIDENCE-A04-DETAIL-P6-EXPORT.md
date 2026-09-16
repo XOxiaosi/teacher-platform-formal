@@ -33,6 +33,13 @@
 - P6 原始证据：[交接清单](/Users/xiaosi/Developer/artifacts/teacher-platform-formal/P6-EXPORT/review-handoff.md)、同目录final-ops-symlink-fixed.log及final-api-export.log。Manifest v1.1声明stored_encoding；密文仍为密文，不冒充可读导出。
 - 完整门禁在所有Owner代码冻结后启动，原始输出V009-next-20260916/check-01.log；运行期间233个已改/新增源码文件SHA256已存，最终需核对未变。
 
+## P6-READABLE 收口
+
+- 新增 `packages/ops/lib/teacher-export-readable.mjs` 与 `scripts/export-teacher-readable.mjs`：显式字段/JSON 映射、当前与旧字段密文双读、媒体原件严格解密及 sha256/size 校验；未知或损坏输入 fail-closed。输出 manifest `version=1.2`、`representation=readable`、`scope=records_and_media`、`complete=true`，可选 ZIP 只收录已校验的可读记录和媒体。
+- 隐私 API 新增 `format=readable`，状态/下载沿用 owner 隔离与一次性清理；JSON 下载响应附 `scope=records`、`mediaDelivery=manifest_only`。前端设置页完成按钮、状态轮询和 Blob 下载；A05-SAVE 新增字段已加入导出策略，迁移计数为 39。
+- 证据：`p6-readable-ops-03.log` 为 ops 隔离 PostgreSQL 17.10 全回归 151 项，149 通过、2 项 Windows PowerShell 专属跳过，退出 0；readable 单测 4/4，前端隐私 API/设置 18/18，后端构建、文件长度、治理、差异检查通过。`p6-readable-privacy.log` 中既有 privacy 测试因当前未跟踪邀请夹具重复写共享 TeacherRegistry，4 项失败、5 项通过；该夹具失败未修改本包逻辑，未将隐私 API 全流程标为通过。
+- 边界：根 `npm run check` 需在本包提交后重跑；真实 Windows、真实媒体存储、真实教师资料、模型/渠道与发布未验证。P6-EXPORT 的 stored_encoding 与本包 readable 表示严格区分。
+
 ## 首轮完整门禁未通过
 
 - `npm run check`（check-01.log）退出1：后端319文件中315通过，2771项中2767通过、4失败；前端/管理端/运维和最终构建因入口短路未执行。治理19项、长度、类型和lint已通过。233个源码文件指纹在该轮结束后核对未变。

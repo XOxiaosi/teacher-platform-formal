@@ -12,6 +12,7 @@
     "metrics-aggregate": "node scripts/metrics-aggregate.mjs",
     "alert-check": "node scripts/alert-check.mjs",
     "export-teacher-data": "node scripts/export-teacher-data.mjs",
+    "export-teacher-readable": "node scripts/export-teacher-readable.mjs",
     "deactivate-teacher": "node scripts/deactivate-teacher.mjs",
     "test": "node scripts/run-tests.mjs"
   }

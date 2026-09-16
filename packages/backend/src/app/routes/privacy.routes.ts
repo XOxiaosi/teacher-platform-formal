@@ -19,37 +19,7 @@ import type { RateLimiter } from '../middleware/rate-limit.js';
 import { createJobStore, runSpawnJob, type BackgroundJobStore } from '../../shared/background-jobs/index.js';
 import { defaultBackupRoot } from '../../features/admin/admin-health.js';
 
-/**
- * 隐私自助化 API（P8 第六批 · t29）。
- *
- * 背景：导出/注销此前仅 ops CLI（export-teacher-data.mjs / deactivate-teacher.mjs），
- * 前端无 API 可接线——本路由补齐 authed API，红线门禁保留服务端：
- *
- * - POST /api/v1/privacy/export          → requireAuth + owner 隔离，spawn export-teacher-data.mjs
- *                                          （--teacher-id <session 教师> --out <exportRoot>/exports/...），
- *                                          202 {jobId}；job 记录 owner，轮询/下载必须 owner 匹配。
- * - GET  /api/v1/privacy/export/status?jobId= → 轮询终态 {status, result?, error?}（jobId 不存在/他人 → 404）。
- * - GET  /api/v1/privacy/export/download?jobId= → 认证下载：jobId+owner 校验 + succeeded 终态，
- *                                          返回 {manifest, account, tables} JSON 附件（下载后清理导出目录
- *                                          及空父目录 exports/<teacherId>）。
- * - POST /api/v1/privacy/deactivate      → requireAuth + 邮箱匹配 + 密码验证（auth-service
- *                                          verifyCredentials，不签发会话）+ 二次确认 confirm=邮箱或固定短语；
- *                                          全部通过后服务端 spawn deactivate-teacher.mjs --confirm
- *                                          （--confirm 门禁只存在于服务端，前端不传裸 confirm）；
- *                                          成功后删 SessionStore（会话失效）+ 删 TeacherRegistry + 清 cookie。
- *
- * 安全：
- * - 导出/注销均 owner 隔离（req.teacherId 来自 requireAuth session，仅能操作自己）；
- * - 注销高风险：服务端强制邮箱+密码双重验证 + confirm 短语；
- * - 操作记结构化日志（actor=teacher）；限流复用 RateLimiter（导出 10/min、注销 3/min，可配）。
- *
- * 契约（前端接线）：
- * - POST /privacy/export → 202 { ok, data: { jobId } }；轮询 GET /privacy/export/status?jobId= →
- *   { ok, data: { jobId, status, result?, error? } }；succeeded 后 GET /privacy/export/download?jobId= →
- *   application/json 附件（Content-Disposition attachment; filename=export-<teacherId>.json）。
- * - POST /privacy/deactivate { email, password, confirm } → 200 { ok, data: { jobId, status, result } }；
- *   邮箱不匹配/密码错/confirm 错 → 400 VALIDATION_ERROR；未登录 → 401。
- */
+/** 隐私自助导出与注销 API；所有操作均受 session owner 围栏与服务端门禁保护。 */
 
 const SESSION_COOKIE_NAME = 'sessionToken';
 const EXPORT_TTL_MS = 60 * 60 * 1000;
@@ -156,7 +126,7 @@ interface ExportJobMeta {
   teacherId: string;
   dir: string;
   /** 导出产物格式：'json'（缺省，目录 + JSON 附件）| 'zip'（--zip 单包，application/zip 下载） */
-  format: 'json' | 'zip';
+  format: 'json' | 'zip' | 'readable';
 }
 
 export function createPrivacyRouter(options: PrivacyRouterOptions): Router {
@@ -185,7 +155,7 @@ export function createPrivacyRouter(options: PrivacyRouterOptions): Router {
       const createdAt = job?.createdAt ?? 0;
       if (now - createdAt > EXPORT_TTL_MS) {
         void rm(meta.dir, { recursive: true, force: true }).catch(() => {});
-        if (meta.format === 'zip') {
+        if (meta.format === 'zip' || meta.format === 'readable') {
           void rm(`${meta.dir}.zip`, { force: true }).catch(() => {});
         }
         void removeEmptyExportParents(meta.dir);
@@ -239,7 +209,8 @@ export function createPrivacyRouter(options: PrivacyRouterOptions): Router {
     }
     if (!(await checkRateLimit(res, teacherId, 'export'))) return;
 
-    const format = readStringBody(req.body, 'format') === 'zip' ? 'zip' : 'json';
+    const requestedFormat = readStringBody(req.body, 'format');
+    const format = requestedFormat === 'readable' ? 'readable' : requestedFormat === 'zip' ? 'zip' : 'json';
     const jobId = jobs.create('privacy-export', teacherId);
     const exportDir = resolve(exportRoot, 'exports', teacherId, jobId);
     await mkdir(exportDir, { recursive: true });
@@ -248,7 +219,7 @@ export function createPrivacyRouter(options: PrivacyRouterOptions): Router {
 
     void runSpawnJob(jobs, jobId, {
       command: 'npm',
-      args: ['-w', '@teacher-platform/ops', 'run', 'export-teacher-data', '--', '--teacher-id', teacherId, '--out', exportDir, ...(format === 'zip' ? ['--zip'] : [])],
+      args: ['-w', '@teacher-platform/ops', 'run', format === 'readable' ? 'export-teacher-readable' : 'export-teacher-data', '--', '--teacher-id', teacherId, '--out', exportDir, ...(format === 'json' ? [] : ['--zip'])],
       cwd: spawnCwd,
     });
     recordAudit(logger, { actor: teacherId, action: 'privacy.export.run', detail: { jobId, format } });
@@ -313,7 +284,7 @@ export function createPrivacyRouter(options: PrivacyRouterOptions): Router {
 
     // P14 t5：zip 产物 → application/zip 附件下载（export-teacher-data --zip 输出 <dir>.zip，
     // 含 manifest/account/tables/media 单包）；下载后清理目录 + zip（一次性产物）。
-    if (meta.format === 'zip') {
+    if (meta.format === 'zip' || meta.format === 'readable') {
       const zipPath = `${meta.dir}.zip`;
       try {
         await stat(zipPath);
@@ -321,7 +292,7 @@ export function createPrivacyRouter(options: PrivacyRouterOptions): Router {
         sendError(res, notFound('zip 导出产物不存在'));
         return;
       }
-      recordAudit(logger, { actor: teacherId, action: 'privacy.export.download', detail: { jobId, format: 'zip' } });
+      recordAudit(logger, { actor: teacherId, action: 'privacy.export.download', detail: { jobId, format: meta.format } });
       res.setHeader('Content-Type', 'application/zip');
       res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(`export-${teacherId}.zip`)}`);
       res.setHeader('Cache-Control', 'private, no-store');
@@ -399,7 +370,10 @@ export function createPrivacyRouter(options: PrivacyRouterOptions): Router {
       res.setHeader('Content-Type', 'application/json');
       res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(`export-${teacherId}.json`)}`);
       res.setHeader('Cache-Control', 'private, no-store');
-      res.status(200).json({ ok: true, data: { manifest, account, tables } });
+      res.status(200).json({
+        ok: true,
+        data: { manifest, account, tables, scope: 'records', mediaDelivery: 'manifest_only' },
+      });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       recordAudit(logger, { actor: teacherId, action: 'privacy.export.download', error: message });

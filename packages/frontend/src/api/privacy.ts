@@ -6,7 +6,7 @@ import { apiDownloadBlob, apiRequest } from './client';
  * - 身份：session cookie（credentials:'include'）。owner 隔离由后端
  *   requireAuth → req.teacherId 保证——前端绝不传 teacherId/他人标识，
  *   零越权：仅能操作自己。
- * - 导出：POST /privacy/export {format:'zip'} → 202 {jobId} → 轮询
+ * - 导出：POST /privacy/export {format:'readable'} → 202 {jobId} → 轮询
  *   GET /privacy/export/status?jobId= → succeeded 后
  *   GET /privacy/export/download?jobId= 取 application/zip 附件
  *   export-<teacherId>.zip（含 manifest/account/tables/media，服务端下载后清理产物）。
@@ -19,7 +19,7 @@ import { apiDownloadBlob, apiRequest } from './client';
 export type PrivacyJobStatus = 'pending' | 'running' | 'succeeded' | 'failed';
 
 /** 导出产物格式（P14 t5）：'zip' 单包（含媒体文件）| 'json'（缺省，JSON 附件）。 */
-export type PrivacyExportFormat = 'json' | 'zip';
+export type PrivacyExportFormat = 'json' | 'zip' | 'readable';
 
 /**
  * 导出任务成功 result（= ops export-teacher-data.mjs stdout 尾行 JSON 汇总；
@@ -77,7 +77,7 @@ export interface PrivacyDeactivateResult {
 
 /** POST /api/v1/privacy/export → 202 {jobId}（owner 由 session 决定；format 缺省 'json'）。 */
 export function exportPrivacy(input?: { format?: PrivacyExportFormat }): Promise<{ jobId: string }> {
-  const body = input?.format === 'zip' ? { format: 'zip' } : undefined;
+  const body = input?.format === 'readable' ? { format: 'readable' } : input?.format === 'zip' ? { format: 'zip' } : undefined;
   return apiRequest<{ jobId: string }>('/privacy/export', {
     method: 'POST',
     ...(body !== undefined ? { body } : {}),

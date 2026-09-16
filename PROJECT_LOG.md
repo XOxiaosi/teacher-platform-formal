@@ -256,3 +256,11 @@ V009 是产品语义版本，不为每个实现 commit 升版；同一任务允�
 - 第三波 A05-SAVE：ParentFeedback 增加可选租户请求编号、请求指纹和加密创建回执；FeedbackEvidence 保存服务器来源版本及保存时原件删除状态。创建事务先以教师/请求编号 advisory lock 查找回执，再执行时钟、学生/课次归属和依据锁定；同指纹只解密不可变回执重放并标记 `replayed=true`，指纹冲突零写入，旧无请求编号调用保持兼容。HTTP、workspace-web 和 feedback.create 工具均透传请求编号，快照读取返回保存时来源元数据。
 - A05-SAVE 验证：后端构建通过；隔离 PostgreSQL 17.10 下 A05-SAVE 3 项（同键重放/加密回执、指纹冲突、旧调用兼容）通过，既有 feedback.create 5 项通过。证据日志待写入 `V009-next-20260916/a05-save-idempotency.log`；完整 `npm run check` 需在 P6-READABLE 收口后重跑。
 - A05-SAVE 提交：仅提交保存回执服务、类型/路由/工具透传、Prisma schema/迁移、聚焦测试和本日志；实现提交为 `27f2261235faedbe24fb12633b81e03da08d2e17`，本行在后续日志校准提交中补记。P6-READABLE 仍未实现，TASK-SOURCES/TASK-INVALIDATION 仍是后续依赖；不调用真实模型、资料或外部服务。
+
+### P6-READABLE｜2026-09-16｜可读教师资料导出
+
+- 实现：新增严格 fail-closed 的字段/JSON/媒体解密转换器与 `export-teacher-readable` CLI。字段映射显式维护，支持当前 `enc:v1`、旧 `v1` 双读；坏密文、未知版本、媒体哈希/大小不一致、缺失原件均阻断，旧明文仅在兼容条件下保留。导出 manifest 标记 `representation=readable`、`scope=records_and_media`、`complete=true`，ZIP 包含解密业务表和媒体原件；认证资料、凭据、租约/claim token 继续排除。
+- 接线：隐私 API 接受 `format=readable`，后台启动可读 CLI 并以 ZIP 下载；JSON 下载响应明确 `scope=records`、`mediaDelivery=manifest_only`。设置页新增导出按钮、状态轮询、Blob 下载与错误提示。P6-EXPORT 策略补齐 A05 新字段，迁移计数更新至 39。
+- 验证：ops 隔离 PostgreSQL 17.10 全回归 151 项中 149 通过、2 项 Windows PowerShell 专属跳过，退出 0（`/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/p6-readable-ops-03.log`）；readable 单测 4/4，前端隐私 API/设置测试 18/18，后端构建、文件长度、治理和 diff 检查通过。隐私 API 聚焦回归另有 4 项既有邀请测试因测试夹具在共享 TeacherRegistry 重复写入而失败、5 项通过；该失败与本包路线无关，保留在 `p6-readable-privacy.log`，不据此宣称 API 全流程已验证。
+- 边界：完整根 `npm run check` 尚待本包提交后重跑；真实 Windows、真实媒体存储、真实教师资料、模型/渠道和发布均未验证。TASK-SOURCES/TASK-INVALIDATION 仍是下一依赖。
+- 提交：实现包待本条日志随包提交后记录实际 SHA；保留其他未提交工作区修改，不调用真实服务或外部写入。
