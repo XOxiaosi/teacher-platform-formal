@@ -278,3 +278,54 @@ describe('A02 TeachingTaskRuntimeRunner failure and query receipts', () => {
     expect(await prisma.stepReceipt.count({ where: { taskId: value.taskId } })).toBe(0);
   });
 });
+
+describe('A02 TeachingTaskRuntimeRunner lease heartbeat', () => {
+  it('renews the claimed lease while a driver is still running', async () => {
+    const value = await received();
+    const heartbeat = vi.spyOn(value.tasks, 'heartbeat');
+    const driver: TeachingRuntimeDriver = {
+      availability: 'test', runtimeVersion: 'dsh-v1',
+      run: async (input) => {
+        await new Promise<void>((resolve) => setTimeout(resolve, 35));
+        return {
+          ok: true,
+          value: {
+            reply: '长任务已完成', sessionRef: 'heartbeat-session', status: 'succeeded', checkpoint: {
+              schemaVersion: 1, runtimeVersion: 'dsh-v1', contextEpoch: input.contextEpoch, lastEventKey: 'heartbeat',
+            }, cost: { modelCalls: 0, inputTokens: 0, outputTokens: 0, toolCalls: 0, synthetic: true },
+          },
+        };
+      },
+    };
+    const runner = createTeachingTaskRuntimeRunner({
+      prisma, cipher, tasks: value.tasks, driver, heartbeatMs: 5,
+    });
+    await expect(runner.run({ teacherId: TEACHER, taskId: value.taskId }))
+      .resolves.toMatchObject({ ok: true, value: { status: 'succeeded' } });
+    expect(heartbeat).toHaveBeenCalled();
+  });
+
+  it('aborts a driver after lease loss and never finishes the task', async () => {
+    const value = await received();
+    vi.spyOn(value.tasks, 'heartbeat').mockResolvedValueOnce(
+      err({ code: 'VERSION_CONFLICT', field: 'lease', message: 'lease lost' }),
+    );
+    const finish = vi.spyOn(value.tasks, 'finish');
+    const driver: TeachingRuntimeDriver = {
+      availability: 'test', runtimeVersion: 'dsh-v1',
+      run: async (input) => new Promise((resolve) => {
+        input.signal.addEventListener('abort', () => resolve(err({
+          code: 'VALIDATION_ERROR', field: 'runtime', message: 'aborted after lease loss', retryable: true,
+        })), { once: true });
+      }),
+    };
+    const runner = createTeachingTaskRuntimeRunner({
+      prisma, cipher, tasks: value.tasks, driver, heartbeatMs: 5,
+    });
+    await expect(runner.run({ teacherId: TEACHER, taskId: value.taskId }))
+      .resolves.toMatchObject({ ok: false, error: { code: 'INTERNAL_ERROR' } });
+    expect(finish).not.toHaveBeenCalled();
+    expect(await prisma.taskRuntime.findUnique({ where: { id: value.taskId } }))
+      .toMatchObject({ status: 'running' });
+  });
+});

@@ -23,6 +23,18 @@ export interface TeachingTaskRuntimeRunnerOptions {
   tasks: TeachingTaskService;
   driver: TeachingRuntimeDriver;
   cipher?: FieldCipher;
+  /** Lease renewal cadence for one run; the timer is cleared before run returns. */
+  heartbeatMs?: number;
+  scheduler?: RuntimeLeaseScheduler;
+}
+
+export interface RuntimeLeaseScheduler {
+  setTimeout(callback: () => void, delayMs: number): ReturnType<typeof setTimeout>;
+  clearTimeout(handle: ReturnType<typeof setTimeout>): void;
+}
+
+export interface TeachingTaskRuntimeRunner {
+  run(input: { teacherId: string; taskId: string }): Promise<Result<RunValue, CommonError>>;
 }
 
 type RunValue = { status: string; executionId: string | null };
@@ -32,6 +44,54 @@ type ClaimedExecution = {
   taskId: string;
   executionId: string;
 };
+
+const DEFAULT_HEARTBEAT_MS = 15_000;
+
+function createLeaseMonitor(
+  tasks: TeachingTaskService,
+  lease: TeachingTaskLease,
+  heartbeatMs: number,
+  scheduler: RuntimeLeaseScheduler,
+) {
+  const controller = new AbortController();
+  let stopped = false;
+  let lost = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let inFlight: Promise<void> | undefined;
+
+  const schedule = () => {
+    if (stopped || lost) return;
+    timer = scheduler.setTimeout(() => {
+      inFlight = heartbeat().finally(() => { inFlight = undefined; });
+    }, heartbeatMs);
+  };
+  const heartbeat = async () => {
+    if (stopped || lost) return;
+    try {
+      const result = await tasks.heartbeat(lease);
+      if (!result.ok) {
+        lost = true;
+        controller.abort();
+        return;
+      }
+    } catch {
+      lost = true;
+      controller.abort();
+      return;
+    }
+    schedule();
+  };
+  schedule();
+  return {
+    signal: controller.signal,
+    get lost() { return lost; },
+    async stop() {
+      stopped = true;
+      if (timer !== undefined) scheduler.clearTimeout(timer);
+      await inFlight;
+    },
+  };
+}
 
 function stableJson(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
@@ -81,8 +141,13 @@ function validCheckpoint(
  * Bridges platform-owned fenced leases to a driver. The driver never receives
  * Prisma, credentials, arbitrary DSH plugins, or another task's conversation.
  */
-export function createTeachingTaskRuntimeRunner(options: TeachingTaskRuntimeRunnerOptions) {
+export function createTeachingTaskRuntimeRunner(options: TeachingTaskRuntimeRunnerOptions): TeachingTaskRuntimeRunner {
   const getClient = options.getClient ?? (async () => options.prisma);
+  const heartbeatMs = options.heartbeatMs ?? DEFAULT_HEARTBEAT_MS;
+  const scheduler = options.scheduler ?? { setTimeout, clearTimeout };
+  if (!Number.isSafeInteger(heartbeatMs) || heartbeatMs < 1) {
+    throw new Error('heartbeatMs 必须为正整数');
+  }
 
   async function finishFailure(
     claimed: ClaimedExecution,
@@ -217,6 +282,14 @@ export function createTeachingTaskRuntimeRunner(options: TeachingTaskRuntimeRunn
       };
       if (!claimed.executionId) return err(internalError('教学任务执行快照不存在'));
 
+      const monitor = createLeaseMonitor(options.tasks, claimed.lease, heartbeatMs, scheduler);
+      const failed = async (error: TeachingRuntimeError): Promise<Result<RunValue, CommonError>> => {
+        await monitor.stop();
+        return monitor.lost
+          ? err(internalError('教学任务租约已丢失，已停止运行且未写入完成状态'))
+          : finishFailure(claimed, error);
+      };
+
       try {
         const db = await getClient();
         const snapshot = await db.taskRuntime.findFirst({
@@ -241,7 +314,7 @@ export function createTeachingTaskRuntimeRunner(options: TeachingTaskRuntimeRunn
           },
         });
         if (!snapshot) {
-          return finishFailure(claimed, runtimeFailure('教学任务执行快照不存在', true));
+          return failed(runtimeFailure('教学任务执行快照不存在', true));
         }
         const execution = await db.agentExecution.findFirst({
           where: {
@@ -251,11 +324,11 @@ export function createTeachingTaskRuntimeRunner(options: TeachingTaskRuntimeRunn
           },
         });
         if (!execution?.userTurnId) {
-          return finishFailure(claimed, runtimeFailure('教学任务原消息不存在', true));
+          return failed(runtimeFailure('教学任务原消息不存在', true));
         }
         const userTurn = snapshot.conversation.turns.find((turn) => turn.id === execution.userTurnId);
         if (!userTurn) {
-          return finishFailure(claimed, runtimeFailure('教学任务原消息不存在', true));
+          return failed(runtimeFailure('教学任务原消息不存在', true));
         }
         let checkpoint: TeachingRuntimeCheckpoint | null;
         try {
@@ -270,7 +343,7 @@ export function createTeachingTaskRuntimeRunner(options: TeachingTaskRuntimeRunn
           if (candidate === undefined) throw new Error('checkpoint-shape');
           checkpoint = candidate;
         } catch {
-          return finishFailure(claimed, {
+          return failed({
             code: 'VALIDATION_ERROR',
             field: 'checkpoint',
             message: '运行检查点无效，不能安全续接，请重建任务上下文。',
@@ -297,8 +370,12 @@ export function createTeachingTaskRuntimeRunner(options: TeachingTaskRuntimeRunn
             createTeachingQueryTools(registry, input.teacherId),
             claimed,
           ),
-          signal: new AbortController().signal,
+          signal: monitor.signal,
         });
+        await monitor.stop();
+        if (monitor.lost) {
+          return err(internalError('教学任务租约已丢失，已停止运行且未写入完成状态'));
+        }
         if (!output.ok) return finishFailure(claimed, output.error);
         const outputCheckpoint = validCheckpoint(
           output.value.checkpoint,
@@ -325,7 +402,10 @@ export function createTeachingTaskRuntimeRunner(options: TeachingTaskRuntimeRunn
           ? ok({ status: output.value.status, executionId: claimed.executionId })
           : err(finished.error);
       } catch {
-        return finishFailure(claimed, runtimeFailure('教学运行发生未处理异常', true));
+        await monitor.stop();
+        return monitor.lost
+          ? err(internalError('教学任务租约已丢失，已停止运行且未写入完成状态'))
+          : finishFailure(claimed, runtimeFailure('教学运行发生未处理异常', true));
       }
     },
   };
