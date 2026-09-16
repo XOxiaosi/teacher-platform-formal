@@ -1,4 +1,5 @@
 import type { AgentTurnDto } from '../../api/conversations';
+import type { TeachingTaskEventDto } from '../../api/teaching-tasks';
 
 export type AssistantTaskStatus = 'queued' | 'running' | 'waiting_input' | 'waiting_confirmation' | 'succeeded' | 'failed' | 'partial' | 'unavailable' | 'cancelled';
 export interface AssistantTask {
@@ -8,6 +9,7 @@ export interface AssistantTask {
   /** 服务端根据执行版本和运行时能力判断是否可以继续。 */
   canResume?: boolean;
 }
+export type AssistantTaskEvent = TeachingTaskEventDto;
 export interface AssistantTransport {
   readonly runtimeAvailability?: 'available' | 'unavailable' | 'test_only';
   createConversation?(input: { teacherId: string }): Promise<string>;
@@ -19,6 +21,7 @@ export interface AssistantTransport {
   getTasks?(input: { teacherId: string; conversationId: string }): Promise<AssistantTask[]>;
   /** 继续服务端已保存但未完成的任务；不会重新发送原消息。 */
   resumeTask?(input: { teacherId: string; conversationId: string; taskId: string }): Promise<AssistantTask>;
+  getTaskEvents?(input: { teacherId: string; conversationId: string; taskId: string; afterSeq?: number }): Promise<{ items: AssistantTaskEvent[]; nextSeq: number | null }>;
 }
 export const taskLabels: Record<AssistantTaskStatus, string> = {
   queued: '等待处理', running: '正在处理', waiting_input: '待补充信息', waiting_confirmation: '待确认',

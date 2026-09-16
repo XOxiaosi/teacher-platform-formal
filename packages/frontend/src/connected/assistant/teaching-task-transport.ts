@@ -2,9 +2,11 @@ import {
   createTeachingConversation,
   getTeachingTask,
   listTeachingTasks,
+  listTeachingTaskEvents,
   resumeTeachingTask,
   sendTeachingTaskMessage,
   type TeachingTaskDto,
+  type TeachingTaskEventDto,
 } from '../../api/teaching-tasks';
 import type { AssistantTask, AssistantTransport } from './transport';
 
@@ -35,8 +37,18 @@ export function createTeachingTaskTransport(): AssistantTransport {
       return { accepted: true, task: toAssistantTask(result.task) };
     },
     async getTasks({ teacherId, conversationId }) {
-      const result = await listTeachingTasks(teacherId, conversationId);
-      return result.items.map(toAssistantTask);
+      const tasks: TeachingTaskDto[] = [];
+      let cursor: string | undefined;
+      const seenCursors = new Set<string>();
+      do {
+        const result = await listTeachingTasks(teacherId, conversationId, cursor ? { cursor } : {});
+        tasks.push(...result.items);
+        const nextCursor = result.nextCursor ?? undefined;
+        if (!nextCursor || seenCursors.has(nextCursor)) break;
+        seenCursors.add(nextCursor);
+        cursor = nextCursor;
+      } while (cursor);
+      return tasks.map(toAssistantTask);
     },
     async getTask({ teacherId, taskId }) {
       return toAssistantTask((await getTeachingTask(teacherId, taskId)).task);
@@ -44,6 +56,22 @@ export function createTeachingTaskTransport(): AssistantTransport {
     async resumeTask({ teacherId, taskId }) {
       const current = (await getTeachingTask(teacherId, taskId)).task;
       return toAssistantTask((await resumeTeachingTask(teacherId, current)).task);
+    },
+    async getTaskEvents({ teacherId, taskId, afterSeq }) {
+      const events: TeachingTaskEventDto[] = [];
+      let cursor = afterSeq;
+      const seenCursors = new Set<number>();
+      for (;;) {
+        const result = await listTeachingTaskEvents(teacherId, taskId, cursor);
+        for (const event of result.items) {
+          if (!events.some(existing => existing.eventKey === event.eventKey)) events.push(event);
+        }
+        if (result.nextSeq === null || (cursor !== undefined && result.nextSeq <= cursor) || seenCursors.has(result.nextSeq)) {
+          return { items: events, nextSeq: result.nextSeq };
+        }
+        seenCursors.add(result.nextSeq);
+        cursor = result.nextSeq;
+      }
     },
   };
 }

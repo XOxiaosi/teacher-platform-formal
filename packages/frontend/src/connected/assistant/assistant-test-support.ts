@@ -15,5 +15,5 @@ export function deferred<T>() {
   return { promise, resolve, reject };
 }
 export function makeTransport() {
-  return { sendMessage: vi.fn(), getTasks: vi.fn().mockResolvedValue([]), resumeTask: vi.fn() };
+  return { sendMessage: vi.fn(), getTasks: vi.fn().mockResolvedValue([]), resumeTask: vi.fn(), getTaskEvents: vi.fn().mockResolvedValue({ items: [], nextSeq: null }) };
 }

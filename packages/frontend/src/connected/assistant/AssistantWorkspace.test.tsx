@@ -164,4 +164,32 @@ describe('A03 server-backed assistant conversations', () => {
     await screen.findByText('已重新排队处理。');
     expect(transport.resumeTask).toHaveBeenCalledWith({ teacherId: 'teacher-a', conversationId: 'one', taskId: 'failed-task' });
   });
+  it('rebuilds visible task progress from server events and de-duplicates a repeated cursor page', async () => {
+    const transport = makeTransport();
+    transport.getTasks.mockResolvedValue([{ id: 'task-1', status: 'running', summary: '正在处理。', canResume: false }]);
+    const event1 = { seq: 1, eventKey: 'event-1', eventKind: 'task_state' as const, executionId: 'exec-1', role: 'assistant' as const, content: '任务已收到并保存。', createdAt: '2026-09-15T12:00:00Z' };
+    const event2 = { seq: 2, eventKey: 'event-2', eventKind: 'assistant_message' as const, executionId: 'exec-1', role: 'assistant' as const, content: '已恢复并继续处理。', createdAt: '2026-09-15T12:01:00Z' };
+    transport.getTaskEvents.mockImplementation(({ afterSeq }: { afterSeq?: number }) => Promise.resolve(afterSeq === 1
+      ? { items: [event1, event2], nextSeq: 2 }
+      : { items: [event1], nextSeq: null }));
+    render(<AssistantWorkspace teacherId="teacher-a" transport={transport} />);
+    await screen.findByText('任务已收到并保存。');
+    expect(screen.getAllByText('任务已收到并保存。')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: '刷新任务和结果' }));
+    await screen.findByText('已恢复并继续处理。');
+    expect(screen.getAllByText('任务已收到并保存。')).toHaveLength(1);
+    expect(transport.getTaskEvents).toHaveBeenLastCalledWith({ teacherId: 'teacher-a', conversationId: 'one', taskId: 'task-1', afterSeq: 1 });
+  });
+  it('shows the 21st persisted task and reads its server event after a full refresh', async () => {
+    const transport = makeTransport();
+    const tasks = Array.from({ length: 21 }, (_, index) => ({ id: `task-${index + 1}`, status: 'partial' as const, summary: `任务${index + 1}`, canResume: false }));
+    transport.getTasks.mockResolvedValue(tasks);
+    transport.getTaskEvents.mockImplementation(({ taskId }: { taskId: string }) => Promise.resolve({ items: taskId === 'task-21'
+      ? [{ seq: 1, eventKey: 'task-21-event-1', eventKind: 'task_state' as const, executionId: 'exec-21', role: 'assistant' as const, content: '任务21已恢复', createdAt: '2026-09-15T12:00:00Z' }]
+      : [], nextSeq: taskId === 'task-21' ? 1 : null }));
+    render(<AssistantWorkspace teacherId="teacher-a" transport={transport} />);
+    await screen.findByText('任务21');
+    await screen.findByText('任务21已恢复');
+    expect(transport.getTaskEvents).toHaveBeenCalledWith({ teacherId: 'teacher-a', conversationId: 'one', taskId: 'task-21', afterSeq: undefined });
+  });
 });

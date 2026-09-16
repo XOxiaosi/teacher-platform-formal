@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { archiveConversation, getConversation, listConversationTurns, type AgentTurnDto, type ConversationDetailDto } from '../../api/conversations';
-import type { AssistantTask, AssistantTransport } from './transport';
+import type { AssistantTask, AssistantTaskEvent, AssistantTransport } from './transport';
 
 export function useConversation(teacherId: string, conversationId: string, transport: AssistantTransport | undefined, receipt?: string) {
   const [conversation, setConversation] = useState<ConversationDetailDto | null>(null);
   const [turns, setTurns] = useState<AgentTurnDto[]>([]);
   const [tasks, setTasks] = useState<AssistantTask[]>([]);
+  const [events, setEvents] = useState<AssistantTaskEvent[]>([]);
+  const [eventCursor, setEventCursor] = useState<Record<string, number>>({});
   const [previousCursor, setPreviousCursor] = useState<string | null>(null);
   const [busy, setBusy] = useState(true);
   const [loadingHistory, setLoadingHistory] = useState(false);
@@ -23,7 +25,28 @@ export function useConversation(teacherId: string, conversationId: string, trans
     setTaskError('');
     try {
       const result = await transport.getTasks({ teacherId, conversationId });
-      if (alive.current) setTasks(result);
+      if (alive.current) {
+        setTasks(result);
+        if (transport.getTaskEvents) {
+          const eventResults = await Promise.all(result.map(task => transport.getTaskEvents!({ teacherId, conversationId, taskId: task.id, afterSeq: eventCursor[task.id] })));
+          if (!alive.current) return;
+          setEvents(previous => {
+            const seen = new Set(previous.map(event => event.eventKey));
+            return [...previous, ...eventResults.flatMap(result => result.items).filter(event => !seen.has(event.eventKey))]
+              .sort((a, b) => a.seq - b.seq);
+          });
+          setEventCursor(previous => {
+            const next = { ...previous };
+            result.forEach((task, index) => {
+              const eventResult = eventResults[index];
+              const maxSeq = eventResult.items.reduce((max, event) => Math.max(max, event.seq), 0);
+              const cursor = eventResult.nextSeq ?? (maxSeq > 0 ? maxSeq : undefined);
+              if (cursor !== undefined) next[task.id] = cursor;
+            });
+            return next;
+          });
+        }
+      }
     } catch { if (alive.current) setTaskError('任务进度暂时无法读取，请重试。'); }
   }
   async function load() {
@@ -70,5 +93,5 @@ export function useConversation(teacherId: string, conversationId: string, trans
     } catch { if (alive.current) setTaskError('任务尚未恢复，请稍后重试。'); return false; }
     finally { if (alive.current) setResumingTaskId(null); }
   }
-  return { conversation, turns, tasks, previousCursor, busy, loadingHistory, archiving, error, taskError, resumingTaskId, load, reloadTasks, loadOlder, archive, resumeTask };
+  return { conversation, turns, tasks, events, previousCursor, busy, loadingHistory, archiving, error, taskError, resumingTaskId, load, reloadTasks, loadOlder, archive, resumeTask };
 }

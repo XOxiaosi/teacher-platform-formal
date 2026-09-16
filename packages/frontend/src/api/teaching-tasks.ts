@@ -25,6 +25,17 @@ export interface TeachingTaskReceipt {
   receivedAt: string;
 }
 
+export type TeachingTaskEventKind = 'message_received' | 'task_state' | 'step_result' | 'task_error' | 'assistant_message';
+export interface TeachingTaskEventDto {
+  seq: number;
+  eventKey: string;
+  eventKind: TeachingTaskEventKind;
+  executionId: string | null;
+  role: 'user' | 'assistant' | 'tool' | 'error';
+  content: string;
+  createdAt: string;
+}
+
 export function createTeachingConversation(teacherId: string): Promise<{ id: string; createdAt: string }> {
   return apiRequest('/teaching-conversations', { method: 'POST', teacherId });
 }
@@ -39,13 +50,27 @@ export function sendTeachingTaskMessage(
 export function listTeachingTasks(
   teacherId: string,
   conversationId: string,
+  params: { cursor?: string; limit?: number } = {},
 ): Promise<{ items: TeachingTaskDto[]; nextCursor: string | null }> {
   const query = new URLSearchParams({ conversationId });
+  if (params.cursor) query.set('cursor', params.cursor);
+  if (params.limit !== undefined) query.set('limit', String(params.limit));
   return apiRequest(`/teaching-tasks?${query.toString()}`, { method: 'GET', teacherId });
 }
 
 export function getTeachingTask(teacherId: string, taskId: string): Promise<{ task: TeachingTaskDto }> {
   return apiRequest(`/teaching-tasks/${encodeURIComponent(taskId)}`, { method: 'GET', teacherId });
+}
+
+export function listTeachingTaskEvents(
+  teacherId: string,
+  taskId: string,
+  afterSeq?: number,
+): Promise<{ items: TeachingTaskEventDto[]; nextSeq: number | null }> {
+  const query = new URLSearchParams();
+  if (afterSeq !== undefined) query.set('afterSeq', String(afterSeq));
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return apiRequest(`/teaching-tasks/${encodeURIComponent(taskId)}/events${suffix}`, { method: 'GET', teacherId });
 }
 
 export function resumeTeachingTask(
