@@ -304,3 +304,9 @@ V009 是产品语义版本，不为每个实现 commit 升版；同一任务允�
 - 回归：新增正式入口单测覆盖生成、证据/窗口/请求编号透传；原型新增导航离页保留测试；A05 E2E 新增生成不落库、依据版本变化拒绝保存且零写、核对后 `sentAt=null` 断言。定向前端 22/22 通过；完整 `npm run check`（`/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/check-10-a06-final.log`）退出 0：后端322文件/2782项、前端47文件/296项、管理端13文件/84项通过，运维151项中149通过、2项 Windows 专属跳过，治理/长度/类型/lint/隔离 PostgreSQL 17/构建通过。
 - 浏览器证据：本地 Vite 合成页面按“逐项确认三条可分享记录 → 准备反馈 → 手工修改 → 切换学生返回 → 明确保存 → 复制”执行；AX 状态显示依据范围和保存/复制回执，375×844 截图显示编辑区与底部导航，DOM `scrollWidth=375`。原始记录见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/a06-browser-feedback.log`。
 - 边界：A06/P2 目前仅完成合成工程和本地浏览器任务证据；真实模型效果、正式认证 HTTP 的真实浏览器登录、Windows/真实手机、跨设备草稿恢复、真实教师资料、渠道发送与用户验收仍未验证。生成结果与发送严格分离，未调用外部服务。
+
+### A06-P2-HTTP-CONTRACT｜2026-09-16｜正式反馈路由契约收口
+
+- 补充正式 `POST /feedback` 路由回归：成功路径同时断言 `lessonId`、`channel`、`parentName`、`clientRequestId`、`evidence` 及 `windowStart/windowEnd` 完整透传，认证教师身份仍来自请求上下文。专项 `feedback-generate.routes.snapshot.test.ts` 9/9 通过。
+- 验收矩阵集中记录于 [A06/P2 正式入口与合成任务证据](evidence/validation/A06-P2-HTTP-ACCEPTANCE.md)，与现有 A05 服务层、A06 ConnectedWorkspace、原型离页回归及浏览器日志相互引用；没有新增真实服务调用或产品范围。
+- 当前投影仍为进行中：正式认证 HTTP 的真实登录浏览器、真实模型/DSH、真实 Windows/手机、跨设备草稿恢复、真实教师资料、渠道发送及用户验收 Gate 尚未关闭。下一步继续做可在本地完成的 HTTP/设备验收准备，并在代码冻结后重跑完整 `npm run check`。
