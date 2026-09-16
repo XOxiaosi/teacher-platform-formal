@@ -34,6 +34,12 @@ export function createTeachingTaskTransport(): AssistantTransport {
     },
     async sendMessage({ teacherId, conversationId, message, clientRequestId }) {
       const result = await sendTeachingTaskMessage(teacherId, { conversationId, message, clientRequestId });
+      if (!result?.receipt || result.receipt.clientRequestId !== clientRequestId
+        || !result.receipt.executionId || !result.receipt.userTurnId
+        || !Number.isFinite(Date.parse(result.receipt.receivedAt))
+        || !result.task?.id || result.task.conversationId !== conversationId) {
+        throw new Error('未取得与本条消息匹配的持久接收回执');
+      }
       return { accepted: true, task: toAssistantTask(result.task) };
     },
     async getTasks({ teacherId, conversationId }) {

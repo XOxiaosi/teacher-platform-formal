@@ -44,6 +44,21 @@ describe('formal teaching task transport', () => {
     expect(api.resume).toHaveBeenCalledWith('teacher-a', expect.objectContaining({ id: 'task-1', currentExecutionId: 'execution-1', version: 2 }));
   });
 
+  it.each(['missing', 'wrong-request', 'missing-execution', 'missing-turn', 'wrong-conversation', 'invalid-time'])('does not acknowledge a %s receipt', async (failure) => {
+    const receipt = { executionId: 'execution-1', userTurnId: 'turn-1', clientRequestId: 'request-1', receivedAt: '2026-09-15T12:00:00Z' };
+    if (failure === 'wrong-request') receipt.clientRequestId = 'another-request';
+    if (failure === 'missing-execution') receipt.executionId = '';
+    if (failure === 'missing-turn') receipt.userTurnId = '';
+    if (failure === 'invalid-time') receipt.receivedAt = 'not-a-date';
+    api.send.mockResolvedValue({ task: task(failure === 'wrong-conversation' ? { conversationId: 'other-conversation' } : {}), receipt: failure === 'missing' ? undefined : receipt, replayed: true });
+    await expect(createTeachingTaskTransport().sendMessage({ teacherId: 'teacher-a', conversationId: 'conversation-1', message: '核对课时', clientRequestId: 'request-1' })).rejects.toThrow('持久接收回执');
+  });
+
+  it('accepts the original receipt when a replayed task has advanced to a newer execution', async () => {
+    api.send.mockResolvedValue({ task: task({ currentExecutionId: 'newer-execution' }), receipt: { executionId: 'original-execution', userTurnId: 'turn-1', clientRequestId: 'request-1', receivedAt: '2026-09-15T12:00:00Z' }, replayed: true });
+    await expect(createTeachingTaskTransport().sendMessage({ teacherId: 'teacher-a', conversationId: 'conversation-1', message: '核对课时', clientRequestId: 'request-1' })).resolves.toMatchObject({ accepted: true });
+  });
+
   it('reads task events with the server cursor', async () => {
     api.events.mockResolvedValue({ items: [{ seq: 3, eventKey: 'event-3', eventKind: 'task_state', executionId: 'execution-1', role: 'assistant', content: '已保存任务状态', createdAt: '2026-09-15T12:00:00Z' }], nextSeq: 3 });
     const transport = createTeachingTaskTransport();

@@ -1,4 +1,4 @@
-export interface AssistantDraft { text: string; requestId: string }
+export interface AssistantDraft { text: string; requestId: string; awaitingReceipt?: boolean }
 const prefix = 'teaching-assistant-draft:';
 const key = (teacherId: string, conversationId: string) => `${prefix}${encodeURIComponent(teacherId)}:${encodeURIComponent(conversationId)}`;
 const memory = new Map<string, AssistantDraft>();
