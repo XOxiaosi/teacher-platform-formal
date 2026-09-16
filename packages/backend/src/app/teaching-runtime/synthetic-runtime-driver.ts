@@ -1,5 +1,5 @@
-import { err, ok, validationError, type CommonError, type Result } from '@teacher-platform/contracts';
-import type { TeachingRuntimeDriver, TeachingRuntimeInput, TeachingRuntimeOutput } from './runtime-driver.js';
+import { err, ok, validationError, type Result } from '@teacher-platform/contracts';
+import type { TeachingRuntimeDriver, TeachingRuntimeError, TeachingRuntimeInput, TeachingRuntimeOutput } from './runtime-driver.js';
 
 const AUDITED_QUERY_NAMES = new Set([
   'students.get', 'students.list', 'students.balance', 'scheduling.list',
@@ -16,8 +16,8 @@ export interface SyntheticRuntimePlan {
   readonly actions: readonly SyntheticRuntimeAction[];
 }
 
-function error(code: string, message: string): Result<TeachingRuntimeOutput, CommonError> {
-  return err({ code: 'VALIDATION_ERROR', field: code, message });
+function error(code: string, message: string, retryable = false): Result<TeachingRuntimeOutput, TeachingRuntimeError> {
+  return err({ code: 'VALIDATION_ERROR', field: code, message, retryable });
 }
 
 /** Test-only local adapter. It cannot load DSH plugins, invoke a model, open a
@@ -25,8 +25,8 @@ function error(code: string, message: string): Result<TeachingRuntimeOutput, Com
 export function createSyntheticTeachingRuntime(plan: SyntheticRuntimePlan): TeachingRuntimeDriver {
   return {
     availability: 'test',
-    runtimeVersion: 'dsh-v1-synthetic',
-    async run(input: TeachingRuntimeInput): Promise<Result<TeachingRuntimeOutput, CommonError>> {
+    runtimeVersion: 'dsh-v1',
+    async run(input: TeachingRuntimeInput): Promise<Result<TeachingRuntimeOutput, TeachingRuntimeError>> {
       if (input.signal.aborted) return error('RUNTIME_CANCELLED', '教学任务已暂停');
       let reply: string | null = null;
       let toolCalls = 0;
@@ -35,21 +35,21 @@ export function createSyntheticTeachingRuntime(plan: SyntheticRuntimePlan): Teac
         if (action.type === 'query') {
           const definition = input.tools.definitions.find((tool) => tool.name === action.tool);
           if (!AUDITED_QUERY_NAMES.has(action.tool) || !definition || definition.sideEffect !== 'read' || definition.confirmation === 'required') {
-            return err(validationError('当前教学助手不支持这项操作', 'tool'));
+            return err({ ...validationError('当前教学助手不支持这项操作', 'tool'), retryable: false });
           }
           const result = await input.tools.execute(action.tool, action.args);
-          if (!result.ok) return err(result.error);
+          if (!result.ok) return err({ ...result.error, retryable: false });
           toolCalls++;
           continue;
         }
         if (action.type === 'pause') {
-          return ok({ reply: reply ?? '需要补充信息后才能继续。', sessionRef: input.sessionRef ?? `synthetic:${input.taskId}`, status: 'waiting_input', checkpoint: { schemaVersion: 1, contextEpoch: input.contextEpoch, lastEventKey: `execution:${input.executionId}:pause` }, cost: { modelCalls: 0, inputTokens: 0, outputTokens: 0, toolCalls, synthetic: true } });
+          return ok({ reply: reply ?? '需要补充信息后才能继续。', sessionRef: input.sessionRef ?? `synthetic:${input.taskId}`, status: 'waiting_input', checkpoint: { schemaVersion: 1, runtimeVersion: 'dsh-v1', contextEpoch: input.contextEpoch, lastEventKey: `execution:${input.executionId}:pause` }, cost: { modelCalls: 0, inputTokens: 0, outputTokens: 0, toolCalls, synthetic: true } });
         }
-        if (action.type === 'fail') return error(action.code, action.message);
+        if (action.type === 'fail') return error(action.code, action.message, action.retryable);
         reply = action.content;
       }
-      if (!reply) return err(validationError('synthetic plan 缺少回复', 'plan'));
-      return ok({ reply, sessionRef: input.sessionRef ?? `synthetic:${input.taskId}`, status: 'succeeded', checkpoint: { schemaVersion: 1, contextEpoch: input.contextEpoch, lastEventKey: `execution:${input.executionId}:complete` }, cost: { modelCalls: 0, inputTokens: 0, outputTokens: 0, toolCalls, synthetic: true } });
+      if (!reply) return err({ ...validationError('synthetic plan 缺少回复', 'plan'), retryable: false });
+      return ok({ reply, sessionRef: input.sessionRef ?? `synthetic:${input.taskId}`, status: 'succeeded', checkpoint: { schemaVersion: 1, runtimeVersion: 'dsh-v1', contextEpoch: input.contextEpoch, lastEventKey: `execution:${input.executionId}:complete` }, cost: { modelCalls: 0, inputTokens: 0, outputTokens: 0, toolCalls, synthetic: true } });
     },
   };
 }

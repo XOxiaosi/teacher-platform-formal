@@ -6,7 +6,7 @@ function input() {
   const execute = vi.fn(async () => ({ ok: true as const, value: { remaining: 8 } }));
   return {
     teacherId: 'teacher-a', taskId: 'task-a', executionId: 'execution-a', message: '核对课时',
-    sessionRef: null, contextEpoch: 2, history: [], signal: new AbortController().signal,
+    sessionRef: null, contextEpoch: 2, checkpoint: null, history: [], signal: new AbortController().signal,
     tools: { definitions: [{ name: 'students.balance', description: 'query', parameters: {}, sideEffect: 'read' }], execute },
     execute,
   } satisfies TeachingRuntimeInput & { execute: ReturnType<typeof vi.fn> };

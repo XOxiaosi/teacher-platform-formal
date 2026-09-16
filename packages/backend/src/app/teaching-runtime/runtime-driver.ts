@@ -8,17 +8,31 @@ export interface TeachingRuntimeInput {
   message: string;
   sessionRef: string | null;
   contextEpoch: number;
+  checkpoint: TeachingRuntimeCheckpoint | null;
   history: readonly { role: 'user' | 'assistant'; content: string }[];
   tools: TeachingQueryTools;
   signal: AbortSignal;
+}
+
+export interface TeachingRuntimeCheckpoint {
+  schemaVersion: 1;
+  runtimeVersion: 'dsh-v1';
+  contextEpoch: number;
+  lastEventKey: string;
 }
 
 export interface TeachingRuntimeOutput {
   reply: string;
   sessionRef: string;
   status: 'succeeded' | 'waiting_input';
-  checkpoint: { schemaVersion: 1; contextEpoch: number; lastEventKey: string } | null;
+  checkpoint: TeachingRuntimeCheckpoint | null;
   cost: { modelCalls: number; inputTokens: number; outputTokens: number; toolCalls: number; synthetic: boolean };
+}
+
+/** A driver must state whether the saved task can safely be retried. This is
+ * persisted as TaskRuntime.lastError; CommonError alone has no retry policy. */
+export interface TeachingRuntimeError extends CommonError {
+  retryable: boolean;
 }
 
 /** Platform port, not another agent loop. Only a verified DSH adapter implements
@@ -27,7 +41,7 @@ export interface TeachingRuntimeOutput {
 export interface TeachingRuntimeDriver {
   readonly availability: 'unavailable' | 'test' | 'ready';
   readonly runtimeVersion: string;
-  run(input: TeachingRuntimeInput): Promise<Result<TeachingRuntimeOutput, CommonError>>;
+  run(input: TeachingRuntimeInput): Promise<Result<TeachingRuntimeOutput, TeachingRuntimeError>>;
 }
 
 /** The runtime adapter vocabulary is deliberately separate from the persisted
@@ -46,7 +60,7 @@ export function createUnavailableTeachingRuntime(): TeachingRuntimeDriver {
     availability: 'unavailable',
     runtimeVersion: 'dsh-v1',
     async run() {
-      return { ok: false, error: { code: 'VALIDATION_ERROR', field: 'runtime', message: 'AI 服务尚未连接。你的消息已保存，可以稍后继续。' } };
+      return { ok: false, error: { code: 'VALIDATION_ERROR', field: 'runtime', message: 'AI 服务尚未连接。你的消息已保存，可以稍后继续。', retryable: true } };
     },
   };
 }

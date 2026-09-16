@@ -18,15 +18,17 @@ function errorDto(value: unknown): TaskError | null {
 
 export function taskDto(row: TaskRuntime, cipher: FieldCipher | undefined, availability: RuntimeAvailability,
   hasUncertain = false, active = true): TaskDTO {
+  const lastError = errorDto(decryptJsonFieldValue(cipher, row.lastError));
   return {
     id: row.id, conversationId: row.conversationId, currentExecutionId: row.currentExecutionId,
     title: row.title === null ? null : decryptFieldValue(cipher, row.title),
     status: row.status as TaskDTO['status'], version: row.version,
     createdAt: row.createdAtTs.toISOString(), updatedAt: row.updatedAtTs.toISOString(),
-    lastError: errorDto(decryptJsonFieldValue(cipher, row.lastError)),
+    lastError,
     // A hint only; mutation always rechecks ownership, lease and version in the DB.
     canResume: active && availability !== 'unavailable' && ['partial', 'failed', 'unavailable'].includes(row.status)
-      && Boolean(row.currentExecutionId) && row.leaseToken === null && !hasUncertain,
+      && Boolean(row.currentExecutionId) && row.leaseToken === null && !hasUncertain
+      && lastError?.retryable !== false,
     runtimeAvailability: availability,
   };
 }

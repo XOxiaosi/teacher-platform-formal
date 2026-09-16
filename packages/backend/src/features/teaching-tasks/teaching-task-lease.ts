@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Prisma, type PrismaClient, type TaskRuntime } from '@prisma/client';
 import { err, internalError, notFound, ok, validationError, versionConflict, type CommonError, type Result } from '@teacher-platform/contracts';
-import { encryptFieldValue, encryptJsonFieldValue, type FieldCipher } from '../../shared/field-encryption/index.js';
+import { decryptJsonFieldValue, encryptFieldValue, encryptJsonFieldValue, type FieldCipher } from '../../shared/field-encryption/index.js';
 import { taskDto } from './teaching-task-reader.js';
 import type { RuntimeAvailability, TaskError, TeachingTaskLease, TeachingTaskService } from './types.js';
 
@@ -104,6 +104,9 @@ export function createTeachingTaskLeaseMethods({ getClient, cipher, availability
         }
         if (task.version !== input.expectedVersion) conflict('expectedVersion');
         if (uncertain) conflict('stepStatus');
+        const previousError = decryptJsonFieldValue(cipher, task.lastError);
+        if (previousError && typeof previousError === 'object'
+          && (previousError as { retryable?: unknown }).retryable === false) conflict('retryable');
         if (!['partial', 'failed', 'unavailable'].includes(task.status)) conflict('taskStatus');
         if (task.leaseToken && task.leaseExpiresAtTs && task.leaseExpiresAtTs > at) conflict('lease');
         const nextStatus = availability === 'unavailable' ? 'unavailable' : 'queued';

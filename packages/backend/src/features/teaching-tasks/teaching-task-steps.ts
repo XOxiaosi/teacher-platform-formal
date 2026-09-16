@@ -53,6 +53,7 @@ export function createQueryStepMethods(context: ReturnType<typeof createTaskCont
           if (existing.status === "succeeded") return existing;
           if (
             existing.status === "running" &&
+            existing.executionId === input.executionId &&
             existing.leaseEpoch === input.leaseEpoch
           )
             return existing;
