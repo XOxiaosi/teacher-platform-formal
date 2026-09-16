@@ -3,7 +3,7 @@ import { PreviewActions } from './PreviewApp';
 import { usePreviewState } from './ui-state';
 import './settings-configuration.css';
 import { commitAction } from './action-result';
-import { exportDownloadZip, exportPrivacy, exportStatus } from '../api/privacy';
+import { exportDownloadZip, exportPrivacy, exportStatus } from '../privacy-export-client';
 
 type SettingsRoute = 'studio' | 'models' | 'wechat' | 'privacy';
 type ModelChoice = 'default' | 'fast' | 'deep';
