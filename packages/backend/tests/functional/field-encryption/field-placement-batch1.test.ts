@@ -290,6 +290,7 @@ describe('批1 ENCRYPTION_KEY 缺省行为', () => {
       expect(got.value.title).toBe('无钥旧明文');
 
       // 写路径拒绝明文落库
+      const beforeWriteCount = await prisma.parentFeedback.count({ where: { teacherId: TEACHER_A } });
       const write = await noKeyService.createFeedback({
         teacherId: TEACHER_A,
         studentId: STUDENT_A,
@@ -299,6 +300,9 @@ describe('批1 ENCRYPTION_KEY 缺省行为', () => {
       expect(write.ok).toBe(false);
       if (write.ok) return;
       expect(write.error.message).toContain('SAFETY_BLOCK');
+      expect(write.error.code).toBe('INTERNAL_ERROR');
+      expect(await prisma.parentFeedback.count({ where: { teacherId: TEACHER_A } })).toBe(beforeWriteCount);
+      expect(write.error.message).not.toContain('无钥拒绝');
     } finally {
       process.env.ENCRYPTION_KEY = originalKey ?? TEST_KEY;
     }

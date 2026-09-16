@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import { createLessonService } from '../../../src/features/lessons/index.js';
 import { createChangelogService } from '../../../src/shared/changelog/index.js';
 import { createStudentTimelineService } from '../../../src/features/student-timeline/index.js';
@@ -37,6 +37,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await prisma.studentRecord.deleteMany({ where: { teacherId: { in: [TEACHER_A, TEACHER_B] } } });
   await prisma.lesson.deleteMany({ where: { teacherId: { in: [TEACHER_A, TEACHER_B] } } });
   await prisma.schedule.deleteMany({ where: { teacherId: { in: [TEACHER_A, TEACHER_B] } } });
   await prisma.changeLog.deleteMany({ where: { teacherId: { in: [TEACHER_A, TEACHER_B] } } });
@@ -202,7 +203,7 @@ describe('批4 ChangeLog：before/after/diff 加密往返', () => {
 });
 
 describe('批4 读路径解密（时间线 + 上下文组装）', () => {
-  it('lesson S1 字段在时间线与反馈上下文中解密展示', async () => {
+  it('lesson S1 在时间线解密；反馈仅解密已确认且可分享的关联正式记录', async () => {
     const lesson = await createLesson(TEACHER_A);
     await lessonService.updateLesson({
       teacherId: TEACHER_A,
@@ -217,11 +218,23 @@ describe('批4 读路径解密（时间线 + 上下文组装）', () => {
     const lessonEntry = timeline.value.items.find((item) => item.type === 'lesson' && item.id === lesson.id);
     expect(lessonEntry?.summary).toBe('时间线进度');
 
-    const context = await assembleUseCase.execute({ teacherId: TEACHER_A, studentId: STUDENT_A });
+    const record = await prisma.studentRecord.create({ data: {
+      teacherId: TEACHER_A, studentId: STUDENT_A, category: 'lesson_observation',
+      occurredAtTs: new Date(), summary: cipher.encrypt('可分享的正式课堂事实'),
+      structuredData: cipher.encryptJson({ lessonId: lesson.id, scheduleId: lesson.scheduleId }) as unknown as Prisma.InputJsonValue,
+      reviewStatus: 'confirmed', visibility: 'parent_shareable',
+    } });
+    expect(record.summary.startsWith('enc:v1:')).toBe(true);
+    expect(cipher.decrypt(record.summary)).toBe('可分享的正式课堂事实');
+    const context = await assembleUseCase.execute({ teacherId: TEACHER_A, studentId: STUDENT_A, lessonIds: [lesson.id] });
     expect(context.ok).toBe(true);
     if (!context.ok) return;
-    const evidence = context.value.evidence.find((item) => item.id === lesson.id);
-    expect(evidence?.summary).toBe('时间线进度');
+    const evidence = context.value.evidence.find((item) => item.id === record.id);
+    expect(evidence?.summary).toBe('可分享的正式课堂事实');
+    expect(context.value.evidence.some(item => item.id === lesson.id || item.type === 'lesson')).toBe(false);
+    expect(JSON.stringify(context.value.evidence)).not.toContain('时间线进度');
+    expect(JSON.stringify(context.value.evidence)).not.toContain('时间线备注');
+
   });
 });
 

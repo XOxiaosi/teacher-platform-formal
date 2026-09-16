@@ -45,12 +45,13 @@ export function registerFeedbackTools(
           parentName: { type: 'string', description: '家长称呼' },
           evidence: {
             type: 'array',
-            description: '依据快照明细（按顺序）',
+            description: '已确认且可用于家长材料的正式记录引用（按顺序）；事实内容由服务器重新读取',
             items: {
               type: 'object',
               properties: {
-                id: { type: 'string', description: '源记录/课程 ID，可选' },
-                type: { type: 'string', description: 'evidence 类型：assessment/record/lesson' },
+                id: { type: 'string', description: '正式 StudentRecord ID，必填' },
+                type: { type: 'string', enum: ['assessment', 'record'], description: '正式依据类型：assessment/record' },
+                sourceVersion: { type: 'string', pattern: '^[a-f0-9]{64}$', description: '生成依据返回的版本；如有须原样传回，变更后需重新生成' },
                 occurredAt: { type: 'string', description: '发生时间（带时区的 RFC3339）' },
                 category: { type: 'string', description: '分类' },
                 summary: { type: 'string', description: '摘要' },
@@ -62,7 +63,7 @@ export function registerFeedbackTools(
                 parentConcerns: { type: 'array', items: { type: 'string' }, description: '家长关注点' },
                 followUps: { type: 'array', items: { type: 'string' }, description: '后续待办' },
               },
-              required: ['type', 'occurredAt'],
+              required: ['id', 'type', 'occurredAt'],
             },
           },
           windowStart: { type: 'string', description: '快照时间窗开始（RFC3339）' },

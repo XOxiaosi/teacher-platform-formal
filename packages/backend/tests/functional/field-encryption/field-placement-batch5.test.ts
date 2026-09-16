@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import { ok } from '@teacher-platform/contracts';
 import { createPushService } from '../../../src/features/push/index.js';
 import { createPendingActionService } from '../../../src/features/pending-action/index.js';
@@ -59,6 +59,8 @@ afterAll(async () => {
   await prisma.parentFeedback.deleteMany({ where: { teacherId: { in: [TEACHER_A, TEACHER_B] } } });
   await prisma.conversationTurn.deleteMany({ where: { teacherId: { in: [TEACHER_A, TEACHER_B] } } });
   await prisma.conversation.deleteMany({ where: { teacherId: { in: [TEACHER_A, TEACHER_B] } } });
+  await prisma.communicationDetail.deleteMany({ where: { teacherId: { in: [TEACHER_A, TEACHER_B] } } });
+  await prisma.studentRecord.deleteMany({ where: { teacherId: { in: [TEACHER_A, TEACHER_B] } } });
   await prisma.student.deleteMany({ where: { id: STUDENT_A } });
   await prisma.$disconnect();
 });
@@ -196,14 +198,23 @@ describe('批5 AgentExecution：reply 加密往返（requestFingerprint 明文�
 
 describe('批5 FeedbackEvidence：summary/parentConcerns/followUps 加密往返', () => {
   it('createFeedback 带 evidence → DB 密文，getFeedbackSnapshot 解密', async () => {
+    const record = await prisma.studentRecord.create({ data: {
+      teacherId: TEACHER_A, studentId: STUDENT_A, category: 'parent_communication',
+      summary: cipher.encrypt('批5证据摘要'), occurredAtTs: new Date('2026-01-15T10:00:00Z'),
+      reviewStatus: 'confirmed', visibility: 'parent_shareable',
+      communicationDetail: { create: { teacherId: TEACHER_A, direction: 'two_way',
+        parentConcerns: cipher.encryptJson(['批5诉求1', '批5诉求2']) as unknown as Prisma.InputJsonValue,
+        followUps: cipher.encryptJson(['批5跟进']) as unknown as Prisma.InputJsonValue,
+      } },
+    } });
     const created = await feedbackService.createFeedback({
       teacherId: TEACHER_A,
       studentId: STUDENT_A,
       title: '批5反馈',
       content: '批5内容',
       evidence: [{
-        id: 'p5-rec-1',
-        type: 'assessment',
+        id: record.id,
+        type: 'record',
         occurredAt: '2026-01-15T10:00:00Z',
         summary: '批5证据摘要',
         parentConcerns: ['批5诉求1', '批5诉求2'],
@@ -231,6 +242,20 @@ describe('批5 FeedbackEvidence：summary/parentConcerns/followUps 加密往返'
 });
 
 describe('批5 篡改拒绝 + 缺钥 SAFETY_BLOCK', () => {
+  it('正式依据密文损坏时反馈事务回滚并保留安全标识，不泄露原始错误', async () => {
+    const source = await prisma.studentRecord.create({ data: { teacherId: TEACHER_A, studentId: STUDENT_A,
+      category: 'general_note', summary: 'enc:v1:malformed-sensitive-source', occurredAtTs: new Date(),
+      reviewStatus: 'confirmed', visibility: 'parent_shareable' } });
+    const before = await prisma.parentFeedback.count({ where: { teacherId: TEACHER_A } });
+    const saved = await feedbackService.createFeedback({ teacherId: TEACHER_A, studentId: STUDENT_A,
+      title: '损坏依据不得保存', content: '内容', evidence: [{ id: source.id, type: 'record', occurredAt: source.occurredAtTs.toISOString() }] });
+    expect(saved.ok).toBe(false);
+    if (saved.ok) throw new Error('损坏依据被接受');
+    expect(saved.error.message).toContain('SAFETY_BLOCK');
+    expect(saved.error.message).not.toContain('malformed-sensitive-source');
+    expect(await prisma.parentFeedback.count({ where: { teacherId: TEACHER_A } })).toBe(before);
+  });
+
   it('DB pushRecord content 密文被篡改 → list 返回 INTERNAL_ERROR（SAFETY_BLOCK）', async () => {
     const sent = await pushService.sendPush({
       teacherId: TEACHER_A,

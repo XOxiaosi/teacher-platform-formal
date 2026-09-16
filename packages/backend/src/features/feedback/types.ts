@@ -12,6 +12,8 @@ export type EvidenceType = 'assessment' | 'record' | 'lesson';
 
 export interface FeedbackEvidenceSnapshotInput {
   id?: string;
+  sourceVersion?: string;
+  originalDeleted?: boolean;
   type: EvidenceType;
   occurredAt: string;
   category?: string | null;

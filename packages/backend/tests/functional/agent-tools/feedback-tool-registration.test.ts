@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ok } from '@teacher-platform/contracts';
 import type { TrustedClock } from '../../../src/shared/trusted-clock/index.js';
 import { PrismaClient } from '@prisma/client';
+import { resolveFeedbackEvidence } from '../../../src/features/feedback/feedback-evidence-resolver.js';
 import { createFieldCipher, loadEncryptionKey } from '../../../src/shared/field-encryption/index.js';
 
 // P8 phase-3 批1：测试密钥 cipher（与 setup 注入同钥）——校验 DB 密文可解密
@@ -29,7 +30,7 @@ function requireRegistryFactory() {
     moderation?: { provider: string; moderateText: ReturnType<typeof vi.fn> };
     logger?: { debug: ReturnType<typeof vi.fn>; info: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
   }) => {
-    list(): Array<{ name: string; confirmation?: 'none' | 'required' }>;
+    list(): Array<{ name: string; confirmation?: 'none' | 'required'; parameters?: unknown }>;
     execute(name: string, args: unknown, context: { teacherId: string }): Promise<{ ok: boolean; value?: unknown; error?: { code: string; field?: string } }>;
   };
 }
@@ -52,6 +53,9 @@ async function cleanup() {
     // ignore before table is pushed
   }
   await prisma.parentFeedback.deleteMany({ where: { teacherId: { in: [TEACHER_A, TEACHER_B] } } });
+  await prisma.communicationDetail.deleteMany({ where: { teacherId: { in: [TEACHER_A, TEACHER_B] } } });
+  await prisma.assessmentDetail.deleteMany({ where: { teacherId: { in: [TEACHER_A, TEACHER_B] } } });
+  await prisma.studentRecord.deleteMany({ where: { teacherId: { in: [TEACHER_A, TEACHER_B] } } });
   await prisma.lesson.deleteMany({ where: { teacherId: { in: [TEACHER_A, TEACHER_B] } } });
   await prisma.schedule.deleteMany({ where: { teacherId: { in: [TEACHER_A, TEACHER_B] } } });
   await prisma.student.deleteMany({ where: { teacherId: { in: [TEACHER_A, TEACHER_B] } } });
@@ -79,6 +83,15 @@ describe('feedback 工具注册契约（Phase 3.5-A 红灯）', () => {
     expect(toolNames).toContain('feedback.create');
     expect(toolNames).toContain('feedback.list');
     expect(toolNames).toContain('feedback.updateStatus');
+  });
+
+  it('feedback.create schema requires formal record ID and carries optional sourceVersion', () => {
+    const definition = requireRegistryFactory()({ prisma }).list().find(tool => tool.name === 'feedback.create');
+    expect(definition?.parameters).toMatchObject({ properties: { evidence: { items: {
+      required: ['id', 'type', 'occurredAt'], properties: {
+        type: { enum: ['assessment', 'record'] }, sourceVersion: { type: 'string', pattern: '^[a-f0-9]{64}$' },
+      },
+    } } } });
   });
 
   it('feedback.create 调用真实 feedback service，创建当前 teacher 家长反馈', async () => {
@@ -318,22 +331,16 @@ describe('feedback 工具注册契约（Phase 3.5-A 红灯）', () => {
     const student = await createStudentFixture(TEACHER_A, '工具证据学生');
     const registry = requireRegistryFactory()({ prisma });
 
-    const evidence = [
-      {
-        id: 'rec-tool-1',
-        type: 'assessment',
-        occurredAt: '2026-01-15T10:00:00Z',
-        category: '月考',
-        summary: '数学月考成绩优秀',
-        examName: '高一上学期第一次月考',
-        subject: '数学',
-        score: 92,
-        fullScore: 100,
-        previousScore: 85,
-        parentConcerns: ['解题步骤不规范'],
-        followUps: ['加强错题本练习'],
-      },
-    ];
+    const record = await prisma.studentRecord.create({ data: { teacherId: TEACHER_A, studentId: student.id,
+      category: 'assessment', summary: '数学月考成绩优秀', occurredAtTs: new Date('2026-01-15T10:00:00Z'),
+      reviewStatus: 'confirmed', visibility: 'parent_shareable',
+      assessment: { create: { teacherId: TEACHER_A, examName: '高一上学期第一次月考', subject: '数学', score: 92, fullScore: 100, previousScore: 85 } },
+      communicationDetail: { create: { teacherId: TEACHER_A, direction: 'two_way', parentConcerns: ['解题步骤不规范'], followUps: ['加强错题本练习'] } },
+    } });
+    const resolved = await resolveFeedbackEvidence({ client: prisma, teacherId: TEACHER_A, studentId: student.id,
+      references: [{ id: record.id, type: 'assessment' }], cipher });
+    if (!resolved.ok) throw new Error('合成正式依据未准入');
+    const evidence = resolved.value;
 
     const result = await registry.execute('feedback.create', {
       studentId: student.id,
@@ -364,10 +371,17 @@ describe('feedback 工具注册契约（Phase 3.5-A 红灯）', () => {
     });
     expect(records).toHaveLength(1);
     expect(records[0].type).toBe('assessment');
-    expect(records[0].recordId).toBe('rec-tool-1');
+    expect(records[0].recordId).toBe(record.id);
     expect(records[0].score).toBe(92);
     // P8 phase-3 批5：parentConcerns 落库为密文，解密后断言
     expect(cipher.decryptJson<unknown>(records[0].parentConcerns as unknown as string)).toEqual(['解题步骤不规范']);
+    const stale = await registry.execute('feedback.create', {
+      studentId: student.id, title: '过期依据不得保存', content: '内容',
+      evidence: [{ ...evidence[0], sourceVersion: '0'.repeat(64) }],
+    }, { teacherId: TEACHER_A });
+    expect(stale).toMatchObject({ ok: false, error: { code: 'VERSION_CONFLICT' } });
+    expect(await prisma.parentFeedback.count({ where: { teacherId: TEACHER_A } })).toBe(1);
+
   });
 
   it('feedback.create 不带 evidence 时行为不变（不建快照）', async () => {

@@ -6,6 +6,8 @@ export type FeedbackEvidenceType = 'assessment' | 'record' | 'lesson';
 
 export interface FeedbackEvidenceItem {
   id: string;
+  sourceVersion?: string;
+  originalDeleted?: boolean;
   type: FeedbackEvidenceType;
   occurredAt: string;
   category: string | null;
@@ -22,6 +24,7 @@ export interface FeedbackEvidenceItem {
 export interface AssembleParentFeedbackContextInput {
   teacherId: string;
   studentId: string;
+  lessonIds?: string[];
 }
 
 export interface AssembleParentFeedbackContextResult {
@@ -29,6 +32,7 @@ export interface AssembleParentFeedbackContextResult {
   windowStart: string;
   windowEnd: string;
   evidence: FeedbackEvidenceItem[];
+  lessonIds?: string[];
 }
 
 export interface CreateAssembleParentFeedbackContextUseCaseOptions {

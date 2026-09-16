@@ -1,4 +1,6 @@
 import { err, internalError, notFound, ok, validationError } from '@teacher-platform/contracts';
+import { createFieldCipherFromEnv, decryptFieldValue } from '../../../shared/field-encryption/index.js';
+import { resolveFeedbackEvidence } from '../../../features/feedback/feedback-evidence-resolver.js';
 import type { ChatMessage } from '../../../shared/ai-client/types.js';
 import type { FeedbackEvidenceItem } from '../assemble-parent-feedback-context/types.js';
 import type {
@@ -36,6 +38,7 @@ export function createGenerateFeedbackDraftUseCase(
 ): GenerateFeedbackDraftUseCase {
   const getClient = options.getClient ?? (async () => options.prisma);
   const { aiClient, context } = options;
+  const cipher = options.cipher ?? createFieldCipherFromEnv();
 
   return {
     async execute(input: GenerateFeedbackDraftInput) {
@@ -48,57 +51,39 @@ export function createGenerateFeedbackDraftUseCase(
       const assembled = await context.execute({
         teacherId: input.teacherId,
         studentId: input.studentId,
+        lessonIds: input.lessonIds,
       });
       if (!assembled.ok) return assembled;
 
-      let finalEvidence = [...assembled.value.evidence];
-      let finalLessons: LessonRecord[];
-      let finalLessonIds: string[];
-
-      if (input.lessonIds && input.lessonIds.length > 0) {
-        const selected = await findSelectedLessons(prisma, input);
-        if (!selected.ok) return selected;
-        finalLessons = selected.value;
-        finalLessonIds = finalLessons.map((l) => l.id);
-
-        // Replace lesson evidence entries with the selected lessons; keep records/assessments intact
-        const nonLessonEvidence = finalEvidence.filter((e) => e.type !== 'lesson');
-        const selectedLessonEvidence = finalLessons.map(lessonToEvidence);
-        finalEvidence = [...nonLessonEvidence, ...selectedLessonEvidence];
-        finalEvidence.sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
-      } else {
-        // Use lessons from assembled evidence
-        const lessonEvidence = finalEvidence.filter((e) => e.type === 'lesson');
-        finalLessonIds = lessonEvidence.map((e) => e.id);
-        finalLessons = []; // not needed in full form; build from evidence if needed below
-
-        // Validate: at least some basis (lessons OR records) to generate from
-        const hasAnyBasis = finalEvidence.length > 0;
-        if (!hasAnyBasis) {
-          return err(validationError('没有可用于生成反馈的课程或学生记录', 'lessonIds'));
-        }
-      }
-
-      // 反雷同：查询该生最近 3 条历史反馈
-      const historyFeedback = await fetchRecentHistoryFeedback(prisma, input.teacherId, input.studentId);
+      const finalEvidence = assembled.value.evidence;
+      const finalLessonIds = assembled.value.lessonIds ?? [];
+      if (!finalEvidence.length) return err(validationError('没有已确认且可用于家长材料的正式记录', 'evidence'));
+      const admitted = await resolveFeedbackEvidence({ client: prisma, teacherId: input.teacherId, studentId: input.studentId,
+        references: finalEvidence, cipher });
+      if (!admitted.ok) return admitted;
 
       const messages = buildMessages({
-        student,
-        lessons: finalLessons,
-        evidence: finalEvidence,
+        student: { ...student, name: decryptFieldValue(cipher, student.name), grade: decryptFieldValue(cipher, student.grade),
+          stageGoal: null },
+        lessons: [],
+        evidence: admitted.value,
         tone: input.tone ?? 'warm',
         classSize: input.classSize,
         parentType: input.parentType,
         focus: input.focus,
-        historyFeedback,
+        historyFeedback: [],
       });
 
       const response = await aiClient.chat(messages, []);
       if (!response.ok) {
-        return err(internalError(response.error.message));
+        return err(internalError('反馈生成暂未完成，请稍后重试'));
       }
 
-      const parsed = parseDraft(response.value.content, student.name);
+      const current = await resolveFeedbackEvidence({ client: prisma, teacherId: input.teacherId, studentId: input.studentId,
+        references: admitted.value, cipher });
+      if (!current.ok) return current;
+      const parsed = parseDraft(response.value.content, decryptFieldValue(cipher, student.name));
+      if (!parsed.content.trim()) return err(validationError('AI 尚未返回完整反馈内容', 'content'));
 
       return ok({
         studentId: student.id,
@@ -107,7 +92,7 @@ export function createGenerateFeedbackDraftUseCase(
         content: parsed.content,
         rationale: parsed.rationale,
         source: 'ai' as const,
-        evidence: finalEvidence,
+        evidence: current.value,
         windowStart: assembled.value.windowStart,
         windowEnd: assembled.value.windowEnd,
         classSize: input.classSize,
@@ -115,72 +100,6 @@ export function createGenerateFeedbackDraftUseCase(
         focus: input.focus,
       });
     },
-  };
-}
-
-async function fetchRecentHistoryFeedback(
-  prisma: CreateGenerateFeedbackDraftUseCaseOptions['prisma'],
-  teacherId: string,
-  studentId: string,
-): Promise<HistoryFeedbackItem[]> {
-  const records = await prisma.parentFeedback.findMany({
-    where: {
-      teacherId,
-      studentId,
-      status: { in: ['draft', 'reviewed', 'sent'] },
-    },
-    orderBy: { createdAtTs: 'desc' },
-    take: 3,
-    select: { title: true, content: true },
-  });
-  return records.map((r) => ({ title: r.title, content: r.content }));
-}
-
-function lessonToEvidence(lesson: LessonRecord): FeedbackEvidenceItem {
-  const summary = lesson.progress ?? lesson.studentState ?? lesson.teacherNote ?? lesson.homework ?? null;
-  return {
-    id: lesson.id,
-    type: 'lesson',
-    occurredAt: lesson.dateTs.toISOString(),
-    category: null,
-    summary,
-    examName: null,
-    subject: null,
-    score: null,
-    fullScore: null,
-    previousScore: null,
-  };
-}
-
-async function findSelectedLessons(prisma: CreateGenerateFeedbackDraftUseCaseOptions['prisma'], input: GenerateFeedbackDraftInput) {
-  const lessonIds = input.lessonIds ?? [];
-  const lessons = await prisma.lesson.findMany({
-    where: {
-      id: { in: lessonIds },
-      teacherId: input.teacherId,
-      studentId: input.studentId,
-    },
-    orderBy: { dateTs: 'desc' },
-  });
-
-  if (lessons.length !== lessonIds.length) {
-    return err(notFound('课程记录不存在'));
-  }
-  if (lessons.length === 0) {
-    return err(validationError('lessonIds 不能为空', 'lessonIds'));
-  }
-
-  return ok(lessons.map(toLessonRecord));
-}
-
-function toLessonRecord(record: LessonRecord): LessonRecord {
-  return {
-    id: record.id,
-    dateTs: record.dateTs,
-    progress: record.progress,
-    studentState: record.studentState,
-    homework: record.homework,
-    teacherNote: record.teacherNote,
   };
 }
 
@@ -345,12 +264,12 @@ function buildMessages(input: {
 function parseDraft(content: string, studentName: string) {
   const titleMatch = content.match(/标题[:：]\s*(.+)/);
   // 内容：抓取从"内容："后到"所以这样写："之前（含换行）
-  const contentMatch = content.match(/内容[:：]\s*([\s\S]*?)(?=\n\s*所以这样写[:：]|$)/);
+  const contentMatch = content.match(/内容[:：][ \t]*([\s\S]*?)(?=\n\s*所以这样写[:：]|$)/);
   const rationaleMatch = content.match(/所以这样写[:：]\s*(.+)/);
 
   return {
     title: titleMatch?.[1]?.trim() || `${studentName}近期学习反馈`,
-    content: contentMatch?.[1]?.trim() || content.trim(),
+    content: contentMatch ? contentMatch[1].trim() : (titleMatch || rationaleMatch ? '' : content.trim()),
     rationale: rationaleMatch?.[1]?.trim() || '',
   };
 }

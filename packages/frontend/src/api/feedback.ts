@@ -18,6 +18,8 @@ export interface GenerateFeedbackDraftRequest {
 
 export interface FeedbackEvidenceItem {
   id: string;
+  sourceVersion?: string;
+  originalDeleted?: boolean;
   type: 'assessment' | 'record' | 'lesson';
   occurredAt: string;
   category: string | null;

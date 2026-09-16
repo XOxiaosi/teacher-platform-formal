@@ -1,22 +1,16 @@
 import { err, internalError, notFound, ok, validationError, versionConflict } from '@teacher-platform/contracts';
 import { Prisma } from '@prisma/client';
-import {
-  createChangelogService,
-  requireChangelogWrite,
-  runWithAutomaticChangelogSuppressed,
-} from '../../shared/changelog/index.js';
+import { createFeedbackWriter } from './create-feedback.js';
 import { createDatabaseTrustedClock } from '../../shared/trusted-clock/index.js';
 import {
   createFieldCipherFromEnv,
   decryptFieldValue,
   decryptJsonFieldValue,
   encryptFieldValue,
-  encryptJsonFieldValue,
 } from '../../shared/field-encryption/index.js';
 import { parseRfc3339Instant } from './rfc3339-instant.js';
 import { moderateFeedbackForSend } from './feedback-moderation.js';
 import { toFeedbackStatus, toParentFeedbackData } from './feedback-record.js';
-import { validateEvidenceArray } from './feedback-evidence-validation.js';
 import type {
   CreateFeedbackServiceOptions,
   EvidenceType,
@@ -25,20 +19,6 @@ import type {
   FeedbackSnapshotData,
   FeedbackStatus,
 } from './types.js';
-
-interface PrismaClientLike {
-  $transaction: <T>(fn: (tx: Prisma.TransactionClient) => Promise<T>) => Promise<T>;
-}
-
-/**
- * Fixed, non-sensitive signal used to make a borrowed outer transaction roll
- * back when any create-stage work has already written data.
- */
-class ParentFeedbackCreateTransactionRollback extends Error {
-  constructor() {
-    super('parent-feedback-create transaction rollback');
-  }
-}
 
 function isFeedbackStatus(value: unknown): value is FeedbackStatus {
   return value === 'draft' || value === 'reviewed' || value === 'sent' || value === 'archived';
@@ -56,8 +36,6 @@ export function createFeedbackService(options: CreateFeedbackServiceOptions): Fe
   const getClient = options.getClient ?? (async () => options.prisma);
   // P8 phase-3 批1：字段加密 cipher（DI 优先；缺省 env 构建——未配置 → undefined 惰性 SAFETY_BLOCK）
   const cipher = options.cipher ?? createFieldCipherFromEnv();
-  const changelogFactory = options.changelogFactory
-    ?? ((client: Prisma.TransactionClient) => createChangelogService(client, cipher));
   // S1 明文边界：只有内置 local adapter 可接收解密后的 title/content。
   const moderation = options.moderation?.provider === 'local' ? options.moderation : undefined;
   const logger = options.logger;
@@ -68,183 +46,7 @@ export function createFeedbackService(options: CreateFeedbackServiceOptions): Fe
   }
 
   return {
-    async createFeedback(input) {
-      const { prisma, trustedClock } = await resolve();
-      const opensTransaction =
-        '$transaction' in prisma &&
-        typeof (prisma as { $transaction?: unknown }).$transaction === 'function';
-      if (!input.title || input.title.trim() === '') {
-        return err(validationError('title 不能为空', 'title'));
-      }
-      if (!input.content || input.content.trim() === '') {
-        return err(validationError('content 不能为空', 'content'));
-      }
-
-      // 校验 evidence（若提供）
-      let validatedEvidence: FeedbackEvidenceSnapshotInput[] | undefined;
-      if (input.evidence !== undefined) {
-        const ev = validateEvidenceArray(input.evidence);
-        if (!ev.ok) {
-          return err(validationError(ev.message, ev.field));
-        }
-        validatedEvidence = ev.value;
-      }
-
-      // 校验 windowStart / windowEnd（若提供）
-      let windowStartDate: Date | null = null;
-      let windowEndDate: Date | null = null;
-      if (input.windowStart !== undefined) {
-        const parsed = parseRfc3339Instant(input.windowStart);
-        if (parsed === undefined) {
-          return err(validationError('windowStart 必须是带时区的严格 RFC3339 时间', 'windowStart'));
-        }
-        windowStartDate = parsed;
-      }
-      if (input.windowEnd !== undefined) {
-        const parsed = parseRfc3339Instant(input.windowEnd);
-        if (parsed === undefined) {
-          return err(validationError('windowEnd 必须是带时区的严格 RFC3339 时间', 'windowEnd'));
-        }
-        windowEndDate = parsed;
-      }
-
-      try {
-        const now = await trustedClock.now();
-        if (!now.ok) return err(now.error);
-        if (!(now.value instanceof Date) || Number.isNaN(now.value.getTime())) {
-          return err(internalError('TrustedClock返回无效时间'));
-        }
-
-        const student = await prisma.student.findFirst({
-          where: { id: input.studentId, teacherId: input.teacherId },
-          select: { id: true },
-        });
-        if (!student) return err(notFound('学生不存在'));
-
-        if (input.lessonId !== undefined) {
-          const lesson = await prisma.lesson.findFirst({
-            where: {
-              id: input.lessonId,
-              teacherId: input.teacherId,
-              studentId: input.studentId,
-            },
-            select: { id: true },
-          });
-          if (!lesson) return err(notFound('课次不存在'));
-        }
-
-        const feedbackData = {
-          teacherId: input.teacherId,
-          studentId: input.studentId,
-          lessonId: input.lessonId ?? null,
-          title: encryptFieldValue(cipher, input.title),
-          content: encryptFieldValue(cipher, input.content),
-          status: 'draft' as const,
-          channel: input.channel ?? null,
-          parentName: input.parentName === undefined || input.parentName === null
-            ? null
-            : encryptFieldValue(cipher, input.parentName),
-          createdAtTs: now.value,
-          updatedAtTs: now.value,
-        };
-
-        const txFn = async (tx: Prisma.TransactionClient) => {
-          const feedback = await tx.parentFeedback.create({ data: feedbackData });
-          await requireChangelogWrite(changelogFactory(tx).recordChange({
-            teacherId: input.teacherId,
-            module: 'feedback',
-            action: 'create',
-            targetType: 'ParentFeedback',
-            targetId: feedback.id,
-            before: null,
-            after: {
-              id: feedback.id,
-              teacherId: input.teacherId,
-              studentId: input.studentId,
-              lessonId: input.lessonId ?? null,
-              title: input.title,
-              content: input.content,
-              status: 'draft',
-              channel: input.channel ?? null,
-              parentName: input.parentName ?? null,
-              sentAtTs: null,
-              moderationFlagged: null,
-              moderationReasons: null,
-              createdAtTs: now.value,
-              updatedAtTs: now.value,
-            },
-            source: 'system',
-          }));
-
-          if (validatedEvidence !== undefined) {
-            const snapshot = await tx.feedbackContextSnapshot.create({
-              data: {
-                teacherId: input.teacherId,
-                feedbackId: feedback.id,
-                windowStartTs: windowStartDate,
-                windowEndTs: windowEndDate,
-                assembledAtTs: now.value,
-              },
-            });
-            if (validatedEvidence.length > 0) {
-              await tx.feedbackEvidence.createMany({
-                data: validatedEvidence.map((item, index) => ({
-                  teacherId: input.teacherId,
-                  snapshotId: snapshot.id,
-                  recordId: item.id ?? null,
-                  type: item.type,
-                  occurredAtTs: parseRfc3339Instant(item.occurredAt) as Date,
-                  category: item.category ?? null,
-                  summary: item.summary === undefined || item.summary === null
-                    ? null
-                    : encryptFieldValue(cipher, item.summary),
-                  examName: item.examName ?? null,
-                  subject: item.subject ?? null,
-                  score: item.score ?? null,
-                  fullScore: item.fullScore ?? null,
-                  previousScore: item.previousScore ?? null,
-                  parentConcerns: (item.parentConcerns ?? []).length > 0
-                    ? (encryptJsonFieldValue(cipher, item.parentConcerns ?? []) as unknown as Prisma.JsonArray)
-                    : [],
-                  followUps: (item.followUps ?? []).length > 0
-                    ? (encryptJsonFieldValue(cipher, item.followUps ?? []) as unknown as Prisma.JsonArray)
-                    : [],
-                  sortOrder: index,
-                })),
-              });
-            }
-          }
-          return feedback;
-        };
-
-        const rollbackTxFn = async (tx: Prisma.TransactionClient) => {
-          try {
-            return await txFn(tx);
-          } catch {
-            // Never expose the underlying database, audit, or evidence failure.
-            throw new ParentFeedbackCreateTransactionRollback();
-          }
-        };
-
-        const feedback = await runWithAutomaticChangelogSuppressed(() => (
-          opensTransaction
-            ? (prisma as PrismaClientLike).$transaction(rollbackTxFn)
-            : rollbackTxFn(prisma as unknown as Prisma.TransactionClient)
-        ));
-
-        return ok(toParentFeedbackData(feedback, cipher));
-      } catch (e) {
-        if (e instanceof ParentFeedbackCreateTransactionRollback) {
-          // A service-owned root transaction can convert the rollback back to a
-          // safe Result. A borrowed transaction must reject so its owner cannot
-          // commit partial feedback, audit, snapshot, or evidence writes.
-          if (!opensTransaction) throw e;
-          return err(internalError('创建家长反馈失败'));
-        }
-        const message = e instanceof Error ? e.message : String(e);
-        return err(internalError(`创建家长反馈失败：${message}`));
-      }
-    },
+    createFeedback: createFeedbackWriter(options),
 
     async getFeedback(input) {
       const { prisma } = await resolve();

@@ -302,7 +302,7 @@ describe('assembleParentFeedbackContext', () => {
     expect(records.length).toBeLessThanOrEqual(20);
   });
 
-  it('课程最多 6 条（30天内）', async () => {
+  it('原始课程不直接成为可分享事实', async () => {
     const student = await createStudent(TEACHER_A, '小粉');
     const now = new Date();
     for (let i = 0; i < 8; i++) {
@@ -319,7 +319,7 @@ describe('assembleParentFeedbackContext', () => {
     if (!result.ok) return;
 
     const lessons = result.value.evidence.filter((e) => e.type === 'lesson');
-    expect(lessons.length).toBeLessThanOrEqual(6);
+    expect(lessons).toHaveLength(0);
   });
 
   it('重要问题：60天前 importance=important 被纳入，normal 同龄不纳入', async () => {
@@ -403,7 +403,7 @@ describe('assembleParentFeedbackContext', () => {
     expect(assessment!.score).toBeNull();
   });
 
-  it('课程 summary 取 progress ?? studentState ?? teacherNote ?? homework', async () => {
+  it('未明确分享的课程摘要不能进入反馈依据', async () => {
     const student = await createStudent(TEACHER_A, '小蟹');
     const now = new Date();
     await createLesson({
@@ -424,10 +424,10 @@ describe('assembleParentFeedbackContext', () => {
     if (!result.ok) return;
 
     const lessons = result.value.evidence.filter((e) => e.type === 'lesson');
-    expect(lessons.length).toBeGreaterThanOrEqual(2);
+    expect(lessons).toHaveLength(0);
     const bySummary = new Map(lessons.map((l) => [l.summary, l]));
-    expect(bySummary.get('进度内容')).toBeDefined();
-    expect(bySummary.get('状态好')).toBeDefined();
+    expect(bySummary.get('进度内容')).toBeUndefined();
+    expect(bySummary.get('状态好')).toBeUndefined();
   });
 
   it('evidence 按 occurredAt desc 排序，id 唯一去重', async () => {
@@ -462,7 +462,8 @@ describe('assembleParentFeedbackContext', () => {
     if (!result.ok) return;
 
     const { evidence } = result.value;
-    expect(evidence.length).toBeGreaterThanOrEqual(3);
+    expect(evidence).toHaveLength(2);
+    expect(evidence.map(item => item.summary)).toEqual(['作业', '成绩']);
     // 排序校验
     for (let i = 0; i < evidence.length - 1; i++) {
       expect(evidence[i].occurredAt >= evidence[i + 1].occurredAt).toBe(true);

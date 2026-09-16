@@ -28,6 +28,9 @@ export function validateEvidenceArray(
     if (parseRfc3339Instant(item.occurredAt) === undefined) {
       return { ok: false, field: `${prefix}.occurredAt`, message: `${prefix}.occurredAt 必须是带时区的严格 RFC3339 时间` };
     }
+    if (item.sourceVersion !== undefined && (typeof item.sourceVersion !== 'string' || !/^[a-f0-9]{64}$/.test(item.sourceVersion))) {
+      return { ok: false, field: `${prefix}.sourceVersion`, message: '依据版本不合法' };
+    }
     if (item.id !== undefined && item.id !== null && typeof item.id !== 'string') {
       return { ok: false, field: `${prefix}.id`, message: `${prefix}.id 必须是字符串` };
     }

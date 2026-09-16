@@ -86,11 +86,13 @@ async function cleanup() {
   await prisma.feedbackContextSnapshot.deleteMany({ where: { teacherId: TEACHER_ID } });
   await prisma.parentFeedback.deleteMany({ where: { teacherId: TEACHER_ID } });
   await prisma.changeLog.deleteMany({ where: { teacherId: TEACHER_ID } });
+  await prisma.assessmentDetail.deleteMany({ where: { teacherId: TEACHER_ID } });
+  await prisma.studentRecord.deleteMany({ where: { teacherId: TEACHER_ID } });
   await prisma.student.deleteMany({ where: { teacherId: TEACHER_ID } });
 }
 
 async function createStudent() {
-  return prisma.student.create({
+  const student = await prisma.student.create({
     data: {
       teacherId: TEACHER_ID,
       name: '显式审计学生',
@@ -98,6 +100,10 @@ async function createStudent() {
       source: 'test',
     },
   });
+  await prisma.studentRecord.create({ data: { id: `${student.id}-assessment`, teacherId: TEACHER_ID, studentId: student.id,
+    category: 'assessment', summary: '已核对测评', occurredAtTs: new Date('2031-12-31T10:00:00Z'),
+    reviewStatus: 'confirmed', visibility: 'parent_shareable', assessment: { create: { teacherId: TEACHER_ID, score: 96 } } } });
+  return student;
 }
 
 function feedbackInput(studentId: string, withEvidence = false) {
@@ -111,6 +117,7 @@ function feedbackInput(studentId: string, withEvidence = false) {
     ...(withEvidence
       ? {
         evidence: [{
+          id: `${studentId}-assessment`,
           type: 'assessment' as const,
           occurredAt: '2031-12-31T10:00:00Z',
           score: 96,
