@@ -255,4 +255,4 @@ V009 是产品语义版本，不为每个实现 commit 升版；同一任务允�
 
 - 第三波 A05-SAVE：ParentFeedback 增加可选租户请求编号、请求指纹和加密创建回执；FeedbackEvidence 保存服务器来源版本及保存时原件删除状态。创建事务先以教师/请求编号 advisory lock 查找回执，再执行时钟、学生/课次归属和依据锁定；同指纹只解密不可变回执重放并标记 `replayed=true`，指纹冲突零写入，旧无请求编号调用保持兼容。HTTP、workspace-web 和 feedback.create 工具均透传请求编号，快照读取返回保存时来源元数据。
 - A05-SAVE 验证：后端构建通过；隔离 PostgreSQL 17.10 下 A05-SAVE 3 项（同键重放/加密回执、指纹冲突、旧调用兼容）通过，既有 feedback.create 5 项通过。证据日志待写入 `V009-next-20260916/a05-save-idempotency.log`；完整 `npm run check` 需在 P6-READABLE 收口后重跑。
-- A05-SAVE 提交：仅提交保存回执服务、类型/路由/工具透传、Prisma schema/迁移、聚焦测试和本日志；提交 SHA 在紧随其后的日志校准提交中记录。P6-READABLE 仍未实现，TASK-SOURCES/TASK-INVALIDATION 仍是后续依赖；不调用真实模型、资料或外部服务。
+- A05-SAVE 提交：仅提交保存回执服务、类型/路由/工具透传、Prisma schema/迁移、聚焦测试和本日志；实现提交为 `27f2261235faedbe24fb12633b81e03da08d2e17`，本行在后续日志校准提交中补记。P6-READABLE 仍未实现，TASK-SOURCES/TASK-INVALIDATION 仍是后续依赖；不调用真实模型、资料或外部服务。
