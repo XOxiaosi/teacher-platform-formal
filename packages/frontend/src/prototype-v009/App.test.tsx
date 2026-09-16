@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { App, FeedbackPage, ReviewPage } from './App';
 import { createStudio, type Studio } from './model';
+import { formatDate } from '../shared/date-format';
 
 function setup(page:'review'|'feedback', initial=createStudio()) {
   let latest=initial;
@@ -11,6 +12,19 @@ function setup(page:'review'|'feedback', initial=createStudio()) {
 }
 
 describe('V009 候选与反馈的连续工作',()=>{
+  it('教师可见日期使用统一中文格式，表单数据仍保留 ISO 值',()=>{
+    location.hash='/desk';
+    render(<App/>);
+    expect(screen.getByText(`${formatDate('2026-09-14')} · 北京时间`)).toBeInTheDocument();
+    expect(screen.getByText(`林小雨 · ${formatDate('2026-09-14')}课后记录`)).toBeInTheDocument();
+  });
+
+  it('家长反馈课程范围使用统一中文日期，表单值仍保留课程 ID',()=>{
+    setup('feedback');
+    expect(screen.getByRole('option',{name:/2026年9月14日 14:00–16:00/})).toBeInTheDocument();
+    expect(screen.getByLabelText('课程与记录范围')).toHaveValue('c1');
+  });
+
   it('离开反馈页再返回仍保留未保存正文，直到教师明确保存', async()=>{
     location.hash='/feedback';
     render(<App/>);
