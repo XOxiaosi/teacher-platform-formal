@@ -358,3 +358,11 @@ V009 是产品语义版本，不为每个实现 commit 升版；同一任务允�
 - 修复：连接工作区模型页改为“已接入的模型服务”，明确正式 AI 由平台统一提供 DeepSeek、教师无需填写 API Key；兼容配置和未启用运行时的状态继续如实展示；保留的新增 API 表单标注为“本地开发测试”，并提示不要粘贴真实密钥。设置入口同步改为平台 DeepSeek 服务状态文案，未改变接口或真实调用边界。
 - 浏览器证据：本地隔离后端、合成账号和无真实运行时下，桌面模型设置页显示新文案，`innerWidth=1278`、`scrollWidth=1278`；375×844 viewport 下显示新文案且 `bodyWidth=375`、`scrollWidth=375`，未观察横向溢出。原始记录见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/web-content-debug-02.log`。
 - 验证：`ModelConfiguration`、设置入口和 unavailable 文案专项 25/25 通过；修改后的完整根门禁退出 0，证据见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/check-16-web-content.log`：治理 19/19，后端 323 文件/2783 测试，前端 47 文件/297 测试，管理端 13 文件/84 测试，运维 151 项中 149 通过、2 项 Windows PowerShell 专属跳过，类型、lint、隔离 PostgreSQL 与构建通过。真实 DeepSeek、Windows、实体手机、真实资料和渠道仍未进入范围。
+
+### WEB-CONTENT-DEBUG-03｜2026-09-16｜网页日期显示统一
+
+- 问题：日程列表/详情、重复规则、学生时间线和缴费表仍把存储用的 `YYYY-MM-DD` 直接展示给教师；编辑确认弹窗也直接展示原始日期，和网页其他中文日期格式不一致。
+- 修复：上述教师可见日期统一使用共享 `formatDate`（Asia/Shanghai）输出中文年月日；日程时间、`<input type=date>` 的值、接口提交和排序比较继续保留原始 ISO 字符串，不改变数据契约。
+- 浏览器证据：本地 `preview.html` 合成数据在桌面 1278px 与 375×844 下核验日程列表/详情、重复规则、学生时间线和缴费记录；页面显示中文日期，原始记录见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/web-content-debug-03.log`。桌面 body/document `scrollWidth=1278`，窄视口 body/document `scrollWidth=375`，未观察横向溢出。
+- 测试：网页相关专项 4 文件/26 项通过；代码冻结后完整 `npm run check` 退出 0，证据为 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/check-18-web-date-format.log`：治理 19/19，后端 323 文件/2783 测试，前端 47 文件/297 测试，管理端 13 文件/84 测试，运维 151 项中 149 通过、2 项 Windows PowerShell 专属跳过，类型、lint、隔离 PostgreSQL 与构建通过。
+- 边界与下一步：网页内容调试继续进行；真实 DeepSeek/DSH、Windows、实体手机、跨设备、真实教师资料、渠道和正式发布仍未进入范围。只有网页 Gate 成熟后才进入 Windows 与手机开发；真实模型验证前需要安全注入平台 DeepSeek 配置，不把 API Key 粘贴到聊天或提交到仓库。
