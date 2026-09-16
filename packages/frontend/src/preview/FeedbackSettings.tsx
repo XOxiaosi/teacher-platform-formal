@@ -1,6 +1,5 @@
 import { FormEvent, useState } from 'react';
-import { PreviewActions, studentName, type FeedbackSaveInput } from './PreviewApp';
-import type { GenerateFeedbackDraftResult } from '../api/feedback';
+import { PreviewActions, studentName, type FeedbackSaveInput, type GenerateFeedbackDraftResult } from './PreviewApp';
 import { Feedback, today } from './data';
 import { usePreviewState } from './ui-state';
 import './feedback.css';
