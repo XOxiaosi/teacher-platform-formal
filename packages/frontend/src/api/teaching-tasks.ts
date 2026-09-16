@@ -36,6 +36,12 @@ export interface TeachingTaskEventDto {
   createdAt: string;
 }
 
+export function getTeachingRuntimeAvailability(
+  teacherId: string,
+): Promise<{ runtimeAvailability: TeachingRuntimeAvailability }> {
+  return apiRequest('/teaching-runtime', { method: 'GET', teacherId });
+}
+
 export function createTeachingConversation(teacherId: string): Promise<{ id: string; createdAt: string }> {
   return apiRequest('/teaching-conversations', { method: 'POST', teacherId });
 }

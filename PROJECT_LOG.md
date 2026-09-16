@@ -438,3 +438,11 @@ V009 是产品语义版本，不为每个实现 commit 升版；同一任务允�
 - 使用当前隔离 PostgreSQL 合成账号 `a06-browser@example.com`，临时创建一条 `deepseek` / `deepseek-flash` ProviderConfig，服务层加密落库；通过 `createProviderConfigRouter`、`createRoutingAiClient` 和 `runAsTeacher` 发起最小合成请求，返回 `OK`，随后删除临时 ProviderConfig。复核数据库中该教师剩余 ProviderConfig 为 0，未发现明文 `apiKeyEnc`。
 - 外部接口预检 `GET https://api.deepseek.com/models` 成功，当前可用模型返回 `deepseek-flash` 与 `deepseek-v4-pro`。路由 Gate 使用 `https://api.deepseek.com/chat/completions`，未发送真实教师资料或业务写操作。原始结果见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/real-deepseek-routing-gate.log`。
 - 完成边界：真实 DeepSeek API Key、OpenAI 兼容端点、加密 ProviderConfig 和按教师路由已验证；当前网页教学任务仍使用显式 `scripted-test-only` DSH 运行时，前端 transport 仍如实显示 `AI 服务尚不可用`，因此不能把本 Gate 记为网页端真实 DSH 完成。Windows/手机、真实资料、跨设备、渠道和用户验收继续后置。
+
+### A02-REAL-DEEPSEEK-DSH｜2026-09-16｜网页真实 DSH 运行时接线
+
+- 接线：新增固定上游 DSH 的一次性 JSONL host bridge `scripts/dsh-teaching-host.ts` 与正式后端适配器 `real-dsh-runtime.ts`。只有显式提供 `DSH_RUNTIME_ROOT`、host 所需 `tsx` 和仓库外 DeepSeek 配置时才报告 `available`；默认 local-safe、缺配置或 host 不可用仍保持 `unavailable`，没有回退到旧 Agent loop。任务接收成功后由正式路由唤醒进程内 worker；新增 `GET /teaching-runtime`，连接版网页读取该能力并更新助手状态。
+- 真实验证：固定 DSH checkout `c291e7961a515f6d7af9304e7fd1d257929aef26` 完成 host 构建前置后，使用仓库外配置文件发起真实 `deepseek-flash` 请求；适配器返回 `ok=true`、`status=succeeded`、`synthetic=false`、`usageStatus=reported`，回复长度 6，未发送教师业务资料。完整结果见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/real-dsh-web-gate.log`。
+- 定向验证：真实运行时配置门禁、教学任务路由能力端点、worker 唤醒和前端助手 transport 共 9 项通过；backend build/lint、frontend typecheck 和 `git diff --check` 通过。前端全套 47 文件/304 项通过；原始输出见此前 `frontend-test-09.log` 及本轮终端记录。
+- 当前边界：host 本轮使用数据库会话历史拼接上下文，尚未接入 DSH 的持久化插件，也尚未把平台只读教学查询工具跨进程注册到真实 host；因此当前 Gate 证明真实 DeepSeek/DSH 文本运行链路和网页能力探测已接通，不把它写成完整教学数据助手完成。运行仍是显式 opt-in；Windows/手机、真实教师资料、跨设备、渠道和正式发布继续后置。
+- 根门禁复核：`check-27-real-dsh-web.log` 的第一次完整 `npm run check` 有 323/324 个后端测试文件通过、2781 个测试通过，唯一失败为 `db-routing-workflow` 的 `beforeAll` 在默认 10 秒钩子预算内超时；未见断言失败。随后在独立临时 PostgreSQL 17、`--hookTimeout 60000` 下复跑该套件，6/6 通过（包含双库物理隔离和未就绪路由断言）。因此本包代码专项和定向复核通过；首次根门禁保留为环境超时记录，不宣称无条件全量 0 退出。原始复核输出在本轮终端记录，复跑未写入仓库。

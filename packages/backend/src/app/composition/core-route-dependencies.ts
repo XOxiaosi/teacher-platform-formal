@@ -7,8 +7,10 @@ import {
 import { createAssessmentService } from '../../features/assessments/index.js';
 import { createStudentTimelineService } from '../../features/student-timeline/index.js';
 import { createScheduleService } from '../../features/scheduling/index.js';
+import { createSchedulingWebService } from '../../features/scheduling-web/index.js';
+import { createWorkspaceWebRouter } from '../routes/workspace-web.routes.js';
 import { createLessonService } from '../../features/lessons/index.js';
-import { createPaymentService } from '../../features/payments/index.js';
+import { createLessonLedgerService, createPaymentService } from '../../features/payments/index.js';
 import { createAiNoteService } from '../../features/ai-notes/index.js';
 import { createConversationService } from '../../features/conversation/index.js';
 import { createAgentExecutionService } from '../../features/agent-execution/index.js';
@@ -57,6 +59,7 @@ import { createRequirementService } from '../../features/requirements/index.js';
 import { createProviderConfigService } from '../../features/provider-configs/index.js';
 import { createProviderUsageService } from '../../features/provider-usage/index.js';
 import { createMediaAssetService } from '../../features/media/index.js';
+import { createCaptureService } from '../../features/capture/index.js';
 import {
   createMediaFileCipherFromEnv,
   createMediaOrphanReaper,
@@ -76,6 +79,9 @@ import {
 import { createMinimalToolRegistry } from '../tool-registration.js';
 import { createPresentationBuilder } from '../presentation/index.js';
 import { createAgendaQuery } from '../agenda/index.js';
+import { createRealDshTeachingRuntime } from '../teaching-runtime/real-dsh-runtime.js';
+import { createTeachingTaskRuntimeWorker } from '../teaching-runtime/teaching-task-runtime-worker.js';
+import { toTaskRuntimeAvailability } from '../teaching-runtime/runtime-driver.js';
 import type {
   CoreRouteDependencies,
   CoreRouterOptions,
@@ -112,14 +118,53 @@ export function createCoreRouteDependencies(
   const clientProvider = createClientProvider(prisma);
   // P8 phase-3 批1：字段加密 cipher 统一装配（ENCRYPTION_KEY env；未配置 → undefined 惰性 SAFETY_BLOCK）
   const fieldCipher = createFieldCipherFromEnv();
-  // Persist messages independently; no HTTP/environment flag enables a test executor.
-  const teachingTasks = createTeachingTaskService({ prisma, getClient: clientProvider.getClient, cipher: fieldCipher });
+  // Real DSH is opt-in and requires an explicit fixed source checkout plus a
+  // repo-external DeepSeek credential file/env. No legacy Agent loop is used as
+  // a fallback when this gate is absent.
+  const configuredTeachingDriver = localSafeMode || !process.env.DSH_RUNTIME_ROOT
+    ? undefined
+    : createRealDshTeachingRuntime({
+      runtimeRoot: process.env.DSH_RUNTIME_ROOT,
+      apiKeyFile: process.env.DEEPSEEK_API_KEY_FILE,
+      model: process.env.DEEPSEEK_MODEL,
+      projectRoot: process.cwd(),
+    });
+  const teachingRuntimeAvailability = options?.teachingRuntimeWorker
+    ? toTaskRuntimeAvailability(options.teachingRuntimeWorker.availability)
+    : configuredTeachingDriver
+      ? toTaskRuntimeAvailability(configuredTeachingDriver.availability)
+      : 'unavailable';
+  // Persist messages independently; no HTTP request can enable a test executor.
+  const teachingTasks = createTeachingTaskService({
+    prisma,
+    getClient: clientProvider.getClient,
+    cipher: fieldCipher,
+    runtimeAvailability: teachingRuntimeAvailability,
+  });
+  const teachingRuntimeWorker = options?.teachingRuntimeWorker
+    ?? (configuredTeachingDriver
+      ? createTeachingTaskRuntimeWorker({
+        driver: configuredTeachingDriver,
+        runnerOptions: {
+          prisma,
+          getClient: clientProvider.getClient,
+          tasks: teachingTasks,
+          cipher: fieldCipher,
+        },
+      })
+      : undefined);
   const students = createStudentService({ getClient: clientProvider.getClient });
   const studentRecords = createStudentRecordsService({ getClient: clientProvider.getClient, cipher: fieldCipher });
   const studentSources = createStudentSourceRecordService({ getClient: clientProvider.getClient, cipher: fieldCipher });
   const assessments = createAssessmentService({ getClient: clientProvider.getClient, cipher: fieldCipher });
   const studentTimeline = createStudentTimelineService({ getClient: clientProvider.getClient, cipher: fieldCipher });
-  const schedules = createScheduleService({ getClient: clientProvider.getClient });
+  const schedules = createScheduleService({ getClient: clientProvider.getClient, cipher: fieldCipher });
+  const schedulingWeb = createSchedulingWebService({
+    getClient: clientProvider.getClient,
+    cipher: fieldCipher,
+    completionFactory: (completionOptions) => createScheduleCompleteUseCase(completionOptions),
+  });
+  const workspaceWeb = createWorkspaceWebRouter({ getClient: clientProvider.getClient });
   const memos = createMemoService({ prisma, getClient: clientProvider.getClient, cipher: fieldCipher });
   const agendaPendingActions = createPendingActionAgendaReader({ getClient: clientProvider.getClient });
   const trustedClock = options?.trustedClock ?? createDatabaseTrustedClock(prisma);
@@ -132,7 +177,8 @@ export function createCoreRouteDependencies(
   });
   const plannedSchedules = createPlannedScheduleUseCase({ scheduling: schedules, trustedClock });
   const payments = createPaymentService({ getClient: clientProvider.getClient, cipher: fieldCipher });
-  const scheduleComplete = createScheduleCompleteUseCase({ getClient: clientProvider.getClient });
+  const lessonLedger = createLessonLedgerService({ getClient: clientProvider.getClient, cipher: fieldCipher });
+  const scheduleComplete = createScheduleCompleteUseCase({ getClient: clientProvider.getClient, cipher: fieldCipher });
   const balanceCalc = createBalanceCalcUseCase({ getClient: clientProvider.getClient });
   const studentProfile = createStudentProfileUseCase({ getClient: clientProvider.getClient });
   const dailyReview = createDailyReviewAssembleUseCase({
@@ -141,8 +187,9 @@ export function createCoreRouteDependencies(
     getClient: clientProvider.getClient,
     cipher: fieldCipher,
   });
-  // Local-safe mode deliberately omits provider resolution and provider
-  // management services, leaving stored credentials outside the reachable graph.
+  // Local-safe mode deliberately omits provider resolution/runtime services.
+  // Credential configuration remains reachable only through owner-isolated CRUD,
+  // with static URL validation and no DNS/probe/network path.
   const providerRouter = localSafeMode ? undefined : createProviderConfigRouter({
     loadConfigs: async (teacherId: string): Promise<ProviderConfigRow[]> => {
       const rows = await prisma.providerConfig.findMany({
@@ -178,7 +225,11 @@ export function createCoreRouteDependencies(
         });
       },
     });
-  const providerConfigService = localSafeMode ? undefined : createProviderConfigService({ prisma });
+  const providerConfigService = createProviderConfigService(
+    localSafeMode
+      ? { prisma, allowedCidrs: [], endpointValidation: 'static', runtimeEnabled: false }
+      : { prisma },
+  );
   const assembleParentFeedbackContext = createAssembleParentFeedbackContextUseCase({ prisma, getClient: clientProvider.getClient, cipher: fieldCipher });
   const generateFeedbackDraft = createGenerateFeedbackDraftUseCase({ prisma, aiClient, context: assembleParentFeedbackContext, getClient: clientProvider.getClient });
   const captureScoreFromText = createCaptureScoreFromTextUseCase({ prisma, aiClient, assessments, getClient: clientProvider.getClient });
@@ -222,6 +273,8 @@ export function createCoreRouteDependencies(
     trustedClock,
   });
   const saveRawInput = createSaveRawInputUseCase({ aiNotes });
+  // T-015 正式捕获链完全不依赖 AI/OCR/ASR；文字先加密持久化，再产出确定性逐字候选。
+  const capture = createCaptureService({ prisma, getClient: clientProvider.getClient, cipher: fieldCipher });
   const conversations = createConversationService({ prisma, getClient: clientProvider.getClient, cipher: fieldCipher });
   const agentExecutions = createAgentExecutionService({ prisma, getClient: clientProvider.getClient, cipher: fieldCipher });
   // P1 修复（t87）：UserRequirement 是共享库表（与 TeacherRegistry/SessionStore 同库），
@@ -397,6 +450,7 @@ export function createCoreRouteDependencies(
   return {
     agenda: { agenda },
     teachingTasks,
+    teachingRuntimeWorker,
     edits,
     conversations: {
       conversations,
@@ -414,9 +468,12 @@ export function createCoreRouteDependencies(
       captureCommunicationFromText,
     },
     schedules: { schedules, plannedSchedules, scheduleComplete },
-    payments: { payments },
+    schedulingWeb: { schedulingWeb },
+    workspaceWeb,
+    payments: { payments, ledger: lessonLedger },
     dailyReview: { dailyReview },
     aiInput: { saveRawInput },
+    capture: { capture },
     agent: { agentConverse, agentExecutions },
     feedback: {
       generateFeedbackDraft,
@@ -431,8 +488,9 @@ export function createCoreRouteDependencies(
     },
     requirements: { requirements },
     media: { media, orphanReaper: mediaOrphanReaper },
-    ...(providerRouter && providerConfigService && providerUsageService
-      ? { provider: { providerRouter, providerConfigService, providerUsageService } }
+    providerConfig: { providerConfigService },
+    ...(providerRouter && providerUsageService
+      ? { provider: { providerRouter, providerUsageService } }
       : {}),
   };
 }

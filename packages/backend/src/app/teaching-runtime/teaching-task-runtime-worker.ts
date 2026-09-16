@@ -21,6 +21,7 @@ export interface TeachingTaskRuntimeWorkerOptions {
 }
 
 export interface TeachingTaskRuntimeWorker {
+  readonly availability: TeachingRuntimeDriver['availability'];
   wake(input: TeachingTaskRuntimeWake): Result<{ queued: boolean }, CommonError>;
   runOnce(): Promise<Result<{
     ran: boolean;
@@ -49,6 +50,7 @@ export function createTeachingTaskRuntimeWorker(
   const pending = new Map<string, TeachingTaskRuntimeWake>();
 
   return {
+    availability: options.driver.availability,
     wake(input) {
       if (!input.teacherId.trim()) return err(validationError('teacherId 不能为空', 'teacherId'));
       if (!input.taskId.trim()) return err(validationError('taskId 不能为空', 'taskId'));

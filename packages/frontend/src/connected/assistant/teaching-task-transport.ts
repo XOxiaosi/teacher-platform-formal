@@ -26,9 +26,11 @@ function toAssistantTask(task: TeachingTaskDto): AssistantTask {
 /** Formal assistant transport. It only calls the persisted teaching-task API;
  * model execution remains server-side and unavailable until a verified DSH
  * runtime is explicitly configured. */
-export function createTeachingTaskTransport(): AssistantTransport {
+export function createTeachingTaskTransport(
+  options: { runtimeAvailability?: AssistantTransport['runtimeAvailability'] } = {},
+): AssistantTransport {
   return {
-    runtimeAvailability: 'unavailable',
+    runtimeAvailability: options.runtimeAvailability ?? 'unavailable',
     async createConversation({ teacherId }) {
       return (await createTeachingConversation(teacherId)).id;
     },

@@ -7,9 +7,11 @@ import { createTeachingTaskRouter } from './teaching-tasks.routes.js';
 import { createPendingActionRouter } from './pending-action.routes.js';
 import { createStudentRouter } from './students.routes.js';
 import { createScheduleRouter } from './schedules.routes.js';
+import { createSchedulingWebRouter } from './scheduling-web.routes.js';
 import { createPaymentRouter } from './payments.routes.js';
 import { createDailyReviewRouter } from './daily-review.routes.js';
 import { createAiInputRouter } from './ai-input.routes.js';
+import { createCaptureRouter } from './capture.routes.js';
 import { createAgentRouter } from './agent.routes.js';
 import { createAgendaRouter } from './agenda.routes.js';
 import { createEditRouter } from './edit.routes.js';
@@ -60,31 +62,44 @@ export function createCoreRouter(prisma: PrismaClient, options?: CoreRouterOptio
 
   router.use(createAgendaRouter(dependencies.agenda));
   if (dependencies.edits) {
-    router.use(createEditRouter(dependencies.edits));
+    router.use(createEditRouter(dependencies.edits, {
+      legacyPaymentEditEnabled: options?.legacyPaymentEditEnabled === true,
+    }));
   }
   router.use(createConversationRouter(
     dependencies.conversations.conversations,
     dependencies.conversations.pendingActions,
   ));
   router.use(createStudentRouter(dependencies.students));
-  if (dependencies.teachingTasks) router.use(createTeachingTaskRouter(dependencies.teachingTasks));
+  if (dependencies.teachingTasks) {
+    router.use(createTeachingTaskRouter(dependencies.teachingTasks, {
+      runtimeWorker: dependencies.teachingRuntimeWorker,
+    }));
+  }
   router.use(createStudentRecordsRouter(dependencies.studentRecords));
   router.use(createStudentRecordSourceRouter(dependencies.studentRecords));
   router.use(createScheduleRouter(dependencies.schedules));
+  router.use(createSchedulingWebRouter(dependencies.schedulingWeb.schedulingWeb));
+  if (dependencies.workspaceWeb) router.use(dependencies.workspaceWeb);
   router.use(createPaymentRouter(dependencies.payments));
   router.use(createDailyReviewRouter(dependencies.dailyReview));
-  router.use(createAiInputRouter(dependencies.aiInput));
+  router.use(createCaptureRouter(dependencies.capture));
+  if (options?.legacyAiInputRoutesEnabled === true) {
+    router.use(createAiInputRouter(dependencies.aiInput));
+  }
   router.use(createAgentRouter(dependencies.agent));
   router.use(createFeedbackRouter(dependencies.feedback));
   router.use(createRequirementRouter(dependencies.requirements));
   // L4 装配（t91）：provider-configs/usage 路由挂载——共享库服务（装配期共享库 prisma），
   // 路由内部 requireAuth 保证 owner 隔离；authService 由 index.ts 经 CoreRouterOptions 注入
+  if (dependencies.providerConfig && options?.authService) {
+    router.use(createProviderConfigRoutes(dependencies.providerConfig.providerConfigService, options.authService));
+  }
   if (dependencies.provider && options?.authService) {
-    router.use(createProviderConfigRoutes(dependencies.provider.providerConfigService, options.authService));
     router.use(createUsageRouter(dependencies.provider.providerUsageService, options.authService));
   }
   // P8 S3 媒体证据链（t8）：上传/下载路由——教师库表（MediaAsset），路由内部 requireAuth
-  if (dependencies.media && options?.authService) {
+  if (options?.legacyMediaRoutesEnabled === true && dependencies.media && options?.authService) {
     router.use(createMediaRouter(dependencies.media.media, options.authService));
   }
   // P8 隐私自助化（t29）：导出/注销 API——requireAuth + owner 隔离，路由内部 requireAuth

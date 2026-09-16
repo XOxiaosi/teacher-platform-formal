@@ -1,4 +1,4 @@
-import type { RequestHandler } from 'express';
+import type { RequestHandler, Router } from 'express';
 import type { PrismaClient } from '@prisma/client';
 import type { DatabaseClientPool } from '../../shared/database-pool/index.js';
 import type { Logger } from '../../shared/logger/index.js';
@@ -10,7 +10,7 @@ import type {
 import type { AssessmentService } from '../../features/assessments/types.js';
 import type { StudentTimelineService } from '../../features/student-timeline/types.js';
 import type { ScheduleService } from '../../features/scheduling/types.js';
-import type { PaymentService } from '../../features/payments/types.js';
+import type { LessonLedgerService, PaymentService } from '../../features/payments/types.js';
 import type { ConversationService } from '../../features/conversation/types.js';
 import type { AgentExecutionService } from '../../features/agent-execution/types.js';
 import type { TeachingTaskService } from '../../features/teaching-tasks/index.js';
@@ -43,6 +43,9 @@ import type { UpdatePaymentUseCase } from '../use-cases/update-payment/types.js'
 import type { UpdateMemoUseCase } from '../use-cases/update-memo/types.js';
 import type { UpdateParentFeedbackContentUseCase } from '../use-cases/update-parent-feedback-content/types.js';
 import type { GenerateFeedbackDraftUseCase } from '../use-cases/generate-feedback-draft/types.js';
+import type { CaptureService } from '../../features/capture/index.js';
+import type { SchedulingWebService } from '../../features/scheduling-web/index.js';
+import type { TeachingTaskRuntimeWorker } from '../teaching-runtime/teaching-task-runtime-worker.js';
 
 export interface CoreRouterOptions {
   agentConverse?: AgentConverseUseCase;
@@ -66,6 +69,14 @@ export interface CoreRouterOptions {
   dependencies?: CoreRouteDependencies;
   /** L0 本地安全模式：生产核心装配默认 true；只有显式 false 才允许直写工具/外部平台服务。 */
   localSafeMode?: boolean;
+  /** 仅兼容旧专项测试；正式装配默认不暴露旧 AI 输入路由。 */
+  legacyAiInputRoutesEnabled?: boolean;
+  /** 仅兼容旧专项测试；正式装配默认不暴露旧媒体/OCR/ASR 路由。 */
+  legacyMediaRoutesEnabled?: boolean;
+  /** 仅兼容旧缴费编辑专项测试；正式装配默认关闭，避免绕过不可变课时账本。 */
+  legacyPaymentEditEnabled?: boolean;
+  /** Optional real DSH worker; omitted keeps the teaching runtime unavailable. */
+  teachingRuntimeWorker?: TeachingTaskRuntimeWorker;
 }
 
 export interface StudentRouteDependencies {
@@ -90,8 +101,13 @@ export interface ScheduleRouteDependencies {
   scheduleComplete: ScheduleCompleteUseCase;
 }
 
+export interface SchedulingWebRouteDependencies {
+  schedulingWeb: SchedulingWebService;
+}
+
 export interface PaymentRouteDependencies {
   payments: Pick<PaymentService, 'listPayments' | 'createPayment'>;
+  ledger: Pick<LessonLedgerService, 'prepareAdjustment' | 'confirmAdjustment' | 'listEntries'>;
 }
 
 export interface DailyReviewRouteDependencies {
@@ -100,6 +116,10 @@ export interface DailyReviewRouteDependencies {
 
 export interface AiInputRouteDependencies {
   saveRawInput: SaveRawInputUseCase;
+}
+
+export interface CaptureRouteDependencies {
+  capture: CaptureService;
 }
 
 export interface AgentRouteDependencies {
@@ -149,14 +169,18 @@ export interface MediaRouteDependencies {
 export interface ProviderRouteDependencies {
   /** routing AiClient 的 ProviderConfig 解析器（L4 t77 装配） */
   providerRouter: ProviderRouterImpl;
-  /** ProviderConfig CRUD 服务（共享库表，装配期共享库 prisma） */
-  providerConfigService: ProviderConfigService;
   /** ProviderUsage 聚合服务（共享库表，装配期共享库 prisma） */
   providerUsageService: ProviderUsageService;
 }
 
+/** 配置管理可在本机安全模式下存在；绝不代表 runtime 已启用。 */
+export interface ProviderConfigRouteDependencies {
+  providerConfigService: ProviderConfigService;
+}
+
 export interface CoreRouteDependencies {
   teachingTasks?: TeachingTaskService;
+  teachingRuntimeWorker?: TeachingTaskRuntimeWorker;
   agenda: AgendaRouteDependencies;
   edits?: EditRouteDependencies;
   conversations: ConversationRouteDependencies;
@@ -164,12 +188,17 @@ export interface CoreRouteDependencies {
   students: StudentRouteDependencies;
   studentRecords: StudentRecordsRouteDependencies;
   schedules: ScheduleRouteDependencies;
+  schedulingWeb: SchedulingWebRouteDependencies;
+  /** Prebuilt with the composition's request-scoped client provider. */
+  workspaceWeb?: Router;
   payments: PaymentRouteDependencies;
   dailyReview: DailyReviewRouteDependencies;
   aiInput: AiInputRouteDependencies;
+  capture: CaptureRouteDependencies;
   agent: AgentRouteDependencies;
   feedback: FeedbackGenerateRouteDependencies;
   requirements: RequirementRouteDependencies;
   media?: MediaRouteDependencies;
+  providerConfig?: ProviderConfigRouteDependencies;
   provider?: ProviderRouteDependencies;
 }

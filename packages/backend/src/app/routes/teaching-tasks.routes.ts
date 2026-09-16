@@ -9,6 +9,8 @@ import type {
   TaskEventDTO,
   TeachingTaskService,
 } from '../../features/teaching-tasks/index.js';
+import type { TeachingTaskRuntimeWorker } from '../teaching-runtime/teaching-task-runtime-worker.js';
+import { toTaskRuntimeAvailability } from '../teaching-runtime/runtime-driver.js';
 
 type PlainObject = Record<string, unknown>;
 
@@ -17,8 +19,26 @@ const messageKeys = new Set(['clientRequestId', 'message', 'expectedVersion', 'm
 const resumeKeys = new Set(['executionId', 'expectedVersion']);
 const conversationKeys = new Set<string>();
 
-export function createTeachingTaskRouter(service: TeachingTaskService): Router {
+export function createTeachingTaskRouter(
+  service: TeachingTaskService,
+  options: { runtimeWorker?: TeachingTaskRuntimeWorker } = {},
+): Router {
   const router = Router();
+
+  router.get('/teaching-runtime', async (req, res) => {
+    const teacherId = requireTeacher(req, res);
+    if (!teacherId) return;
+    // The worker is process-local and carries only the configured capability;
+    // no credential or provider detail is exposed through this endpoint.
+    res.json({
+      ok: true,
+      data: {
+        runtimeAvailability: options.runtimeWorker
+          ? toTaskRuntimeAvailability(options.runtimeWorker.availability)
+          : 'unavailable',
+      },
+    });
+  });
 
   router.post('/teaching-conversations', async (req, res) => {
     const teacherId = requireTeacher(req, res);
@@ -37,6 +57,7 @@ export function createTeachingTaskRouter(service: TeachingTaskService): Router {
     if (!parsed.ok) return sendError(res, parsed.error);
     const result = await service.receiveMessage({ teacherId, ...parsed.value, conversationId: parsed.value.conversationId as string });
     if (!result.ok) return sendError(res, result.error);
+    wakeRuntime(options.runtimeWorker, teacherId, result.value.task, result.value.replayed);
     res.status(result.value.replayed ? 200 : 202).json({
       ok: true,
       data: { task: safeTask(result.value.task), receipt: safeReceipt(result.value.receipt), replayed: result.value.replayed },
@@ -59,6 +80,7 @@ export function createTeachingTaskRouter(service: TeachingTaskService): Router {
       ...parsed.value,
     });
     if (!result.ok) return sendError(res, result.error);
+    wakeRuntime(options.runtimeWorker, teacherId, result.value.task, result.value.replayed);
     res.status(result.value.replayed ? 200 : 202).json({
       ok: true,
       data: { task: safeTask(result.value.task), receipt: safeReceipt(result.value.receipt), replayed: result.value.replayed },
@@ -110,10 +132,22 @@ export function createTeachingTaskRouter(service: TeachingTaskService): Router {
     if (!expectedVersion.ok) return sendError(res, expectedVersion.error);
     const result = await service.resume({ teacherId, taskId: taskId.value, executionId: executionId.value, expectedVersion: expectedVersion.value });
     if (!result.ok) return sendError(res, result.error);
+    wakeRuntime(options.runtimeWorker, teacherId, result.value.task, result.value.replayed);
     res.json({ ok: true, data: { task: safeTask(result.value.task), replayed: result.value.replayed } });
   });
 
   return router;
+}
+
+function wakeRuntime(
+  worker: TeachingTaskRuntimeWorker | undefined,
+  teacherId: string,
+  task: TaskDTO,
+  replayed: boolean,
+): void {
+  if (!worker || replayed || (task.status !== 'queued' && task.status !== 'running')) return;
+  const queued = worker.wake({ teacherId, taskId: task.id });
+  if (queued.ok) void worker.runOnce().catch(() => undefined);
 }
 
 function requireTeacher(req: Request, res: Response): string | undefined {

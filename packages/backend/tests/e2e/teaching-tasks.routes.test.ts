@@ -53,6 +53,37 @@ describe('teaching task HTTP routes', () => {
     expect(service.receiveMessage).toHaveBeenCalledWith(expect.objectContaining({ teacherId: 'teacher-a' }));
   });
 
+  it('reports the configured runtime capability without exposing provider details', async () => {
+    const service = serviceDouble();
+    const app = appFor(service);
+    expect((await request(app).get('/teaching-runtime')).status).toBe(401);
+    const response = await request(app).get('/teaching-runtime').set('x-teacher-id', 'teacher-a');
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ ok: true, data: { runtimeAvailability: 'unavailable' } });
+  });
+
+  it('wakes an available worker only after a newly queued task is durably accepted', async () => {
+    const service = serviceDouble();
+    (service.receiveMessage as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ ok: true, value: {
+      task: { ...task, status: 'queued', runtimeAvailability: 'available' },
+      receipt: { executionId: 'execution-1', userTurnId: 'turn-1', clientRequestId: 'request-1', receivedAt: task.createdAt },
+      replayed: false,
+    }});
+    const worker = {
+      availability: 'ready' as const,
+      wake: vi.fn(() => ok({ queued: true })),
+      runOnce: vi.fn(async () => ok({ ran: true, pending: false, status: 'succeeded', executionId: 'execution-1' })),
+    };
+    const app = express();
+    app.use(express.json());
+    app.use((req, _res, next) => { (req as express.Request & { teacherId?: string }).teacherId = 'teacher-a'; next(); });
+    app.use(createTeachingTaskRouter(service, { runtimeWorker: worker }));
+    const response = await request(app).post('/teaching-tasks').send({ conversationId: 'conversation-1', clientRequestId: 'request-1', message: 'hello' });
+    expect(response.status).toBe(202);
+    expect(worker.wake).toHaveBeenCalledWith({ teacherId: 'teacher-a', taskId: 'task-1' });
+    expect(worker.runOnce).toHaveBeenCalledTimes(1);
+  });
+
   it('returns 202 for the first receipt and 200 for a replay', async () => {
     const service = serviceDouble();
     const receive = service.receiveMessage as ReturnType<typeof vi.fn>;

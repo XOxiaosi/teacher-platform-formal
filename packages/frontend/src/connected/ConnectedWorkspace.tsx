@@ -17,6 +17,7 @@ import './connected.css';
 import { ModelConfiguration } from './ModelConfiguration';
 import { CaptureInbox } from './captures/CaptureInbox';
 import { StudentRecordPanel } from './student-records/StudentRecordPanel';
+import { getTeachingRuntimeAvailability } from '../api/teaching-tasks';
 import { createTeachingTaskTransport } from './assistant/teaching-task-transport';
 
 const routeParts = () => location.hash.replace(/^#\/?/, '').split('?')[0].split('/').filter(Boolean);
@@ -31,7 +32,11 @@ export function ConnectedWorkspace() {
   const [route, setRoute] = useState(routeParts);
   const [dialog, setDialog] = useState<{ title: string; body: ReactNode } | null>(null);
   const [notice, setNotice] = useState<Toast>(null);
-  const assistantTransport = useMemo(() => createTeachingTaskTransport(), []);
+  const [teachingRuntimeAvailability, setTeachingRuntimeAvailability] = useState<'available' | 'unavailable' | 'test_only'>('unavailable');
+  const assistantTransport = useMemo(
+    () => createTeachingTaskTransport({ runtimeAvailability: teachingRuntimeAvailability }),
+    [teachingRuntimeAvailability],
+  );
   const alive = useRef(true); const keys = useRef(new Map<string, string>());
   const generation = useRef(0);
   const needsRefresh = useRef(false);
@@ -52,7 +57,14 @@ export function ConnectedWorkspace() {
   }
   useEffect(() => {
     alive.current = true;
+    setTeachingRuntimeAvailability('unavailable');
     void reload().catch((e: unknown) => { if (alive.current) setError(e instanceof Error ? e.message : '资料加载失败'); });
+    void getTeachingRuntimeAvailability(auth.teacherId!).then((result) => {
+      if (alive.current) setTeachingRuntimeAvailability(result.runtimeAvailability);
+    }).catch(() => {
+      // Keep the explicit unavailable state when capability discovery is down.
+      if (alive.current) setTeachingRuntimeAvailability('unavailable');
+    });
     return () => { alive.current = false; generation.current += 1; };
   }, [auth.teacherId]);
   useEffect(() => {
