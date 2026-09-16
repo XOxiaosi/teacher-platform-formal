@@ -263,4 +263,11 @@ V009 是产品语义版本，不为每个实现 commit 升版；同一任务允�
 - 接线：隐私 API 接受 `format=readable`，后台启动可读 CLI 并以 ZIP 下载；JSON 下载响应明确 `scope=records`、`mediaDelivery=manifest_only`。设置页新增导出按钮、状态轮询、Blob 下载与错误提示。P6-EXPORT 策略补齐 A05 新字段，迁移计数更新至 39。
 - 验证：ops 隔离 PostgreSQL 17.10 全回归 151 项中 149 通过、2 项 Windows PowerShell 专属跳过，退出 0（`/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/p6-readable-ops-03.log`）；readable 单测 4/4，前端隐私 API/设置测试 18/18，后端构建、文件长度、治理和 diff 检查通过。隐私 API 聚焦回归另有 4 项既有邀请测试因测试夹具在共享 TeacherRegistry 重复写入而失败、5 项通过；该失败与本包路线无关，保留在 `p6-readable-privacy.log`，不据此宣称 API 全流程已验证。
 - 根门禁：本包提交后的 `npm run check`（`/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/check-04.log`）退出 0；治理 19 项、后端 320 文件/2775 项、前端 47 文件/294 项、管理端 13 文件/84 项、运维 151 项中 149 通过且 2 项 Windows 专属跳过，长度、类型、lint、隔离 PostgreSQL 17 和全部构建通过。真实 Windows、真实媒体存储、真实教师资料、模型/渠道和发布均未验证。TASK-SOURCES/TASK-INVALIDATION 仍是下一依赖。
+
+### A05-TASK-SOURCES｜2026-09-16｜教学查询来源版本闭环
+
+- 实现：教学查询结果按工具显式映射为 `Student/Schedule/Lesson/Payment/ParentFeedback/Memo` 来源引用，保存 `id + version` 到 StepReceipt；完成写入前重查当前教师归属与 `updatedAtTs`，同一执行回放成功回执时再次重查，发现来源删除、越权或版本变化即标记 `invalidated` 并返回版本冲突。无版本标记的聚合结果不伪造来源版本。
+- 兼容：旧空 `sourceRefs` 回执继续可读；StepDTO 返回真实来源引用；未知/损坏引用 fail-closed。未改变查询工具白名单和外部模型/写操作边界。
+- 验证：隔离 PostgreSQL 17.10 下教学任务恢复与 runtime runner 20/20 通过（`/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/a05-task-sources.log`），新增用例覆盖来源版本变化后回执失效；后端 build、文件长度、治理与 diff 检查通过。
+- 边界：TASK-INVALIDATION（contextEpoch/旧租约与 DSH 会话）、反馈上下文准入和明确草稿保存命令仍未完成；真实 DSH、真实资料和 Windows 未验证。
 - 提交：实现包 `63d1f49c113c2e86b99c7d7898a64fbbccf1a2c4`，preview 依赖围栏修复 `1365665c3e73da3d0f5acd27010eed08d662273a`；本条日志校准另行提交。保留其他未提交工作区修改，不调用真实服务或外部写入。

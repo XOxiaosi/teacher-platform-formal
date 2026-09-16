@@ -20,6 +20,7 @@ async function running() {
   return { ...owner.lease, executionId: received.receipt.executionId, conversationId: conversation.id };
 }
 afterAll(async () => {
+  await prisma.student.deleteMany({ where: { teacherId } });
   await prisma.stepReceipt.deleteMany({ where: { teacherId } });
   await prisma.agentExecution.deleteMany({ where: { teacherId } });
   await prisma.taskRuntime.deleteMany({ where: { teacherId } });
@@ -74,5 +75,22 @@ describe('A01 partial query recovery through the composed service', () => {
     expect(await tasks.failStep({ ...step, error: { code: 'ARCHIVED', message: 'no writes', retryable: false } })).toMatchObject({ ok: false, error: { code: 'VERSION_CONFLICT' } });
     expect(await prisma.conversationTurn.count({ where: { taskId: owner.taskId } })).toBe(before);
     expect((await prisma.stepReceipt.findUniqueOrThrow({ where: { id: prepared.id } })).status).toBe('running');
+  });
+
+  it('stores source refs and invalidates a cached query after the source version changes', async () => {
+    const owner = await running();
+    const student = await prisma.student.create({ data: {
+      teacherId, name: '来源校验学生', grade: 'grade-1', currentStatus: 'active',
+    } });
+    const ref = { type: 'Student', id: student.id, version: student.updatedAtTs.toISOString() };
+    const step = { ...owner, stepKey: 'source-version', inputFingerprint: 'source-version-fingerprint', kind: 'query' as const };
+    const prepared = value(await tasks.prepareStep({ ...step, sourceRefs: [ref] }));
+    const completed = value(await tasks.completeStep({ ...step, result: {
+      id: student.id, updatedAt: student.updatedAtTs, name: student.name,
+    }, sourceRefs: [ref] }));
+    expect(completed.sourceRefs).toEqual([ref]);
+    await prisma.student.update({ where: { id: student.id }, data: { name: '来源已更新' } });
+    expect(await tasks.prepareStep({ ...step, sourceRefs: [] })).toMatchObject({ ok: false, error: { code: 'VERSION_CONFLICT' } });
+    expect(await prisma.stepReceipt.findUniqueOrThrow({ where: { id: prepared.id } })).toMatchObject({ status: 'invalidated' });
   });
 });

@@ -41,6 +41,12 @@
 - 根门禁：本包提交后的 `npm run check`（`/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/check-04.log`）退出 0；治理 19 项、后端 320 文件/2775 项、前端 47 文件/294 项、管理端 13 文件/84 项、运维 151 项中 149 通过且 2 项 Windows 专属跳过，长度、类型、lint、隔离 PostgreSQL 17 和全部构建通过。真实 Windows、真实媒体存储、真实教师资料、模型/渠道与发布未验证。P6-EXPORT 的 stored_encoding 与本包 readable 表示严格区分。
 - 追加修复：preview 原型隔离测试发现设置页直接引用 `/api/` 路径，已将隐私 API 适配层移到 preview 外部（`1365665c3e73da3d0f5acd27010eed08d662273a`）；前端隔离/隐私/设置 24/24 与构建通过。
 
+## A05-TASK-SOURCES 专项
+
+- 教学查询工具按工具名映射来源模型，结果中只采集带版本标记的服务端对象；StepReceipt 保存 `sourceRefs`，DTO 原样返回引用。完成步骤前、成功回执同执行重放前均在事务内按教师和 `updatedAtTs` 重查，来源删除/版本变化会写入 `invalidated` 并拒绝复用。
+- `a05-task-sources.log`：隔离 PostgreSQL 17.10 下教学任务恢复 3 项 + runtime runner 17 项，共 20/20 通过；新增回归明确验证 Student 版本变化后缓存步骤失效。后端 build、文件长度、治理、diff 检查通过。
+- 本包不扩展查询白名单，不接真实模型或外部资料；TASK-INVALIDATION、反馈上下文准入和明确保存命令仍在后续工作包。
+
 ## 首轮完整门禁未通过
 
 - `npm run check`（check-01.log）退出1：后端319文件中315通过，2771项中2767通过、4失败；前端/管理端/运维和最终构建因入口短路未执行。治理19项、长度、类型和lint已通过。233个源码文件指纹在该轮结束后核对未变。

@@ -1,6 +1,7 @@
 import type { PrismaClient, Prisma, TaskRuntime, StepReceipt } from '@prisma/client';
 import { err, notFound, ok, validationError } from '@teacher-platform/contracts';
 import { decryptFieldValue, decryptJsonFieldValue, type FieldCipher } from '../../shared/field-encryption/index.js';
+import { parseSourceRefs } from './teaching-task-sources.js';
 import type { RuntimeAvailability, StepDTO, TaskDTO, TaskError, TeachingTaskService, TaskEventDTO } from './types.js';
 
 type ReaderOptions = {
@@ -35,10 +36,11 @@ export function taskDto(row: TaskRuntime, cipher: FieldCipher | undefined, avail
 
 export function stepDto(row: StepReceipt, cipher: FieldCipher | undefined): StepDTO {
   const envelope = decryptJsonFieldValue(cipher, row.resultRef);
+  const sourceRefs = parseSourceRefs(row.sourceRefs) ?? [];
   return {
     id: row.id, executionId: row.executionId, kind: 'query', status: row.status as StepDTO['status'],
     result: envelope && typeof envelope === 'object' && 'public' in envelope ? envelope.public : null,
-    sourceRefs: [], confirmation: null, error: errorDto(decryptJsonFieldValue(cipher, row.error)),
+    sourceRefs, confirmation: null, error: errorDto(decryptJsonFieldValue(cipher, row.error)),
   };
 }
 

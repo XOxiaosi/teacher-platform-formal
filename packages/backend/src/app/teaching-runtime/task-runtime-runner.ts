@@ -16,6 +16,7 @@ import {
   type TeachingRuntimeDriver,
   type TeachingRuntimeError,
 } from './runtime-driver.js';
+import { sourceRefsFromQuery } from '../../features/teaching-tasks/teaching-task-sources.js';
 
 export interface TeachingTaskRuntimeRunnerOptions {
   prisma: PrismaClient;
@@ -203,11 +204,13 @@ export function createTeachingTaskRuntimeRunner(options: TeachingTaskRuntimeRunn
             });
             return failed.ok ? err(result.error) : err(failed.error);
           }
+          const sourceRefs = sourceRefsFromQuery(name, args, result.value);
           const completed = await options.tasks.completeStep({
             ...claimed.lease,
             executionId: claimed.executionId,
             stepKey,
             result: result.value,
+            sourceRefs,
           });
           return completed.ok ? ok(completed.value.result) : err(completed.error);
         } catch {

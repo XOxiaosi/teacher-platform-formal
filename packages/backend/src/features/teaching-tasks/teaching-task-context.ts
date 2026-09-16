@@ -15,6 +15,7 @@ import type {
   SourceRef,
   TeachingTaskLease,
 } from "./types.js";
+import { sourceRefsCurrent } from './teaching-task-sources.js';
 
 export const REQUEST_ID = /^[A-Za-z0-9._:-]{8,128}$/;
 const LEASE_MS = 60_000;
@@ -58,7 +59,9 @@ export function safeResult(value: unknown): boolean {
   );
 }
 export function validRefs(refs: SourceRef[] | undefined) {
-  return !refs || refs.length === 0;
+  return !refs || refs.every((ref) => Boolean(ref) && typeof ref.type === 'string' && ref.type.length > 0
+    && typeof ref.id === 'string' && ref.id.length > 0
+    && typeof ref.version === 'string' && ref.version.length > 0);
 }
 export function createTaskContext(
   options: CreateTeachingTaskServiceOptions,
@@ -176,5 +179,5 @@ export function createTaskContext(
   }
 
 
-  return { getClient, cipher, availability, leaseMs, writable, now, lockConversation, lockTask, event, authorized };
+  return { getClient, cipher, availability, leaseMs, writable, now, lockConversation, lockTask, event, authorized, sourceRefsCurrent };
 }

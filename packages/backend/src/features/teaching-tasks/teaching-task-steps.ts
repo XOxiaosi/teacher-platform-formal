@@ -2,12 +2,13 @@ import { Prisma } from '@prisma/client';
 import { err, internalError, ok, validationError, versionConflict } from '@teacher-platform/contracts';
 import { encryptJsonFieldValue } from '../../shared/field-encryption/index.js';
 import { stepDto } from './teaching-task-reader.js';
+import { parseSourceRefs } from './teaching-task-sources.js';
 import { json, safeResult, validRefs, validError, type createTaskContext } from './teaching-task-context.js';
 import type { TeachingTaskService } from './types.js';
 
 export function createQueryStepMethods(context: ReturnType<typeof createTaskContext>):
   Pick<TeachingTaskService, 'prepareStep' | 'completeStep' | 'failStep'> {
-  const { getClient, cipher, writable, now, event, authorized } = context;
+  const { getClient, cipher, writable, now, event, authorized, sourceRefsCurrent } = context;
   return {
     async prepareStep(input) {
       try {
@@ -20,7 +21,7 @@ export function createQueryStepMethods(context: ReturnType<typeof createTaskCont
         !input.inputFingerprint
       )
         return err(
-          validationError("本批只允许无来源引用的 query 步骤", "kind"),
+        validationError("query 步骤来源引用格式无效", "sourceRefs"),
         );
       const db = await getClient();
       const step = await db.$transaction(async (tx) => {
@@ -28,6 +29,8 @@ export function createQueryStepMethods(context: ReturnType<typeof createTaskCont
         if (!task) return null;
         const clock = await now(tx);
         if (!clock.ok) return null;
+        const inputRefs = input.sourceRefs ?? [];
+        if (!(await sourceRefsCurrent(tx, input.teacherId, inputRefs))) return null;
         const execution = await tx.agentExecution.findFirst({
           where: {
             id: input.executionId,
@@ -50,7 +53,14 @@ export function createQueryStepMethods(context: ReturnType<typeof createTaskCont
             existing.executionId !== input.executionId
           )
             return null;
-          if (existing.status === "succeeded") return existing;
+          if (existing.status === "succeeded") {
+            const refs = parseSourceRefs(existing.sourceRefs);
+            if (!refs || !(await sourceRefsCurrent(tx, input.teacherId, refs))) {
+              await tx.stepReceipt.update({ where: { id: existing.id }, data: { status: 'invalidated', updatedAtTs: clock.value } });
+              return null;
+            }
+            return existing;
+          }
           if (
             existing.status === "running" &&
             existing.executionId === input.executionId &&
@@ -80,7 +90,7 @@ export function createQueryStepMethods(context: ReturnType<typeof createTaskCont
             status: "running",
             attemptCount: 1,
             leaseEpoch: input.leaseEpoch,
-            sourceRefs: [],
+            sourceRefs: json(inputRefs),
             createdAtTs: clock.value,
             updatedAtTs: clock.value,
           },
@@ -96,6 +106,8 @@ export function createQueryStepMethods(context: ReturnType<typeof createTaskCont
       if (blocked) return blocked;
       if (!safeResult(input.result))
         return err(validationError("查询结果格式无效", "result"));
+      const sourceRefs = input.sourceRefs ?? [];
+      if (!validRefs(sourceRefs) || !parseSourceRefs(sourceRefs)) return err(validationError("查询来源引用格式无效", "sourceRefs"));
       const db = await getClient();
       const step = await db.$transaction(async (tx) => {
         const task = await authorized(tx, input);
@@ -117,8 +129,16 @@ export function createQueryStepMethods(context: ReturnType<typeof createTaskCont
           task.currentExecutionId !== input.executionId
         )
           return null;
-        if (row.status === "succeeded") return row;
+        if (row.status === "succeeded") {
+          const refs = parseSourceRefs(row.sourceRefs);
+          if (!refs || !(await sourceRefsCurrent(tx, input.teacherId, refs))) {
+            await tx.stepReceipt.update({ where: { id: row.id }, data: { status: 'invalidated', updatedAtTs: clock.value } });
+            return null;
+          }
+          return row;
+        }
         if (!["prepared", "running"].includes(row.status)) return null;
+        if (!(await sourceRefsCurrent(tx, input.teacherId, sourceRefs))) return null;
         const updated = await tx.stepReceipt.update({
           where: { id: row.id },
           data: {
@@ -126,6 +146,7 @@ export function createQueryStepMethods(context: ReturnType<typeof createTaskCont
             resultRef: json(
               encryptJsonFieldValue(cipher, { public: input.result }),
             ),
+            sourceRefs: json(sourceRefs),
             error: Prisma.DbNull,
             updatedAtTs: clock.value,
           },

@@ -55,7 +55,7 @@ export interface TeachingTaskService {
   claim(input: { teacherId: string; taskId: string }): Promise<Result<{ task: TaskDTO; lease: TeachingTaskLease } | { task: TaskDTO; unavailable: true }, CommonError>>;
   heartbeat(input: TeachingTaskLease): Promise<Result<TaskDTO, CommonError>>;
   prepareStep(input: TeachingTaskLease & { executionId: string; stepKey: string; inputFingerprint: string; kind: StepKind; sourceRefs?: SourceRef[] }): Promise<Result<StepDTO, CommonError>>;
-  completeStep(input: TeachingTaskLease & { executionId: string; stepKey: string; result: unknown | null }): Promise<Result<StepDTO, CommonError>>;
+  completeStep(input: TeachingTaskLease & { executionId: string; stepKey: string; result: unknown | null; sourceRefs?: SourceRef[] }): Promise<Result<StepDTO, CommonError>>;
   failStep(input: TeachingTaskLease & { executionId: string; stepKey: string; error: TaskError; status?: 'failed' | 'uncertain' }): Promise<Result<StepDTO, CommonError>>;
   finish(input: TeachingTaskLease & { executionId: string; status: 'succeeded' | 'partial' | 'failed' | 'waiting_input'; error?: TaskError; reply?: string }): Promise<Result<TaskDTO, CommonError>>;
 }
