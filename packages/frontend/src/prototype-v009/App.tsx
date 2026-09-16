@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Dialog, Icon } from '../preview/Chrome';
 import { SchedulePage } from './Schedule';
-import { courseObject, createStudio, DEMO_DAY, type Candidate, type ScheduleRequest, type Studio, type StudioProps } from './model';
+import { courseObject, createStudio, DEMO_DAY, type Candidate, type FeedbackDraft, type ScheduleRequest, type Studio, type StudioProps } from './model';
 
 type FeedbackTarget = { studentId:string; courseId?:string };
 type Page = 'desk' | 'students' | 'schedule' | 'review' | 'feedback' | 'account';
@@ -13,6 +13,7 @@ function readPage(): Page { const key = location.hash.slice(2); return pages.som
 function go(page: Page) { location.hash = '/'+page; }
 export function App() {
   const [data,setData] = useState<Studio>(createStudio);
+  const [localDrafts,setLocalDrafts] = useState<Record<string, FeedbackDraft>>({});
   const [page,setPage] = useState<Page>(readPage);
   const mainRef=useRef<HTMLElement>(null);
   useEffect(()=>{mainRef.current?.scrollTo?.({top:0});},[page]);
@@ -26,7 +27,7 @@ export function App() {
   useEffect(()=>{ const handler = ()=>setPage(readPage()); addEventListener('hashchange',handler); return ()=>removeEventListener('hashchange',handler); },[]);
   useEffect(()=>{ if(!notice)return; const timer=setTimeout(()=>notify(''),5500); return ()=>clearTimeout(timer); },[notice]);
   const pending = data.candidates.filter(c=>c.status==='pending').length;
-  const props: StudioProps = {data,setData,notify};
+  const props: StudioProps = {data,setData,notify,localDrafts,setLocalDrafts};
   const openFeedback=(studentId:string,courseId?:string)=>{setFeedbackTarget({studentId,courseId});go('feedback');};
   const schedule = (mode:ScheduleRequest['mode'],courseId?:string)=> { setRequest({key:Date.now(),mode,courseId});go('schedule'); };
   return <div className="v9-app">
@@ -122,29 +123,29 @@ function StudentsPage({data,setData,notify}:StudioProps) {
   </>;
 }
 
-export function FeedbackPage({data,setData,notify,target}:StudioProps & {target?:FeedbackTarget}) {
+export function FeedbackPage({data,setData,notify,target,localDrafts,setLocalDrafts}:StudioProps & {target?:FeedbackTarget}) {
   const initialStudent=target?.studentId||data.feedback?.studentId||'s1';
   const initialCourse=target?(target.courseId||''):(data.feedback?.courseId||'c1');
-  const initial=data.feedbacks[initialStudent+':'+(initialCourse||'unlinked-'+DEMO_DAY)];
+  const scopeKey=(student:string,course:string)=>student+':'+(course||'unlinked-'+DEMO_DAY);
+  const [fallbackDrafts,setFallbackDrafts]=useState<Record<string,{text:string;sourceIds:string[]}>>({});
+  const drafts=localDrafts||fallbackDrafts;
+  const writeDrafts=setLocalDrafts||setFallbackDrafts;
+  const initial=drafts[scopeKey(initialStudent,initialCourse)]||data.feedbacks[scopeKey(initialStudent,initialCourse)];
   const [studentId,setStudentId]=useState(initialStudent);
   const [text,setText]=useState(initial?.text||'');
   const [sourceIds,setSourceIds]=useState<string[]>(initial?.sourceIds||[]);
-  // Keep edits in the current browser session until the teacher explicitly
-  // saves a draft or confirms it. This map is not the canonical feedback store.
-  const [localDrafts,setLocalDrafts]=useState<Record<string,{text:string;sourceIds:string[]}>>({});
   const [courseId,setCourseId]=useState(initialCourse);
   const [replacing,setReplacing]=useState(false);
   const [showSources,setShowSources]=useState(false);
   const student=data.students.find(s=>s.id===studentId)!;
   const selectedCourse=data.courses.find(c=>c.id===courseId);
   const occurredOn=selectedCourse?.day||DEMO_DAY;
-  const scopeKey=(student:string,course:string)=>student+':'+(course||'unlinked-'+DEMO_DAY);
-  const setLocalDraft=(key:string,value:{text:string;sourceIds:string[]})=>setLocalDrafts(old=>({...old,[key]:value}));
-  const loadScope=(student:string,course:string)=>{const key=scopeKey(student,course);const value=localDrafts[key]||data.feedbacks[key];setStudentId(student);setCourseId(course);setText(value?.text||'');setSourceIds(value?.sourceIds||[]);};
+  const setLocalDraft=(key:string,value:{text:string;sourceIds:string[]})=>writeDrafts(old=>({...old,[key]:value}));
+  const loadScope=(student:string,course:string)=>{const key=scopeKey(student,course);const value=drafts[key]||data.feedbacks[key];setStudentId(student);setCourseId(course);setText(value?.text||'');setSourceIds(value?.sourceIds||[]);};
   const records=data.candidates.filter(c=>c.studentId===studentId&&c.courseId===(courseId||undefined)&&c.occurredOn===occurredOn&&c.status==='confirmed'&&c.share);
   const saved=data.feedbacks[scopeKey(studentId,courseId)];
   const reviewed=saved?.status==='reviewed'&&saved.text===text;
-  const save = (status:'draft'|'reviewed')=>{if(!text.trim()){notify('请先准备反馈正文。');return;}const value={studentId,courseId:courseId||undefined,occurredOn,text:text.trim(),sourceIds,status};setData(old=>({...old,feedback:value,feedbacks:{...old.feedbacks,[scopeKey(studentId,courseId)]:value}}));setLocalDrafts(old=>{const next={...old};delete next[scopeKey(studentId,courseId)];return next;});notify(status==='reviewed'?'反馈已核对。你可以复制后自行发给家长。':'反馈草稿已保存。');};
+  const save = (status:'draft'|'reviewed')=>{if(!text.trim()){notify('请先准备反馈正文。');return;}const value={studentId,courseId:courseId||undefined,occurredOn,text:text.trim(),sourceIds,status};setData(old=>({...old,feedback:value,feedbacks:{...old.feedbacks,[scopeKey(studentId,courseId)]:value}}));writeDrafts(old=>{const next={...old};delete next[scopeKey(studentId,courseId)];return next;});notify(status==='reviewed'?'反馈已核对。你可以复制后自行发给家长。':'反馈草稿已保存。');};
   const prepare = ()=>{if(!records.length)return;const value=`${student.name}家长您好，和您同步本次课后情况。\n\n${records.map(r=>r.text).join('\n\n')}\n\n以上是本次已有记录的整理，我们会在后续课堂继续关注。`;setText(value);setSourceIds(records.map(r=>r.id));setLocalDraft(scopeKey(studentId,courseId),{text:value,sourceIds:records.map(r=>r.id)});notify('已根据允许对家长表达的记录准备草稿，请核对正文后明确保存。');};
   return <><div className="v9-heading"><div className="v9-eyebrow">PARENT FEEDBACK</div><h1>让家长看到有依据的变化</h1><p>准备本次课后反馈，核对后由你发送。</p></div>
     <div className="v9-feedback-grid"><aside className="v9-paper"><h2>这次反馈写给谁</h2><label>学生<select value={studentId} onChange={e=>loadScope(e.target.value,data.courses.find(c=>c.studentIds.includes(e.target.value)&&c.status!=='cancelled')?.id||'')}>{data.students.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label><label>课程与记录范围<select value={courseId} onChange={e=>loadScope(studentId,e.target.value)}>{data.courses.filter(c=>c.studentIds.includes(studentId)&&c.status!=='cancelled').map(c=><option key={c.id} value={c.id}>{c.day} {c.start}–{c.end} · {c.location}</option>)}<option value="">未关联课程 · {DEMO_DAY}</option></select></label><p className="v9-muted">范围：{occurredOn} · {selectedCourse?selectedCourse.start+'–'+selectedCourse.end:'未关联课程的记录'}</p><div className="v9-rule"><b>{records.length} 条记录可用于家长材料</b><p>只使用已确认且允许对家长表达的内容。内部记录不进入正文。</p></div><button className="v9-button v9-full" onClick={()=>text.trim()?setReplacing(true):prepare()} disabled={!records.length}>根据记录准备反馈</button>{!records.length&&<button className="v9-text-button" onClick={()=>go('review')}>先去核对教学记录 →</button>}<p className="v9-muted">也可以直接编写反馈正文。</p><button className="v9-text-button" onClick={()=>setShowSources(!showSources)}>{showSources?'收起依据':'查看可用依据'}</button>{showSources&&records.map(r=><p key={r.id} className="v9-source-snippet"><b>{r.speaker}</b><br/>{r.text}</p>)}</aside>

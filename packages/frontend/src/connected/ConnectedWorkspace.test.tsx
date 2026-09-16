@@ -3,11 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConnectedWorkspace } from './ConnectedWorkspace';
 import { createDemoData } from '../preview/data';
 
-const mock = vi.hoisted(() => ({ load: vi.fn(), command: vi.fn(), schedule: vi.fn(), payment: vi.fn(), update: vi.fn(), logout: vi.fn(), records: vi.fn() }));
+const mock = vi.hoisted(() => ({ load: vi.fn(), command: vi.fn(), schedule: vi.fn(), payment: vi.fn(), update: vi.fn(), logout: vi.fn(), records: vi.fn(), generate: vi.fn(), createFeedback: vi.fn(), updateFeedback: vi.fn() }));
 vi.mock('../app/teacher-context', () => ({ useAuth: () => ({ teacherId: 'teacher-a', displayName: '验收老师', email: 'a@example.test', logout: mock.logout }) }));
 vi.mock('./workspace-api', () => ({ loadWorkspace: mock.load, workspaceCommand: mock.command, schedulingCommand: mock.schedule }));
 vi.mock('../api/payments', () => ({ createPayment: mock.payment }));
 vi.mock('../api/students', () => ({ updateStudentProfile: mock.update, listStudentRecords: mock.records, reviewStudentRecord: vi.fn(), getStudentRecordSource: vi.fn() }));
+vi.mock('../api/feedback', () => ({ generateFeedbackDraft: mock.generate, createFeedback: mock.createFeedback, updateFeedbackContent: mock.updateFeedback }));
 vi.mock('./ModelConfiguration', () => ({ ModelConfiguration: ({ teacherId }: { teacherId: string }) => <div>具体模型配置：{teacherId}</div> }));
 vi.mock('../connected/assistant', () => ({ AssistantWorkspace: ({ teacherId }: { teacherId: string }) => <section aria-label="正式教学助手入口"><h1>教学助手</h1><p>当前账号：{teacherId}</p></section> }));
 
@@ -15,6 +16,23 @@ const snapshot = () => ({ data: createDemoData(), studentVersions: { s1: 'v1', s
 beforeEach(() => { vi.clearAllMocks(); location.hash = '#/students'; mock.load.mockResolvedValue(snapshot()); mock.command.mockResolvedValue({}); mock.schedule.mockResolvedValue({}); });
 
 describe('connected workspace server-backed writes', () => {
+  it('connects feedback generation to an explicit save with evidence and request receipt', async () => {
+    location.hash = '#/feedback';
+    mock.generate.mockResolvedValue({ studentId: 's1', lessonIds: ['lesson-1'], title: '课堂进展', content: '小雨主动验算，下一次继续保持。', rationale: '使用具体课堂行为。', source: 'ai', evidence: [{ id: 'record-1', type: 'record', occurredAt: '2026-09-14T08:00:00Z', category: 'lesson_observation', summary: '主动验算' }], windowStart: '2026-09-14T08:00:00Z', windowEnd: '2026-09-14T10:00:00Z' });
+    mock.createFeedback.mockResolvedValue({ id: 'feedback-1', studentId: 's1', title: '课堂进展', content: '小雨主动验算，下一次继续保持。', status: 'draft' });
+    render(<ConnectedWorkspace />);
+    await screen.findByRole('heading', { name: '家长反馈' });
+    fireEvent.click(screen.getByRole('button', { name: '新建反馈' }));
+    fireEvent.change(screen.getByLabelText('选择学生'), { target: { value: 's1' } });
+    fireEvent.click(screen.getByRole('button', { name: '根据教学记录生成反馈' }));
+    await screen.findByDisplayValue('小雨主动验算，下一次继续保持。');
+    fireEvent.click(screen.getByRole('button', { name: '保存草稿' }));
+    await waitFor(() => expect(mock.createFeedback).toHaveBeenCalledWith('teacher-a', expect.objectContaining({
+      studentId: 's1', lessonId: 'lesson-1', evidence: expect.arrayContaining([expect.objectContaining({ id: 'record-1' })]),
+      windowStart: '2026-09-14T08:00:00Z', windowEnd: '2026-09-14T10:00:00Z', clientRequestId: expect.any(String),
+    })));
+    expect(mock.generate).toHaveBeenCalledWith('teacher-a', { studentId: 's1' });
+  });
   it('mounts complete server record details and reloads them with the workspace', async () => {
     location.hash = '#/students/s1';
     mock.records.mockResolvedValue({ items: [{

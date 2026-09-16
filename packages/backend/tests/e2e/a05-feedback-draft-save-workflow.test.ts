@@ -89,6 +89,8 @@ describe('A05 反馈草稿端到端保存闭环', () => {
     expect(draft.value.source).toBe('ai');
     expect(draft.value.evidence.map((item) => item.id)).toEqual([record.id]);
     expect(draft.value.content).toContain('独立完成三道计算题');
+    // 生成只返回待核对结果，不应在教师明确保存前创建正式反馈。
+    expect(await prisma.parentFeedback.count({ where: { teacherId: TEACHER, studentId: student.id } })).toBe(0);
 
     const service = createFeedbackService({ prisma, cipher });
     const saveInput = {
@@ -122,6 +124,7 @@ describe('A05 反馈草稿端到端保存闭环', () => {
     expect(reviewed.ok).toBe(true);
     if (!reviewed.ok) return;
     expect(reviewed.value.status).toBe('reviewed');
+    expect(reviewed.value.sentAt).toBeNull();
 
     const snapshot = await service.getFeedbackSnapshot({ teacherId: TEACHER, feedbackId: saved.value.id });
     expect(snapshot.ok).toBe(true);
@@ -133,5 +136,23 @@ describe('A05 反馈草稿端到端保存闭环', () => {
     const replay = await service.createFeedback(saveInput);
     expect(replay).toEqual({ ok: true, value: expect.objectContaining({ id: saved.value.id, replayed: true }) });
     expect(await prisma.parentFeedback.count({ where: { teacherId: TEACHER, studentId: student.id } })).toBe(1);
+  });
+
+  it('生成后依据版本变化会阻止保存，且不写入反馈', async () => {
+    const { student, lesson, record } = await fixture();
+    const context = createAssembleParentFeedbackContextUseCase({ prisma, cipher });
+    const generator = createGenerateFeedbackDraftUseCase({ prisma, cipher, aiClient: fakeAiClient(), context });
+    const draft = await generator.execute({ teacherId: TEACHER, studentId: student.id, lessonIds: [lesson.id] });
+    expect(draft.ok).toBe(true);
+    if (!draft.ok) return;
+    await prisma.studentRecord.update({ where: { id: record.id }, data: { summary: encryptFieldValue(cipher, '依据已经发生变化') } });
+    const service = createFeedbackService({ prisma, cipher });
+    const rejected = await service.createFeedback({
+      teacherId: TEACHER, studentId: student.id, lessonId: lesson.id,
+      title: draft.value.title, content: draft.value.content, evidence: draft.value.evidence,
+      windowStart: draft.value.windowStart, windowEnd: draft.value.windowEnd, clientRequestId: 'a05-e2e-stale-0001',
+    });
+    expect(rejected).toMatchObject({ ok: false, error: { code: 'VERSION_CONFLICT' } });
+    expect(await prisma.parentFeedback.count({ where: { teacherId: TEACHER, studentId: student.id } })).toBe(0);
   });
 });

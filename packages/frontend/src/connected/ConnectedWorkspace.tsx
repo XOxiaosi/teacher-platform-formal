@@ -3,7 +3,7 @@ import { useAuth } from '../app/teacher-context';
 import { createCapture, confirmCapture } from '../api/captures';
 import { createPayment } from '../api/payments';
 import { updateStudentProfile } from '../api/students';
-import { updateFeedbackContent } from '../api/feedback';
+import { createFeedback, generateFeedbackDraft, updateFeedbackContent } from '../api/feedback';
 import { Dialog, Shell } from '../preview/Chrome';
 import { Confirm, type PreviewActions, type Toast } from '../preview/PreviewApp';
 import { TodayPage } from '../preview/Today';
@@ -102,9 +102,21 @@ export function ConnectedWorkspace() {
     },
     saveMemo: (text) => command('memos', { text }),
     toggleMemo: (id, done) => command('memo-status', { id, done, expectedUpdatedAt: snapshotRef.current!.memoVersions[id] }),
-    saveFeedback: async ({ id, studentId, title, content }) => {
-      if (id) await transaction(() => updateFeedbackContent(auth.teacherId!, id, { expectedUpdatedAt: snapshotRef.current!.feedbackVersions[id], changes: { title, content } }));
-      else await command('feedback', { studentId, title, content });
+    generateFeedbackDraft: (input) => generateFeedbackDraft(auth.teacherId!, input),
+    saveFeedback: async ({ id, studentId, title, content, lessonId, evidence, windowStart, windowEnd }) => {
+      if (id) {
+        await transaction(() => updateFeedbackContent(auth.teacherId!, id, { expectedUpdatedAt: snapshotRef.current!.feedbackVersions[id], changes: { title, content } }));
+        return;
+      }
+      const intent = `feedback:${JSON.stringify({ studentId, lessonId, title, content, evidence, windowStart, windowEnd })}`;
+      await transaction(async () => {
+        const result = await createFeedback(auth.teacherId!, {
+          studentId, title, content, lessonId, evidence, windowStart, windowEnd,
+          clientRequestId: requestKey(intent),
+        });
+        keys.current.delete(intent);
+        return result;
+      });
     },
     savePreferences: (changes) => command('preferences', { changes, expectedUpdatedAt: snapshotRef.current!.preferenceVersion }),
     addPayment: async (payment) => {

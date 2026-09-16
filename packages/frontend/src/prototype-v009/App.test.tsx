@@ -1,7 +1,7 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { FeedbackPage, ReviewPage } from './App';
+import { App, FeedbackPage, ReviewPage } from './App';
 import { createStudio, type Studio } from './model';
 
 function setup(page:'review'|'feedback', initial=createStudio()) {
@@ -11,6 +11,18 @@ function setup(page:'review'|'feedback', initial=createStudio()) {
 }
 
 describe('V009 候选与反馈的连续工作',()=>{
+  it('离开反馈页再返回仍保留未保存正文，直到教师明确保存', async()=>{
+    location.hash='/feedback';
+    render(<App/>);
+    const text='离开页面后仍应保留的反馈草稿';
+    fireEvent.change(await screen.findByRole('textbox',{name:'课后反馈正文'}),{target:{value:text}});
+    const nav=within(screen.getByRole('navigation',{name:'主要导航'}));
+    fireEvent.click(nav.getByRole('link',{name:/学生/}));
+    await waitFor(()=>expect(screen.getByRole('heading',{name:'每个学生，持续了解'})).toBeInTheDocument());
+    fireEvent.click(nav.getByRole('link',{name:/家长反馈/}));
+    expect(await screen.findByRole('textbox',{name:'课后反馈正文'})).toHaveValue(text);
+  });
+
   it('切换候选保留修改，修改本身不将候选确认',()=>{
     const data=setup('review');
     fireEvent.change(screen.getByLabelText('记录内容'),{target:{value:'核对后的教师观察，但尚未确认'}});

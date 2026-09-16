@@ -96,6 +96,8 @@ export interface CreateFeedbackBody {
   studentId: string;
   title: string;
   content: string;
+  /** 租户内幂等请求编号；显式保存时由正式入口生成。 */
+  clientRequestId?: string;
   lessonId?: string;
   channel?: string;
   parentName?: string;
