@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { logout as requestLogout, me } from '../api/auth';
 import { onSessionExpired } from '../api/client';
+import { clearAssistantDrafts } from '../connected/assistant/drafts';
 
 export type AuthStatus = 'loading' | 'authed' | 'anon';
 
@@ -31,6 +32,7 @@ export function TeacherProvider({ children }: { children: ReactNode }) {
   const [identity, setIdentity] = useState<{ teacherId: string; email: string; displayName: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
+  const identityRef = useRef<{ teacherId: string; email: string; displayName: string } | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -46,14 +48,18 @@ export function TeacherProvider({ children }: { children: ReactNode }) {
       const current = await me();
       if (!mountedRef.current) return;
       if (current === null) {
+        identityRef.current = null;
         setIdentity(null);
         setStatus('anon');
         return;
       }
-      setIdentity({ teacherId: current.id, email: current.email, displayName: current.displayName });
+      const nextIdentity = { teacherId: current.id, email: current.email, displayName: current.displayName };
+      identityRef.current = nextIdentity;
+      setIdentity(nextIdentity);
       setStatus('authed');
     } catch (refreshError) {
       if (!mountedRef.current) return;
+      identityRef.current = null;
       setIdentity(null);
       setStatus('anon');
       setError(`无法连接服务器，请检查网络后重试：${messageOf(refreshError)}`);
@@ -68,6 +74,8 @@ export function TeacherProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     return onSessionExpired(() => {
       if (!mountedRef.current) return;
+      if (identityRef.current === null) return;
+      identityRef.current = null;
       setIdentity(null);
       setStatus('anon');
       setError('会话已过期，请重新登录');
@@ -77,13 +85,16 @@ export function TeacherProvider({ children }: { children: ReactNode }) {
   const handleLogout = useCallback(async () => {
     try {
       await requestLogout();
-    } catch {
-      // best-effort：登出请求失败也本地清态（服务端 session 会过期兜底）
+      if (!mountedRef.current) return;
+      if (identityRef.current) clearAssistantDrafts(identityRef.current.teacherId);
+      identityRef.current = null;
+      setIdentity(null);
+      setStatus('anon');
+      setError(null);
+    } catch (logoutError) {
+      if (!mountedRef.current) return;
+      setError(`退出登录失败，请重试：${messageOf(logoutError)}`);
     }
-    if (!mountedRef.current) return;
-    setIdentity(null);
-    setStatus('anon');
-    setError(null);
   }, []);
 
   const value: AuthContextValue = {

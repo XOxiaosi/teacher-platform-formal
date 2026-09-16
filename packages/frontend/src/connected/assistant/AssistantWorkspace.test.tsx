@@ -164,6 +164,21 @@ describe('A03 server-backed assistant conversations', () => {
     await screen.findByText('已重新排队处理。');
     expect(transport.resumeTask).toHaveBeenCalledWith({ teacherId: 'teacher-a', conversationId: 'one', taskId: 'failed-task' });
   });
+  it('refreshes task events immediately after recovery without duplicating prior events', async () => {
+    const transport = makeTransport();
+    transport.getTasks.mockResolvedValue([{ id: 'failed-task', status: 'failed', summary: '反馈生成失败。', canResume: true }]);
+    const oldEvent = { seq: 1, eventKey: 'old-event', eventKind: 'task_state' as const, executionId: 'exec-1', role: 'assistant' as const, content: '任务已保存。', createdAt: '2026-09-15T12:00:00Z' };
+    const resumedEvent = { seq: 2, eventKey: 'resumed-event', eventKind: 'task_state' as const, executionId: 'exec-2', role: 'assistant' as const, content: '任务已恢复。', createdAt: '2026-09-15T12:01:00Z' };
+    transport.getTaskEvents.mockImplementation(({ afterSeq }: { afterSeq?: number }) => Promise.resolve(afterSeq === 1
+      ? { items: [oldEvent, resumedEvent], nextSeq: null } : { items: [oldEvent], nextSeq: null }));
+    transport.resumeTask.mockResolvedValue({ id: 'failed-task', status: 'running', summary: '已重新排队。', canResume: false });
+    render(<AssistantWorkspace teacherId="teacher-a" transport={transport} />);
+    await screen.findByText('任务已保存。');
+    fireEvent.click(screen.getByRole('button', { name: '继续处理' }));
+    await screen.findByText('任务已恢复。');
+    expect(screen.getAllByText('任务已保存。')).toHaveLength(1);
+    expect(transport.getTaskEvents).toHaveBeenLastCalledWith({ teacherId: 'teacher-a', conversationId: 'one', taskId: 'failed-task', afterSeq: 1 });
+  });
   it('rebuilds visible task progress from server events and de-duplicates a repeated cursor page', async () => {
     const transport = makeTransport();
     transport.getTasks.mockResolvedValue([{ id: 'task-1', status: 'running', summary: '正在处理。', canResume: false }]);

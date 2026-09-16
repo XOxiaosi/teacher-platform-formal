@@ -20,6 +20,28 @@ export function useConversation(teacherId: string, conversationId: string, trans
   const historyLock = useRef(false);
   const archiveLock = useRef(false);
   useEffect(() => { alive.current = true; return () => { alive.current = false; version.current += 1; }; }, []);
+  async function reloadTaskEvents(taskItems: AssistantTask[]) {
+    if (!transport?.getTaskEvents || taskItems.length === 0) return;
+    const eventResults = await Promise.all(taskItems.map(task => transport.getTaskEvents!({
+      teacherId, conversationId, taskId: task.id, afterSeq: eventCursor[task.id],
+    })));
+    if (!alive.current) return;
+    setEvents(previous => {
+      const seen = new Set(previous.map(event => event.eventKey));
+      return [...previous, ...eventResults.flatMap(result => result.items).filter(event => !seen.has(event.eventKey))]
+        .sort((a, b) => a.seq - b.seq);
+    });
+    setEventCursor(previous => {
+      const next = { ...previous };
+      taskItems.forEach((task, index) => {
+        const eventResult = eventResults[index];
+        const maxSeq = eventResult.items.reduce((max, event) => Math.max(max, event.seq), 0);
+        const cursor = eventResult.nextSeq ?? (maxSeq > 0 ? maxSeq : undefined);
+        if (cursor !== undefined) next[task.id] = cursor;
+      });
+      return next;
+    });
+  }
   async function reloadTasks() {
     if (!transport?.getTasks) return;
     setTaskError('');
@@ -27,25 +49,7 @@ export function useConversation(teacherId: string, conversationId: string, trans
       const result = await transport.getTasks({ teacherId, conversationId });
       if (alive.current) {
         setTasks(result);
-        if (transport.getTaskEvents) {
-          const eventResults = await Promise.all(result.map(task => transport.getTaskEvents!({ teacherId, conversationId, taskId: task.id, afterSeq: eventCursor[task.id] })));
-          if (!alive.current) return;
-          setEvents(previous => {
-            const seen = new Set(previous.map(event => event.eventKey));
-            return [...previous, ...eventResults.flatMap(result => result.items).filter(event => !seen.has(event.eventKey))]
-              .sort((a, b) => a.seq - b.seq);
-          });
-          setEventCursor(previous => {
-            const next = { ...previous };
-            result.forEach((task, index) => {
-              const eventResult = eventResults[index];
-              const maxSeq = eventResult.items.reduce((max, event) => Math.max(max, event.seq), 0);
-              const cursor = eventResult.nextSeq ?? (maxSeq > 0 ? maxSeq : undefined);
-              if (cursor !== undefined) next[task.id] = cursor;
-            });
-            return next;
-          });
-        }
+        await reloadTaskEvents(result);
       }
     } catch { if (alive.current) setTaskError('任务进度暂时无法读取，请重试。'); }
   }
@@ -89,6 +93,7 @@ export function useConversation(teacherId: string, conversationId: string, trans
       const resumed = await transport.resumeTask({ teacherId, conversationId, taskId: task.id });
       if (!alive.current) return false;
       setTasks(previous => [resumed, ...previous.filter(item => item.id !== resumed.id)]);
+      await reloadTaskEvents([resumed]);
       return true;
     } catch { if (alive.current) setTaskError('任务尚未恢复，请稍后重试。'); return false; }
     finally { if (alive.current) setResumingTaskId(null); }
