@@ -16,8 +16,8 @@
 | 已有实现 | V008 正式人工业务；A01 持久消息、只读回执和租约恢复基础通过本地验证。A02 已有租约运行器、检查点校验、查询 StepReceipt、失败重试和显式 worker/心跳围栏；A03 已有正式助手任务/事件全分页恢复入口、恢复刷新和按教师清理草稿；A04 已在 Capture 删除事务中清理复制来源原文并保留 deleted 投影。生产 DSH 仍未接入 |
 | V009 进度 | 不报完成百分比；P0–P6 工程尚未按新版验收，方案完成不代表实现完成 |
 | 历史进度 | V008 工程基线 43%，只供追溯，不换算成 V009 进度 |
-| 交付门禁 | 待本轮文档同步后的最终 `npm run check`；最近一次完整隔离回归退出 0 |
-| 验证概况 | 最近一次完整隔离回归：后端 303 文件/2688 项、前端 39 文件/233 项、管理端 13 文件/84 项、运维 124 项通过；运维 2 项 Windows 专属测试跳过。A04 来源失效用例包含在后端全量通过中；文档同步后还需重跑最终 check |
+| 交付门禁 | 通过（本轮文档同步后的完整 `npm run check` 退出 0） |
+| 验证概况 | 最终完整门禁：治理 16 项；后端 303 文件/2688 项、前端 39 文件/233 项、管理端 13 文件/84 项、运维 124 项通过；运维 2 项 Windows 专属测试跳过。类型检查、lint、构建、隔离 PostgreSQL 17 全部通过；A04 来源失效用例包含在后端全量通过中 |
 | 下一步 | 先定义并验证真实 DeepSeek/DSH adapter，再做 A03 跨设备/重登验收；A04 多候选兼容迁移与来源准入继续保持未开始，不以本地单候选修复替代 |
 
 ### 当前授权和运行边界
@@ -185,5 +185,6 @@ V009 是产品语义版本，不为每个实现 commit 升版；同一任务允�
 - A04-SRC：Capture 删除事务同时清理按 `CaptureEvent` 复制的 `StudentSourceRecord.rawText` 并标记 `captureStatus=deleted`；来源读取保留来源 ID、哈希和 deleted 状态而不返回原文，已确认的 StudentRecord 不删除。未改 CaptureCandidate 单候选唯一约束，也未声称多候选迁移完成。
 - 测试更新：新增 worker 不可用/唤醒去重测试、运行器心跳和丢租约测试、助手恢复事件可见及登出草稿隔离测试、Capture 删除后的来源失效回归；相关专项 lint、后端构建均通过。
 - 实际验证：首次全量隔离回归记录 1 个既有 `db-routing-workflow` beforeAll 10 秒超时（其 6 项测试均 skip），后续同一入口重跑退出 0。最终重跑后端 303 文件/2688 项、前端 39 文件/233 项、管理端 13 文件/84 项、运维 124 项通过，运维 2 项 Windows 专属测试跳过；Capture 来源失效用例 10/10 通过。完整门禁仍需在本日志提交后再次执行 `npm run check`。
+- 文档同步后的最终门禁：`npm run check` 退出 0；治理 16 项、长度门禁、类型检查、lint、隔离 PostgreSQL 17 全量测试和全部构建均通过。后端 303 文件/2688 项、前端 39 文件/233 项、管理端 13 文件/84 项、运维 124 项通过；运维 2 项 Windows 专属测试跳过。首轮 `auth-boundary` 生产模式断言曾因环境变量竞态出现 401/404 单项失败，随后 `npm run test` 与本次完整门禁均重跑通过，失败事实保留。
 - Git：A02 worker 为 `3f8837a feat(A02): add fenced teaching task worker`；A03 恢复/登出清理为 `9e60ed5 fix(A03-REC2): refresh task events and clear assistant drafts on logout`，配套认证测试为 `014d195 test(A03-REC2): cover auth recovery behavior`；A04 来源失效为 `385f1b5 fix(A04): invalidate deleted capture sources`。每个提交只纳入对应文件，其他已有工作区修改保留。
 - 完成边界与下一步：本地 worker/心跳、助手恢复刷新/登出清理和来源原文失效已通过；真实 DeepSeek/DSH、跨设备/Windows、真实教师资料、渠道及用户验收仍未完成。下一步先完成真实 DSH adapter 的受控契约和授权，再安排跨设备验收；A04 多候选 schema/兼容迁移和来源准入继续单独设计。
