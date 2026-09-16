@@ -350,6 +350,10 @@ export function createTeachingTaskRuntimeRunner(options: TeachingTaskRuntimeRunn
             retryable: true,
           });
         }
+        // Snapshot reads can outlast a heartbeat. Do not hand an already-aborted
+        // lease to a driver that would otherwise begin model work or await a
+        // future abort event that has already happened.
+        if (monitor.lost) return failed(runtimeFailure('教学任务租约已丢失，拒绝启动运行器', false));
         const registry = createTeachingRegistry(getClient);
         const output = await options.driver.run({
           teacherId: input.teacherId,

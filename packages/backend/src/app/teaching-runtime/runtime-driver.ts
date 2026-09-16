@@ -26,7 +26,12 @@ export interface TeachingRuntimeOutput {
   sessionRef: string;
   status: 'succeeded' | 'waiting_input';
   checkpoint: TeachingRuntimeCheckpoint | null;
-  cost: { modelCalls: number; inputTokens: number; outputTokens: number; toolCalls: number; synthetic: boolean };
+  cost: {
+    modelCalls: number | null; inputTokens: number | null; outputTokens: number | null;
+    toolCalls: number; synthetic: boolean;
+    /** Missing provider usage is unknown, never a zero-cost claim. */
+    usageStatus?: 'reported' | 'unknown';
+  };
 }
 
 /** A driver must state whether the saved task can safely be retried. This is

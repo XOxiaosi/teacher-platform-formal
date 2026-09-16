@@ -305,27 +305,65 @@ describe('A02 TeachingTaskRuntimeRunner lease heartbeat', () => {
     expect(heartbeat).toHaveBeenCalled();
   });
 
-  it('aborts a driver after lease loss and never finishes the task', async () => {
+  it('does not start a driver if the lease is lost while loading its snapshot', async () => {
     const value = await received();
-    vi.spyOn(value.tasks, 'heartbeat').mockResolvedValueOnce(
-      err({ code: 'VERSION_CONFLICT', field: 'lease', message: 'lease lost' }),
+    const heartbeat = vi.spyOn(value.tasks, 'heartbeat').mockResolvedValueOnce(
+      err({ code: 'VERSION_CONFLICT', field: 'lease', message: 'lease lost before driver' }),
     );
     const finish = vi.spyOn(value.tasks, 'finish');
-    const driver: TeachingRuntimeDriver = {
-      availability: 'test', runtimeVersion: 'dsh-v1',
-      run: async (input) => new Promise((resolve) => {
-        input.signal.addEventListener('abort', () => resolve(err({
-          code: 'VALIDATION_ERROR', field: 'runtime', message: 'aborted after lease loss', retryable: true,
-        })), { once: true });
-      }),
-    };
+    const run = vi.fn<TeachingRuntimeDriver['run']>(async () => err({
+      code: 'VALIDATION_ERROR', field: 'runtime', message: 'driver must not start', retryable: true,
+    }));
     const runner = createTeachingTaskRuntimeRunner({
-      prisma, cipher, tasks: value.tasks, driver, heartbeatMs: 5,
+      prisma, cipher, tasks: value.tasks, driver: { availability: 'test', runtimeVersion: 'dsh-v1', run },
+      scheduler: {
+        setTimeout(callback) { queueMicrotask(callback); return 0 as unknown as ReturnType<typeof setTimeout>; },
+        clearTimeout: vi.fn(),
+      },
     });
     await expect(runner.run({ teacherId: TEACHER, taskId: value.taskId }))
       .resolves.toMatchObject({ ok: false, error: { code: 'INTERNAL_ERROR' } });
+    expect(heartbeat).toHaveBeenCalledOnce();
+    expect(run).not.toHaveBeenCalled();
     expect(finish).not.toHaveBeenCalled();
     expect(await prisma.taskRuntime.findUnique({ where: { id: value.taskId } }))
-      .toMatchObject({ status: 'running' });
+      .toMatchObject({ status: 'running', dshSessionRef: null, dshCheckpoint: null });
+  });
+
+  it('aborts a driver after lease loss and never finishes the task', async () => {
+    const value = await received();
+    const heartbeat = vi.spyOn(value.tasks, 'heartbeat').mockResolvedValueOnce(
+      err({ code: 'VERSION_CONFLICT', field: 'lease', message: 'lease lost' }),
+    );
+    const finish = vi.spyOn(value.tasks, 'finish');
+    let heartbeatTick!: () => void;
+    const aborted = vi.fn();
+    const driver: TeachingRuntimeDriver = {
+      availability: 'test', runtimeVersion: 'dsh-v1',
+      run: async (input) => new Promise((resolve) => {
+        expect(input.signal.aborted).toBe(false);
+        input.signal.addEventListener('abort', () => {
+          aborted();
+          resolve(err({ code: 'VALIDATION_ERROR', field: 'runtime', message: 'aborted after lease loss', retryable: true }));
+        }, { once: true });
+        // Deliberately lose the lease only after the driver has subscribed.
+        // The separate test above covers loss during asynchronous snapshot reads.
+        heartbeatTick();
+      }),
+    };
+    const runner = createTeachingTaskRuntimeRunner({
+      prisma, cipher, tasks: value.tasks, driver,
+      scheduler: {
+        setTimeout(callback) { heartbeatTick = callback; return 0 as unknown as ReturnType<typeof setTimeout>; },
+        clearTimeout: vi.fn(),
+      },
+    });
+    await expect(runner.run({ teacherId: TEACHER, taskId: value.taskId }))
+      .resolves.toMatchObject({ ok: false, error: { code: 'INTERNAL_ERROR' } });
+    expect(heartbeat).toHaveBeenCalledOnce();
+    expect(aborted).toHaveBeenCalledOnce();
+    expect(finish).not.toHaveBeenCalled();
+    expect(await prisma.taskRuntime.findUnique({ where: { id: value.taskId } }))
+      .toMatchObject({ status: 'running', dshSessionRef: null, dshCheckpoint: null });
   });
 });
