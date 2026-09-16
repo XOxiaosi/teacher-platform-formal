@@ -284,3 +284,9 @@ V009 是产品语义版本，不为每个实现 commit 升版；同一任务允�
 - 实现：教学 registry 新增 `feedback.list` 只读工具，固定使用认证教师范围，支持状态和分页过滤；`feedback.create`、`feedback.updateStatus` 等写工具不注册到教学运行时，仍由平台确认或明确保存命令承载。反馈列表返回的 `updatedAt` 进入 `ParentFeedback` 来源引用并沿用来源版本重查围栏。
 - 验证：隔离 PostgreSQL 17.10 下反馈上下文、教学任务恢复与 runtime runner 共 24/24 通过（`/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/a05-feedback-context-integration.log`）；后端 lint/build、文件长度和 `git diff --check` 通过。测试明确覆盖租户过滤、状态/分页透传、来源版本提取及写工具拒绝。
 - 边界：只读上下文接入不等于反馈草稿自动保存；未调用真实模型、教师资料、渠道或外部服务，真实 Windows/跨设备未验证。下一项为明确草稿保存命令，需继续保持证据版本与显式教师动作。
+
+### A05-DRAFT-SAVE｜2026-09-16｜明确草稿保存命令
+
+- 实现：原型反馈准备与编辑只写浏览器会话内的 `localDrafts`，按学生和课次隔离；只有“保存草稿”或“确认已核对”才写入 canonical `feedbacks`，保存后清除临时草稿。切换学生或课次时保留未保存输入，避免无意自动保存。
+- 验证：原型专项 13/13 通过（`/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/a05-feedback-save-command-prototype.log`）；前端 lint/typecheck 通过；重跑完整 `npm run check` 退出 0（`/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/check-05-rerun.log`），治理通过、长度门禁通过，后端 321 文件/2780 项、前端 47 文件/294 项、管理端 13 文件/84 项通过，运维 151 项中 149 项通过、2 项 Windows 专属跳过，类型、lint、隔离 PostgreSQL 17 和全部构建通过。此前一次全量仅有微信状态上限用例 `ECONNRESET`，专项重跑 22/22 后未复现。
+- 边界：仅本地合成 prototype；未接真实模型生成、真实教师资料、真实渠道、Windows/跨设备，也不代表正式反馈发送或发布授权。下一项继续处理 A05 端到端草稿/API 证据整合与剩余 Gate，不因本包完成结束 V009。

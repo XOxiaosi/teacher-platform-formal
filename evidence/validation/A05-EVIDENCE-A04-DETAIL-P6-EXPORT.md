@@ -84,3 +84,9 @@
 - 实现覆盖服务、HTTP 路由、workspace-web、feedback.create 工具和 Prisma 第39项增量迁移；同事务完成回执、反馈、审计、快照及证据写入，旧无键调用不产生回执。
 - 隔离 PostgreSQL 17.10 证据：A05-SAVE 3/3 通过（`a05-save-idempotency.log`），既有 feedback.create 5/5 通过；后端 TypeScript build 退出0。测试使用 harness 合成教师/学生和随机密钥，未使用真实资料、模型或外部服务。
 - 当前边界：完整 `npm run check` 尚未因 P6-READABLE 未收口而重跑；P6-EXPORT 当前只证明 stored_encoding，不能当作可读解密 ZIP；TASK-SOURCES/TASK-INVALIDATION 仍未完成。
+
+## A05-DRAFT-SAVE
+
+- `packages/frontend/src/prototype-v009/App.tsx` 的反馈准备/编辑现在只更新浏览器会话 `localDrafts`；“保存草稿”和“确认已核对”共用显式保存路径，写入 canonical `feedbacks` 后移除对应临时草稿。学生和课次切换按 scope 保留未保存内容。
+- 证据：原型测试 13/13（`/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/a05-feedback-save-command-prototype.log`）；完整门禁重跑 `check-05-rerun.log` 退出 0，后端 321/2780、前端 47/294、管理端 13/84 通过，运维 151 中 149 通过、2 项 Windows 专属跳过。
+- 边界：只验证本地合成原型的显式保存交互，不声称真实 AI 草稿生成、正式 API/渠道发送、真实教师资料、Windows 或跨设备行为已完成。
