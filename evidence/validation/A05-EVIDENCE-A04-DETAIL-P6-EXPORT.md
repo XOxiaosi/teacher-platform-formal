@@ -90,3 +90,9 @@
 - `packages/frontend/src/prototype-v009/App.tsx` 的反馈准备/编辑现在只更新浏览器会话 `localDrafts`；“保存草稿”和“确认已核对”共用显式保存路径，写入 canonical `feedbacks` 后移除对应临时草稿。学生和课次切换按 scope 保留未保存内容。
 - 证据：原型测试 13/13（`/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/a05-feedback-save-command-prototype.log`）；完整门禁重跑 `check-05-rerun.log` 退出 0，后端 321/2780、前端 47/294、管理端 13/84 通过，运维 151 中 149 通过、2 项 Windows 专属跳过。
 - 边界：只验证本地合成原型的显式保存交互，不声称真实 AI 草稿生成、正式 API/渠道发送、真实教师资料、Windows 或跨设备行为已完成。
+
+## A05-E2E-DRAFT
+
+- 新增后端端到端回归串联“当前课次依据 → mock AI 草稿 → 显式保存 → 手工编辑 → 确认 → 快照读取”，并验证同请求编号重放不重复写入。专项 1/1 通过，证据 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/a05-feedback-draft-save-e2e.log`。
+- 完整门禁 `check-06.log` 退出 0：后端 322/2781、前端 47/294、管理端 13/84 通过；运维 151 中 149 通过，2 项 Windows 专属跳过。
+- 仅验证隔离 PostgreSQL 与合成/mock 路径，不声称真实模型、真实资料、实际渠道发送、Windows、跨设备或用户验收已完成。
