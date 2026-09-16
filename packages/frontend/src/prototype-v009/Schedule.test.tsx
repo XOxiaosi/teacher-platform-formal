@@ -100,6 +100,21 @@ describe('V009 排课原型', () => {
     expect(data().ledger).toHaveLength(0);
   });
 
+  it('课程确认和每周重复提示使用统一中文日期，表单值仍保留 ISO 值', () => {
+    setup();
+    fireEvent.click(screen.getByRole('button', { name: '增加课程' }));
+    fireEvent.change(screen.getByLabelText('日期'), { target: { value: '2026-09-15' } });
+    fireEvent.click(screen.getByLabelText('林小雨'));
+    fireEvent.change(screen.getByLabelText('地点'), { target: { value: '教室 C' } });
+    fireEvent.click(screen.getByLabelText('每周重复'));
+    fireEvent.change(screen.getByLabelText('结束日期'), { target: { value: '2026-09-29' } });
+    expect(screen.getByText(`将安排 ${formatDate('2026-09-15')} 至 ${formatDate('2026-09-29')} 的每周课程。`)).toBeInTheDocument();
+    expect(screen.getByLabelText('日期')).toHaveValue('2026-09-15');
+    fireEvent.click(screen.getByRole('button', { name: '查看确认' }));
+    expect(screen.getByText(`北京时间：${formatDate('2026-09-15')} 14:00–16:00`)).toBeInTheDocument();
+    expect(screen.getByText(`每周重复，至 ${formatDate('2026-09-29')}`)).toBeInTheDocument();
+  });
+
   it('同一待确认补录连续确认只写入一次课程和课时流水', async () => {
     const { data } = setup();
     fireEvent.click(screen.getByRole('button', { name: '补录过去课程' }));

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDate, formatDateTime, formatTime } from './date-format';
+import { formatDate, formatDateTime, formatTime, formatYearMonth } from './date-format';
 
 describe('formatDateTime', () => {
   it('把 ISO 时间格式化为中文日期时间', () => {
@@ -8,6 +8,10 @@ describe('formatDateTime', () => {
 
   it('把日期格式化为中文日期', () => {
     expect(formatDate('2026-07-01')).toBe('2026年7月1日');
+  });
+
+  it('把日期格式化为中文年月', () => {
+    expect(formatYearMonth('2026-07-01')).toBe('2026年7月');
   });
 
   it('把时间格式化为小时分钟', () => {
