@@ -337,5 +337,5 @@ V009 是产品语义版本，不为每个实现 commit 升版；同一任务允�
 
 - 使用本地隔离后端和 Vite 页面，以合成邀请账号 `a06-browser@example.com` 登录正式工作区，进入 `/#/feedback`，选择合成学生并生成反馈。页面显示生成说明、1 条已核对依据和时间范围；生成结果保持待核对状态。
 - 手工编辑正文为“浏览器核对后的反馈：小雨主动验算，下一次继续保持。”后点击“保存草稿”，列表显示标题、合成学生、草稿状态、编辑后的正文和“已保存”回执。点击“复制草稿”后剪贴板读回标题与正文，页面显示“已复制”。
-- 视口实测 `innerWidth=1278`、`innerHeight=1235`、`scrollWidth=1278`、`scrollHeight=1235`，未观察到横向溢出。完整步骤、AX/UI 结果和边界记录见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/a06-auth-http-browser.log`。
+- 桌面视口实测 `innerWidth=1278`、`innerHeight=1235`、`scrollWidth=1278`、`scrollHeight=1235`；另以浏览器 viewport override `375×844` 完成同一生成→编辑→保存→复制流程，窄视口 `bodyWidth=375`、`scrollWidth=375`、`scrollHeight=844`，均未观察到横向溢出。完整步骤、AX/UI 结果和边界记录见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/a06-auth-http-browser.log`。
 - 验证边界：本包仍只使用 fake AI、隔离数据库和合成账号；真实模型/DSH、Windows/手机、跨设备草稿、真实教师资料、渠道发送和用户验收未验证。下一步在不新增外部授权的前提下保留工程回归，等待相应环境再做真实设备 Gate。

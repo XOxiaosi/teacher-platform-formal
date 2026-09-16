@@ -22,9 +22,9 @@
 
 ## 认证浏览器合成闭环
 
-本地合成账号在 Vite 页面完成认证后，进入正式 `/#/feedback`，选择合成学生并生成反馈。页面显示生成说明和 1 条已核对依据；编辑正文后保存，列表显示草稿和“已保存”；点击复制后剪贴板读回标题与编辑后的正文，页面显示“已复制”。视口 `1278×1235`，`scrollWidth=1278`，未观察到横向溢出。
+本地合成账号在 Vite 页面完成认证后，进入正式 `/#/feedback`，选择合成学生并生成反馈。页面显示生成说明和 1 条已核对依据；编辑正文后保存，列表显示草稿和“已保存”；点击复制后剪贴板读回标题与编辑后的正文，页面显示“已复制”。桌面视口 `1278×1235` 与窄视口 `375×844` 均完成该流程，二者 `scrollWidth` 分别为 `1278`、`375`，未观察到横向溢出。
 
-完整步骤和可复核输出见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/a06-auth-http-browser.log`。该证据使用项目 fake AI 依赖、隔离数据库和合成邀请账号，不代表真实模型或真实教师环境。
+完整步骤和可复核输出见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/a06-auth-http-browser.log`。窄视口为浏览器 viewport override，不等同于实体手机或 Windows 验收。该证据使用项目 fake AI 依赖、隔离数据库和合成邀请账号，不代表真实模型或真实教师环境。
 
 ## 未关闭 Gate
 
