@@ -397,3 +397,9 @@ V009 是产品语义版本，不为每个实现 commit 升版；同一任务允�
 - 代码冻结后以 `set -o pipefail; npm run check` 完整复跑，退出 0；证据为 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/check-24-web-content-final.log`。
 - 本轮治理、文件长度、类型检查、lint、隔离 PostgreSQL 17 全量测试、三端构建均通过：后端 323 文件/2783 测试，前端 47 文件/299 测试，管理端 13 文件/84 测试，运维 151 项中 149 通过、2 项 Windows PowerShell 专属跳过。
 - 上一轮出现的三个后端并行抖动（capture-api-contract、media-transcription-adapter、interactions-health）本轮均未复现；不将偶发复跑等同于根因修复。真实 DeepSeek、Windows/手机、跨设备和用户体验验收仍未验证。
+
+### WEB-CONTENT-DEBUG-07｜2026-09-16｜核心网页内容与窄屏布局复核
+
+- 对本地 `preview.html` 的 9 个核心路由（今日、助手、学生列表/详情、日程、缴费、反馈、设置、模型设置）完成桌面与 `375×844` viewport override 实际浏览器检查；两种视口逐页 `body/document scrollWidth` 均与视口一致，逐元素右边界检查无横向溢出。证据见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/web-content-debug-07.log`。
+- 教师可见文本逐页检查无 RFC3339 或斜杠日期残留，无 `undefined`/`NaN`；未配置模型时仍明确显示助手不可用，符合当前平台统一 DeepSeek 且未注入真实运行时的边界。
+- 本轮未发现有证据支持的新网页文案或布局缺陷，因此不改产品代码；上一包最终根门禁已退出 0。真实 DeepSeek、Windows/手机、跨设备和用户体验验收仍未验证。
