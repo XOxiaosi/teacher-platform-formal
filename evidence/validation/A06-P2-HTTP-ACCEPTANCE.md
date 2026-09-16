@@ -31,3 +31,7 @@
 ## Gate 复核
 
 首次在新增路由契约之后运行完整 `npm run check` 时，后端 322 个文件中 321 个通过、2782 个测试中 2781 个通过；唯一失败是 `tests/e2e/teaching-tasks.routes.test.ts` 的一次 `socket hang up`。随后用同一隔离 PostgreSQL 17 harness 单独重跑该文件，5/5 通过，原始日志为 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/teaching-tasks-rerun-11.log`。第二次完整 Gate 已退出 0，最终日志为 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/check-12-a06-final.log`：后端 322/2782、前端 47/296、管理端 13/84 全部通过，运维 149/151 通过且 2 项 Windows 专属跳过。
+
+## 认证 HTTP 合成闭环
+
+`packages/backend/tests/e2e/a06-feedback-http-workflow.test.ts` 在隔离 PostgreSQL 17 harness 下 1/1 通过（`/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/a06-feedback-http-workflow.log`）。用例通过真实邀请认证 cookie 进入正式 Express 应用，依次调用生成草稿、明确保存、同请求编号重放和依据快照；生成后 `ParentFeedback` 为 0，保存后只产生一条 `draft` 且 `sentAt=null`。测试通过 `CreateAppOptions.coreDependencies` 注入合成 mock AI，未启用外部供应商。

@@ -5,6 +5,7 @@ import { createHealthRouter } from './app/routes/health.routes.js';
 import { createAuthRouter } from './app/routes/auth.routes.js';
 import { createCoreRouter } from './app/routes/core.routes.js';
 import { createCoreRouteDependencies } from './app/composition/core-route-dependencies.js';
+import type { CoreRouteDependencies } from './app/composition/types.js';
 import { resolveLocalSafeMode } from './app/composition/local-safe-mode.js';
 import {
   createWechatFeature,
@@ -103,6 +104,8 @@ function createMetricsRouter(): Router {
 
 export interface CreateAppOptions {
   agentConverse?: AgentConverseUseCase;
+  /** 测试/本地合成注入完整核心依赖；生产缺省走正式组合装配。 */
+  coreDependencies?: CoreRouteDependencies;
   rawPrisma?: PrismaClient;
   actionTokenSigner?: ActionTokenSigner;
   authService?: AuthService;
@@ -126,6 +129,8 @@ export interface CreateAppOptions {
   onWechatRuntime?: (runtime: WechatFeature['runtime']) => void;
   /** L0 本地安全模式：默认开启；只有显式 false（或 LOCAL_SAFE_MODE=false）才关闭。 */
   localSafeMode?: boolean;
+  /** 仅 legacy 测试/兼容调用显式开启支付编辑；正式路由默认关闭。 */
+  legacyPaymentEditEnabled?: boolean;
 }
 
 function unavailableActionTokenSigner(): ActionTokenSigner {
@@ -178,7 +183,7 @@ export function createApp(client: PrismaClient = prisma, options?: CreateAppOpti
   });
   // P8 t20：预构建核心依赖（wechat 等共享同一组合——conversation/agent 单实例，budget/工具注册不重复）；
   // 与两个分支传入 createCoreRouter 的选项一致（dbRouter/dbPool 不参与依赖构建）
-  const coreDeps = createCoreRouteDependencies(client, {
+  const coreDeps = options?.coreDependencies ?? createCoreRouteDependencies(client, {
     agentConverse: options?.agentConverse,
     rawPrisma: editRawPrisma,
     confirmation: {
@@ -281,6 +286,7 @@ export function createApp(client: PrismaClient = prisma, options?: CreateAppOpti
       },
       dbRouter: router,
       dbPool: pool,
+      legacyPaymentEditEnabled: options?.legacyPaymentEditEnabled === true,
     }));
     // S3：DatabaseRouterError → 明确 HTTP 语义（设计 §2.3）：
     //   TEACHER_NOT_FOUND → 404；DATABASE_NOT_READY → 503「教师数据库未就绪」；其余 → 500。
@@ -333,6 +339,7 @@ export function createApp(client: PrismaClient = prisma, options?: CreateAppOpti
         rawPrisma: confirmationPrisma,
         actionTokenSigner: resolveActionTokenSigner(options),
       },
+      legacyPaymentEditEnabled: options?.legacyPaymentEditEnabled === true,
     }));
     app.use('/api/v1', coreGuard);
   }
