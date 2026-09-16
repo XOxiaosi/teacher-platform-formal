@@ -351,3 +351,10 @@ V009 是产品语义版本，不为每个实现 commit 升版；同一任务允�
 - 修复：`FeedbackSettings` 统一使用共享 `formatDate`（Asia/Shanghai）展示反馈依据时间窗和已保存反馈更新时间；数据提交仍保留原始 RFC3339 值，不改变接口契约。
 - 浏览器证据：本地隔离 PostgreSQL、合成邀请账号和 fake AI 下完成反馈生成→明确保存；页面显示“本次使用 1 条已核对依据，范围 2026年8月18日 至 2026年9月17日”，保存列表显示“2026年9月17日”。同一轮审计了今日、学生、日程、缴费、AI 助手、反馈、设置和模型设置页；375×844 viewport 下 `body.scrollWidth=375`、`preview-main.scrollWidth=375`，未观察横向溢出。原始记录见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/web-content-debug-01.log`。
 - 验证：反馈组件专项 3/3、前端完整 47 文件/297 测试通过，`git diff --check` 通过；本包完整根门禁退出 0，证据见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/check-15-web-content.log`（后端 323/2783、前端 47/297、管理端 13/84、运维 149/151，2 项 Windows 专属跳过，构建通过）。真实 DeepSeek、Windows、实体手机、真实资料和渠道仍未进入范围。
+
+### WEB-CONTENT-DEBUG-02｜2026-09-16｜DeepSeek 平台提供边界文案
+
+- 问题：正式教师网页的模型设置页仍以“手动填写供应商、地址和模型 ID”描述空状态，容易让教师误以为需要自行准备 API Key，与 V009 的平台统一 DeepSeek 约束不一致。
+- 修复：连接工作区模型页改为“已接入的模型服务”，明确正式 AI 由平台统一提供 DeepSeek、教师无需填写 API Key；兼容配置和未启用运行时的状态继续如实展示；保留的新增 API 表单标注为“本地开发测试”，并提示不要粘贴真实密钥。设置入口同步改为平台 DeepSeek 服务状态文案，未改变接口或真实调用边界。
+- 浏览器证据：本地隔离后端、合成账号和无真实运行时下，桌面模型设置页显示新文案，`innerWidth=1278`、`scrollWidth=1278`；375×844 viewport 下显示新文案且 `bodyWidth=375`、`scrollWidth=375`，未观察横向溢出。原始记录见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/web-content-debug-02.log`。
+- 验证：`ModelConfiguration`、设置入口和 unavailable 文案专项 25/25 通过；修改后的完整根门禁退出 0，证据见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/check-16-web-content.log`：治理 19/19，后端 323 文件/2783 测试，前端 47 文件/297 测试，管理端 13 文件/84 测试，运维 151 项中 149 通过、2 项 Windows PowerShell 专属跳过，类型、lint、隔离 PostgreSQL 与构建通过。真实 DeepSeek、Windows、实体手机、真实资料和渠道仍未进入范围。
