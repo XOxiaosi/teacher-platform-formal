@@ -48,8 +48,8 @@
 | GOV-002 | 治理（需求 V009 不变） | 明确交互约定、新项目 Git 归属、初始提交及已有仓库保护；相关规则检查通过 | 用户追加要求；沿用 GOV-001 规则 | 已完成 |
 | GOV-003 | F05、F18；治理（需求 V009 不变） | 拆分媒体服务/测试/schema，保持业务和数据库结构，校准声明；长度及完整 check 通过 | GOV-001/GOV-002 阻塞收口 | 已完成 |
 | A01 | F01、F06、F13、F14、F18 | 稳定任务/消息/确认/回执契约；持久消息、只读步骤与租约恢复基础，正式写事务/来源失效由下游接入 | P0 起步 | 已完成 |
-| A02 | F13、F17、F18 | 固定版本教学 DSH 最小执行/恢复；模拟与真实能力分开验收 | A01 | 未开始 |
-| A03 | F01、F02、F13、F14 | 正式助手入口、持久消息及任务找回，刷新/重登/重启与隔离验证 | A01；集成依赖 A02 | 未开始 |
+| A02 | F13、F17、F18 | 固定版本教学 DSH 最小执行/恢复；模拟与真实能力分开验收 | A01 | 进行中 |
+| A03 | F01、F02、F13、F14 | 正式助手入口、持久消息及任务找回，刷新/重登/重启与隔离验证 | A01；集成依赖 A02 | 进行中 |
 | A04 | F05、F06、F07、F08 | 一材料多候选、逐项核对与来源；合成旧数据兼容迁移 | A01；页面依赖 A03 | 未开始 |
 | A05 | F10、F13 | 记录到反馈闭环、有效可分享依据、失败续做不重复归档 | A02–A04；状态迁移依赖 B01 | 未开始 |
 | A06 | F01、F06、F10、F13 | 每包独立审阅，P2 集成后真实用户任务检查；主 Agent 核验证据 | 对应工作包及 P2 | 未开始 |
@@ -154,3 +154,13 @@ V009 是产品语义版本，不为每个实现 commit 升版；同一任务允�
 
 - 最终验证：第三轮完整 `npm run check` 退出 0；治理、500 行门禁、类型、lint、隔离全量测试与全部构建通过。后端 300 文件/2663 项、前端 37 文件/222 项、管理端 13 文件/84 项、运维 124 项通过，治理 16 项通过。运维 2 项 Windows ZIP/PowerShell 专属测试在 macOS 跳过，未作真实 Windows 验收；完整输出见 `A01/check-03.log`。
 - 完成与提交：A01 后端基础完成，最终文档再跑治理、治理测试、长度和差异检查。提交标题 `feat(A01): persist teaching tasks and fenced recovery`，实际 SHA 由 Git 与交付消息提供；下一依赖为 A02/A03。真实 DSH/模型效果、正式写与来源清理、界面和渠道均未以本轮通过替代验收。
+
+### A02/A03｜2026-09-15｜并行助手运行时与正式入口波次
+
+- 用户要求与授权：用户要求将后续工作拆成多个子 Agent 并行执行，由主 Agent 检查后继续推进；沿用 V009 已确认范围和 A01 依赖，不改变 PRODUCT 业务语义。
+- 分工：A02 子 Agent 负责 `packages/backend/src/app/teaching-runtime/**`、`scripts/dsh-runtime/**` 及专项测试；A03 子 Agent 负责 `packages/frontend/src/connected/assistant/**` 及专项测试；独立审阅 Agent 只读检查契约。主 Agent 负责 A01 DTO 适配、正式入口挂载、文档、全量验证和提交。
+- 实现：A02 增加显式 `TeachingRuntimeDriver` 端口、生产 `unavailable` 和本地 synthetic driver；synthetic 每次 query 同时校验固定教学查询名、definitions、只读属性和无需确认，输出 checkpoint/session token 与零模型成本元数据。A03 增加任务状态/失败恢复 UI、教学任务 API transport，并将正式 `/#/agent` 接入登录工作区；消息回执后才清除草稿，恢复使用服务端 execution/version。
+- 契约修复：独立审阅发现 synthetic driver 原先可能直接执行伪造的 shell 定义，已在 driver 与回归测试中修复；恢复测试明确只证明 token/checkpoint 传递，不声称 TaskRuntime 数据库重建恢复。runtime availability 显式映射 `ready→available`、`test→test_only`、`unavailable→unavailable`。
+- 定向验证：A02 synthetic runtime 与教学查询测试 10 项通过（子 Agent 报告，主 Agent 已审读源码和测试）；A03 `AssistantWorkspace` 与 transport 共 14 项通过；`ConnectedWorkspace` 挂载测试 7 项通过；frontend lint 通过。证据见 [A02/A03 波次验证记录](evidence/validation/A02-A03-assistant-wave.md)。
+- 最终验证：主 Agent 执行根 `npm run check` 退出 0；治理 16 项、后端 301 文件/2669 项、前端 38 文件/225 项、管理端 13 文件/84 项、运维 124 项通过，运维 2 项 Windows 专属测试在 macOS 跳过。类型、lint、全量隔离 PostgreSQL 17 测试和构建均通过；证据见 [A02/A03 波次验证记录](evidence/validation/A02-A03-assistant-wave.md)。
+- 完成边界：本波本地工程适配和正式入口挂载通过，A02 真实 DeepSeek/DSH、TaskRuntime 持久 checkpoint 重建、真实教师资料、跨设备、微信和用户验收仍未完成；A02/A03 保持“进行中”，不能据此宣称 V009 或真实 AI 已交付。
