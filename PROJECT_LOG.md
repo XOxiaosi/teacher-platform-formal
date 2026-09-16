@@ -269,5 +269,5 @@ V009 是产品语义版本，不为每个实现 commit 升版；同一任务允�
 - 实现：教学查询结果按工具显式映射为 `Student/Schedule/Lesson/Payment/ParentFeedback/Memo` 来源引用，保存 `id + version` 到 StepReceipt；完成写入前重查当前教师归属与 `updatedAtTs`，同一执行回放成功回执时再次重查，发现来源删除、越权或版本变化即标记 `invalidated` 并返回版本冲突。无版本标记的聚合结果不伪造来源版本。
 - 兼容：旧空 `sourceRefs` 回执继续可读；StepDTO 返回真实来源引用；未知/损坏引用 fail-closed。未改变查询工具白名单和外部模型/写操作边界。
 - 验证：隔离 PostgreSQL 17.10 下教学任务恢复与 runtime runner 20/20 通过（`/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/a05-task-sources.log`），新增用例覆盖来源版本变化后回执失效；后端 build、文件长度、治理与 diff 检查通过。
-- 边界：TASK-INVALIDATION（contextEpoch/旧租约与 DSH 会话）、反馈上下文准入和明确草稿保存命令仍未完成；真实 DSH、真实资料和 Windows 未验证。
+- 提交：实现包 `ef12452550e6851be985d5bf7f8ea2073c1c101e`；日志校准另行提交。TASK-INVALIDATION（contextEpoch/旧租约与 DSH 会话）、反馈上下文准入和明确草稿保存命令仍未完成；真实 DSH、真实资料和 Windows 未验证。
 - 提交：实现包 `63d1f49c113c2e86b99c7d7898a64fbbccf1a2c4`，preview 依赖围栏修复 `1365665c3e73da3d0f5acd27010eed08d662273a`；本条日志校准另行提交。保留其他未提交工作区修改，不调用真实服务或外部写入。
