@@ -39,6 +39,7 @@
 - 隐私 API 新增 `format=readable`，状态/下载沿用 owner 隔离与一次性清理；JSON 下载响应附 `scope=records`、`mediaDelivery=manifest_only`。前端设置页完成按钮、状态轮询和 Blob 下载；A05-SAVE 新增字段已加入导出策略，迁移计数为 39。
 - 证据：`p6-readable-ops-03.log` 为 ops 隔离 PostgreSQL 17.10 全回归 151 项，149 通过、2 项 Windows PowerShell 专属跳过，退出 0；readable 单测 4/4，前端隐私 API/设置 18/18，后端构建、文件长度、治理、差异检查通过。`p6-readable-privacy.log` 中既有 privacy 测试因当前未跟踪邀请夹具重复写共享 TeacherRegistry，4 项失败、5 项通过；该夹具失败未修改本包逻辑，未将隐私 API 全流程标为通过。
 - 边界：根 `npm run check` 需在本包提交后重跑；真实 Windows、真实媒体存储、真实教师资料、模型/渠道与发布未验证。P6-EXPORT 的 stored_encoding 与本包 readable 表示严格区分。
+- 追加修复：preview 原型隔离测试发现设置页直接引用 `/api/` 路径，已将隐私 API 适配层移到 preview 外部（`1365665c3e73da3d0f5acd27010eed08d662273a`）；前端隔离/隐私/设置 24/24 与构建通过。
 
 ## 首轮完整门禁未通过
 

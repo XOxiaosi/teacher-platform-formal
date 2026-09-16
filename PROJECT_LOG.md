@@ -263,4 +263,4 @@ V009 是产品语义版本，不为每个实现 commit 升版；同一任务允�
 - 接线：隐私 API 接受 `format=readable`，后台启动可读 CLI 并以 ZIP 下载；JSON 下载响应明确 `scope=records`、`mediaDelivery=manifest_only`。设置页新增导出按钮、状态轮询、Blob 下载与错误提示。P6-EXPORT 策略补齐 A05 新字段，迁移计数更新至 39。
 - 验证：ops 隔离 PostgreSQL 17.10 全回归 151 项中 149 通过、2 项 Windows PowerShell 专属跳过，退出 0（`/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/p6-readable-ops-03.log`）；readable 单测 4/4，前端隐私 API/设置测试 18/18，后端构建、文件长度、治理和 diff 检查通过。隐私 API 聚焦回归另有 4 项既有邀请测试因测试夹具在共享 TeacherRegistry 重复写入而失败、5 项通过；该失败与本包路线无关，保留在 `p6-readable-privacy.log`，不据此宣称 API 全流程已验证。
 - 边界：完整根 `npm run check` 尚待本包提交后重跑；真实 Windows、真实媒体存储、真实教师资料、模型/渠道和发布均未验证。TASK-SOURCES/TASK-INVALIDATION 仍是下一依赖。
-- 提交：实现包 `63d1f49c113c2e86b99c7d7898a64fbbccf1a2c4`；本条日志校准另行提交。保留其他未提交工作区修改，不调用真实服务或外部写入。
+- 提交：实现包 `63d1f49c113c2e86b99c7d7898a64fbbccf1a2c4`，preview 依赖围栏修复 `1365665c3e73da3d0f5acd27010eed08d662273a`；本条日志校准另行提交。保留其他未提交工作区修改，不调用真实服务或外部写入。
