@@ -92,5 +92,7 @@ describe('A01 partial query recovery through the composed service', () => {
     await prisma.student.update({ where: { id: student.id }, data: { name: '来源已更新' } });
     expect(await tasks.prepareStep({ ...step, sourceRefs: [] })).toMatchObject({ ok: false, error: { code: 'VERSION_CONFLICT' } });
     expect(await prisma.stepReceipt.findUniqueOrThrow({ where: { id: prepared.id } })).toMatchObject({ status: 'invalidated' });
+    expect(await prisma.taskRuntime.findUniqueOrThrow({ where: { id: owner.taskId } }))
+      .toMatchObject({ contextEpoch: 1, dshSessionRef: null, dshCheckpoint: null });
   });
 });

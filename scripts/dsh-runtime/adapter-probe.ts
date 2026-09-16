@@ -51,25 +51,27 @@ if (mode === 'next') {
   const previous = JSON.parse(await readFile(join(root, 'create.json'), 'utf8'));
   input.sessionRef = previous.output.value.sessionRef;
   input.checkpoint = previous.output.value.checkpoint;
+  input.history = [
+    { role: 'user', content: '查询合成学生课时。' },
+    { role: 'assistant', content: '合成学生剩余 8 课时，仅查询。' },
+  ];
 }
 if (mode === 'cancel') setTimeout(() => controller.abort(), 100);
 const output = await driver.run(input);
 if (mode === 'create') { assert(output.ok, JSON.stringify(output)); assert.equal(queries, 1); assert.equal(output.value.cost.modelCalls, 2); }
 if (mode === 'replay' || mode === 'replay-after-next') {
-  // Deliberately omit the platform checkpoint: upstream completed before the
-  // platform saved it. Deterministic ownership must recover the existing turn.
-  assert(output.ok, JSON.stringify(output)); assert.equal(queries, 0);
-  assert.equal(adapters[0].requests.length, 0); assert.equal(usage[0].replayed, true);
-  assert.equal(output.value.reply, '合成学生剩余 8 课时，仅查询。');
-  assert.equal(output.value.cost.modelCalls, 2);
+  // A stored JSONL session without the platform resume fence is ambiguous.
+  // The adapter must surface outcome_unknown instead of replaying an old reply.
+  assert(!output.ok, JSON.stringify(output)); assert.equal(output.error.field, 'DSH_OUTCOME_UNKNOWN');
+  assert.equal(queries, 0); assert.equal(adapters[0].requests.length, 0); assert.equal(usage[0].replayed, false);
 }
 if (['next', 'recover-failure', 'recover-deny'].includes(mode)) {
   assert(output.ok, JSON.stringify(output)); assert.equal(queries, 0); assert.equal(adapters[0].requests.length, 1);
   assert.equal(usage[0].replayed, false);
 }
 if (mode === 'replay-recovered-deny') {
-  assert(output.ok, JSON.stringify(output)); assert.equal(adapters[0].requests.length, 0);
-  assert.equal(usage[0].replayed, true); assert.equal(output.value.reply, '继续该任务，请补充本次记录。');
+  assert(!output.ok, JSON.stringify(output)); assert.equal(output.error.field, 'DSH_OUTCOME_UNKNOWN');
+  assert.equal(adapters[0].requests.length, 0); assert.equal(usage[0].replayed, false);
 }
 if (['deny', 'isolation', 'failure', 'cancel'].includes(mode)) {
   assert.equal(output.ok, false, JSON.stringify(output)); assert.equal(queries, 0);

@@ -8,7 +8,7 @@ import type { TeachingTaskService } from './types.js';
 
 export function createQueryStepMethods(context: ReturnType<typeof createTaskContext>):
   Pick<TeachingTaskService, 'prepareStep' | 'completeStep' | 'failStep'> {
-  const { getClient, cipher, writable, now, event, authorized, sourceRefsCurrent } = context;
+  const { getClient, cipher, writable, now, event, authorized, sourceRefsCurrent, invalidateContext } = context;
   return {
     async prepareStep(input) {
       try {
@@ -57,6 +57,7 @@ export function createQueryStepMethods(context: ReturnType<typeof createTaskCont
             const refs = parseSourceRefs(existing.sourceRefs);
             if (!refs || !(await sourceRefsCurrent(tx, input.teacherId, refs))) {
               await tx.stepReceipt.update({ where: { id: existing.id }, data: { status: 'invalidated', updatedAtTs: clock.value } });
+              await invalidateContext(tx, task.id, input.teacherId, clock.value);
               return null;
             }
             return existing;
@@ -133,12 +134,17 @@ export function createQueryStepMethods(context: ReturnType<typeof createTaskCont
           const refs = parseSourceRefs(row.sourceRefs);
           if (!refs || !(await sourceRefsCurrent(tx, input.teacherId, refs))) {
             await tx.stepReceipt.update({ where: { id: row.id }, data: { status: 'invalidated', updatedAtTs: clock.value } });
+            await invalidateContext(tx, task.id, input.teacherId, clock.value);
             return null;
           }
           return row;
         }
         if (!["prepared", "running"].includes(row.status)) return null;
-        if (!(await sourceRefsCurrent(tx, input.teacherId, sourceRefs))) return null;
+        if (!(await sourceRefsCurrent(tx, input.teacherId, sourceRefs))) {
+          await tx.stepReceipt.update({ where: { id: row.id }, data: { status: 'invalidated', updatedAtTs: clock.value } });
+          await invalidateContext(tx, task.id, input.teacherId, clock.value);
+          return null;
+        }
         const updated = await tx.stepReceipt.update({
           where: { id: row.id },
           data: {

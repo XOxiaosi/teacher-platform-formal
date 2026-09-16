@@ -178,6 +178,19 @@ export function createTaskContext(
     });
   }
 
+  async function invalidateContext(tx: Db, taskId: string, teacherId: string, at: Date): Promise<void> {
+    await tx.taskRuntime.updateMany({
+      where: { id: taskId, teacherId, status: 'running' },
+      data: {
+        contextEpoch: { increment: 1 },
+        dshSessionRef: null,
+        dshCheckpoint: Prisma.DbNull,
+        version: { increment: 1 },
+        updatedAtTs: at,
+      },
+    });
+  }
 
-  return { getClient, cipher, availability, leaseMs, writable, now, lockConversation, lockTask, event, authorized, sourceRefsCurrent };
+
+  return { getClient, cipher, availability, leaseMs, writable, now, lockConversation, lockTask, event, authorized, sourceRefsCurrent, invalidateContext };
 }

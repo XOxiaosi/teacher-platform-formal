@@ -12,6 +12,29 @@ import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import type { MockAdapter } from './packages/core/agent-loop/tests/mock-adapter.ts';
 import type { DshTeachingHost, DshHostResult } from '../../packages/backend/src/app/teaching-runtime/dsh-adapter-contract.js';
 
+function textFromEvent(event: any): string {
+  const blocks = event?.data?.message?.content ?? event?.data?.content;
+  return Array.isArray(blocks) ? blocks.filter((block: any) => block?.type === 'text').map((block: any) => block.text).join('\n') : '';
+}
+
+function sessionHistory(events: readonly any[]) {
+  return events.filter((event) => event.type === 'user/message' || event.type === 'assistant/message')
+    .map((event) => ({ role: event.type === 'user/message' ? 'user' : 'assistant', content: textFromEvent(event) }))
+    // Tool-call assistant events carry no textual turn and are not part of the
+    // platform's user/assistant history fence.
+    .filter((entry) => entry.content.trim().length > 0);
+}
+
+function compatibleHistory(expected: readonly { role: string; content: string }[], persisted: readonly { role: string; content: string }[]) {
+  if (expected.length > persisted.length) return false;
+  const prefixMatches = expected.every((entry, index) => entry.role === persisted[index]?.role && entry.content === persisted[index]?.content);
+  if (!prefixMatches) return false;
+  // A crash can occur after DSH durably appended the assistant reply but
+  // before the platform appended its assistant turn. One trailing assistant
+  // event is therefore compatible with the platform snapshot.
+  return persisted.length === expected.length || (persisted.length === expected.length + 1 && persisted.at(-1)?.role === 'assistant');
+}
+
 export function createPinnedTestHost(root: string, makeAdapter: () => MockAdapter): DshTeachingHost {
   return {
     commit: 'c291e7961a515f6d7af9304e7fd1d257929aef26', model: 'scripted-test-only',
@@ -53,6 +76,10 @@ export function createPinnedTestHost(root: string, makeAdapter: () => MockAdapte
         disposeHandle = () => handle.dispose();
         const agent: Agent = handle.agent;
         const initial = agent.session.snapshotEvents();
+        if (stored && input.resume && !compatibleHistory(input.history, sessionHistory(initial))) {
+          return { sessionId: input.sessionId, lastEventSeq: initial.length - 1, outcome: 'outcome_unknown', reply: null,
+            replayed: false, modelCalls: null, inputTokens: null, outputTokens: null, toolCalls: 0 };
+        }
         const priorInput = initial.findLast(event => event.type === 'user/message'
           && 'teachingExecutionId' in event.data && event.data.teachingExecutionId === input.executionId);
         let replayed = false;
@@ -65,7 +92,14 @@ export function createPinnedTestHost(root: string, makeAdapter: () => MockAdapte
             && event.data.error?.code === TOOL_OUTCOME_UNKNOWN);
           const priorFailedTool = priorEvents.some(event => event.type === 'tool/result' && (event.data.error
             || event.data.message.content.some(block => block.type === 'tool-result' && block.isError)));
-          if (priorEnd?.type === 'turn/end' && priorEnd.data.reason.kind === 'completed' && !priorFailedTool) replayed = true;
+          if (priorEnd?.type === 'turn/end' && priorEnd.data.reason.kind === 'completed' && !priorFailedTool) {
+            // Without the platform's resume fence, a completed persisted turn
+            // cannot be distinguished from a duplicate request. Do not replay
+            // its answer; an explicit resume may replay it deterministically.
+            if (!input.resume) return { sessionId: input.sessionId, lastEventSeq: initial.length - 1, outcome: 'outcome_unknown', reply: null,
+              replayed: false, modelCalls: null, inputTokens: null, outputTokens: null, toolCalls: 0 };
+            replayed = true;
+          }
           else if (priorEnd && !priorUnknown) startSeq = initial.length;
           else return { sessionId: input.sessionId, lastEventSeq: initial.length - 1, outcome: 'outcome_unknown', reply: null,
             replayed: false, modelCalls: null, inputTokens: null, outputTokens: null, toolCalls: 0 };
