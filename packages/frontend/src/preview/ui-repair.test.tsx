@@ -1,7 +1,9 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { PreviewApp } from './PreviewApp';
+import { today } from './data';
 import { revisionTimeLabel } from './ScheduleDetails';
+import { formatDate } from '../shared/date-format';
 
 function route(path: string) { act(() => { window.history.replaceState(null, '', path); window.dispatchEvent(new HashChangeEvent('hashchange')); }); }
 afterEach(() => window.history.replaceState(null, '', '/'));
@@ -9,6 +11,10 @@ afterEach(() => window.history.replaceState(null, '', '/'));
 describe('UI审查修复：工作台与缴费', () => {
   it('修订时间使用上海日期而非UTC截取日期', () => {
     expect(revisionTimeLabel('2026-09-09T19:30:00Z')).toBe('2026年9月10日 03:30');
+  });
+  it('课时流水日期使用统一中文日期格式', () => {
+    route('#/students/s1'); render(<PreviewApp />);
+    expect(screen.getByText(`完成课时记录 · ${formatDate(today)}`)).toBeInTheDocument();
   });
   it('筛选后统计、空态、新增对象一致，并保留跨页筛选', () => {
     route('#/finance'); render(<PreviewApp />);

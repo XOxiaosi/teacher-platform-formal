@@ -382,3 +382,12 @@ V009 是产品语义版本，不为每个实现 commit 升版；同一任务允�
 - 测试：预览版 `ui-repair` 与 `schedule-interaction` 专项 2 文件/15 项通过；代码冻结后完整 `npm run check` 退出 0，证据为 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/check-20-preview-revision-date.log`：治理 19/19，后端 323 文件/2783 测试，前端 47 文件/298 测试，管理端 13 文件/84 测试，运维 151 项中 149 通过、2 项 Windows PowerShell 专属跳过，类型、lint、文件长度、隔离 PostgreSQL 与构建通过。
 - 浏览器证据：本地 `preview.html` 合成数据桌面端实际完成已完成课程编辑并查看修订记录，时间显示为中文北京时间，原扣课记录保留；375×844 下排期列表/详情显示中文日期，`innerWidth=375`、body/document `scrollWidth=375`，无横向溢出，默认视口已恢复。完整步骤见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/web-content-debug-05.log`。
 - 边界与下一步：继续网页端内容与交互成熟度核对；真实 DeepSeek/DSH、真实教师资料、Windows、实体手机、跨设备、渠道和正式发布仍未进入范围。网页 Gate 成熟后才进入 Windows 与手机开发；真实模型验证前需要安全注入平台 DeepSeek 配置，不把 API Key 粘贴到聊天或提交到仓库。
+
+### WEB-CONTENT-DEBUG-06｜2026-09-16｜学生详情课时流水日期
+
+- 问题：学生详情“历史完成 → 课时流水”直接显示存储日期 `YYYY-MM-DD`，与同页排期及网页其他教师可见日期不一致。
+- 修复：`packages/frontend/src/preview/Students.tsx` 的课时流水日期改用共享 `formatDate`（Asia/Shanghai）；余额、排序、数据契约和内部业务日期计算不变。`ui-repair.test.tsx` 增加中文日期回归断言。
+- 稳定性修复：既有 `v006-flow.test.tsx` 已完成课程编辑用例在整套 Vitest 并行负载下超过默认 5 秒，单跑 9/9 通过；将该用例测试预算调整为 15 秒，仅改变测试等待预算，不改变产品行为。
+- 测试：课时流水相关专项 2 文件/11 项通过；网页全套 47 文件/299 项通过。首次根门禁因既有 v006 超时失败；调整测试预算后第二次根门禁网页测试通过，但后端出现 3 个与本包无关的并行抖动（capture-api-contract socket hang up、media-transcription-adapter 状态仍 running、admin interactions-health 返回 404），后端 320/323 文件、2780/2783 项通过，根门禁未标记为通过。完整日志见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/check-23-student-completion-date.log`；专项与浏览器证据见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/web-content-debug-06.log`。
+- 浏览器证据：预览版学生详情桌面端显示“完成课时记录 · 2026年9月17日”；375×844 下同样显示中文日期，`innerWidth=375`、`bodyScrollWidth=375`、`documentScrollWidth=375`，未观察横向溢出，默认视口已恢复。
+- 边界与下一步：本包网页专项和真实浏览器内容验收通过；根门禁 0 退出仍待后端并行抖动消除或下一轮完整复跑。真实 DeepSeek/DSH、真实教师资料、Windows、实体手机、跨设备、渠道和正式发布仍未进入范围；网页 Gate 成熟后才进入 Windows 与手机开发，真实模型验证前需安全注入平台 DeepSeek 配置。
