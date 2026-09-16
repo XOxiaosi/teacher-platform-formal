@@ -271,3 +271,10 @@ V009 是产品语义版本，不为每个实现 commit 升版；同一任务允�
 - 验证：隔离 PostgreSQL 17.10 下教学任务恢复与 runtime runner 20/20 通过（`/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/a05-task-sources.log`），新增用例覆盖来源版本变化后回执失效；后端 build、文件长度、治理与 diff 检查通过。
 - 提交：实现包 `ef12452550e6851be985d5bf7f8ea2073c1c101e`；日志校准另行提交。TASK-INVALIDATION（contextEpoch/旧租约与 DSH 会话）、反馈上下文准入和明确草稿保存命令仍未完成；真实 DSH、真实资料和 Windows 未验证。
 - 提交：实现包 `63d1f49c113c2e86b99c7d7898a64fbbccf1a2c4`，preview 依赖围栏修复 `1365665c3e73da3d0f5acd27010eed08d662273a`；本条日志校准另行提交。保留其他未提交工作区修改，不调用真实服务或外部写入。
+
+### TASK-INVALIDATION｜2026-09-16｜来源变化与 DSH 会话结果围栏
+
+- 实现：来源引用失效时，在同一事务内将 StepReceipt 标记为 `invalidated`，递增 TaskRuntime `contextEpoch`，清除 DSH session/checkpoint 并递增版本；旧租约无法继续写入。固定 DSH 宿主只在平台提供 resume 围栏时校验持久会话历史，已完成旧回合在缺少 resume 围栏时返回 `DSH_OUTCOME_UNKNOWN`；失败回合仍允许明确恢复，平台历史不匹配也 fail-closed。
+- 兼容：DSH session ID 继续由教师、任务和 `contextEpoch` 派生；旧空 `sourceRefs` 回执保持可读，未知或损坏引用拒绝复用。适配器探针同步覆盖完成回放、带 checkpoint 恢复、拒绝工具恢复和结果待核对路径。
+- 验证：隔离 PostgreSQL 17.10 下教学任务恢复与 runtime runner 20/20 通过；固定上游 DSH `c291e7961a515f6d7af9304e7fd1d257929aef26` 的 11 场景全部通过（`/Users/xiaosi/Developer/research/teacher-platform-dsh-runtime-20260915/.a02/adapter-2026-09-16T08-09-38.259Z/summary.json`）；后端 build、workspace lint、文件长度和 `git diff --check` 通过。完整根门禁沿用 P6-READABLE 的 `check-04.log`，本包新增改动尚未重新执行完整 `npm run check`。
+- 边界：仅合成数据与 mock adapter；未调用真实 DSH/模型、教师资料、渠道或外部服务。真实 Windows、真实供应商结果与跨设备恢复仍未验证。下一项为反馈上下文准入，随后再处理明确草稿保存命令。

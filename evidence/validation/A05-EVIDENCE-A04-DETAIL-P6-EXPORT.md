@@ -41,6 +41,12 @@
 - 根门禁：本包提交后的 `npm run check`（`/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/check-04.log`）退出 0；治理 19 项、后端 320 文件/2775 项、前端 47 文件/294 项、管理端 13 文件/84 项、运维 151 项中 149 通过且 2 项 Windows 专属跳过，长度、类型、lint、隔离 PostgreSQL 17 和全部构建通过。真实 Windows、真实媒体存储、真实教师资料、模型/渠道与发布未验证。P6-EXPORT 的 stored_encoding 与本包 readable 表示严格区分。
 - 追加修复：preview 原型隔离测试发现设置页直接引用 `/api/` 路径，已将隐私 API 适配层移到 preview 外部（`1365665c3e73da3d0f5acd27010eed08d662273a`）；前端隔离/隐私/设置 24/24 与构建通过。
 
+## TASK-INVALIDATION
+
+- 来源版本变化现在会在事务内使 StepReceipt 失效，同时递增 TaskRuntime `contextEpoch`、清除 DSH session/checkpoint 并递增任务版本；旧租约和旧上下文不能继续写入。固定 DSH 宿主要求平台 resume 围栏与历史匹配；缺少围栏的已完成旧回合返回 `DSH_OUTCOME_UNKNOWN`，失败回合可明确恢复。
+- 隔离 PostgreSQL 17.10 聚焦验证：教学任务恢复 + runtime runner 20/20，证据 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/a05-task-invalidation-focused.log`。固定上游提交 `c291e7961a515f6d7af9304e7fd1d257929aef26` 的 DSH 适配器 11/11 场景通过，证据 `/Users/xiaosi/Developer/research/teacher-platform-dsh-runtime-20260915/.a02/adapter-2026-09-16T08-09-38.259Z/summary.json`。后端 build、workspace lint、文件长度与差异检查通过。
+- 本包仍只使用 synthetic/mock 数据；未执行真实供应商、真实教师资料、Windows 或跨设备验收。P6-READABLE 的 `check-04.log` 是本包之前的根门禁，本包新增改动尚未重跑完整入口。
+
 ## A05-TASK-SOURCES 专项
 
 - 教学查询工具按工具名映射来源模型，结果中只采集带版本标记的服务端对象；StepReceipt 保存 `sourceRefs`，DTO 原样返回引用。完成步骤前、成功回执同执行重放前均在事务内按教师和 `updatedAtTs` 重查，来源删除/版本变化会写入 `invalidated` 并拒绝复用。
