@@ -278,3 +278,9 @@ V009 是产品语义版本，不为每个实现 commit 升版；同一任务允�
 - 兼容：DSH session ID 继续由教师、任务和 `contextEpoch` 派生；旧空 `sourceRefs` 回执保持可读，未知或损坏引用拒绝复用。适配器探针同步覆盖完成回放、带 checkpoint 恢复、拒绝工具恢复和结果待核对路径。
 - 验证：隔离 PostgreSQL 17.10 下教学任务恢复与 runtime runner 20/20 通过；固定上游 DSH `c291e7961a515f6d7af9304e7fd1d257929aef26` 的 11 场景全部通过（`/Users/xiaosi/Developer/research/teacher-platform-dsh-runtime-20260915/.a02/adapter-2026-09-16T08-09-38.259Z/summary.json`）；后端 build、workspace lint、文件长度和 `git diff --check` 通过。完整根门禁沿用 P6-READABLE 的 `check-04.log`，本包新增改动尚未重新执行完整 `npm run check`。
 - 边界：仅合成数据与 mock adapter；未调用真实 DSH/模型、教师资料、渠道或外部服务。真实 Windows、真实供应商结果与跨设备恢复仍未验证。下一项为反馈上下文准入，随后再处理明确草稿保存命令。
+
+### A05-FEEDBACK-CONTEXT｜2026-09-16｜教学反馈只读上下文准入
+
+- 实现：教学 registry 新增 `feedback.list` 只读工具，固定使用认证教师范围，支持状态和分页过滤；`feedback.create`、`feedback.updateStatus` 等写工具不注册到教学运行时，仍由平台确认或明确保存命令承载。反馈列表返回的 `updatedAt` 进入 `ParentFeedback` 来源引用并沿用来源版本重查围栏。
+- 验证：隔离 PostgreSQL 17.10 下反馈上下文、教学任务恢复与 runtime runner 共 24/24 通过（`/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/a05-feedback-context-integration.log`）；后端 lint/build、文件长度和 `git diff --check` 通过。测试明确覆盖租户过滤、状态/分页透传、来源版本提取及写工具拒绝。
+- 边界：只读上下文接入不等于反馈草稿自动保存；未调用真实模型、教师资料、渠道或外部服务，真实 Windows/跨设备未验证。下一项为明确草稿保存命令，需继续保持证据版本与显式教师动作。

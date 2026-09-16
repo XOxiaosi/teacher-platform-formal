@@ -47,6 +47,12 @@
 - 隔离 PostgreSQL 17.10 聚焦验证：教学任务恢复 + runtime runner 20/20，证据 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/a05-task-invalidation-focused.log`。固定上游提交 `c291e7961a515f6d7af9304e7fd1d257929aef26` 的 DSH 适配器 11/11 场景通过，证据 `/Users/xiaosi/Developer/research/teacher-platform-dsh-runtime-20260915/.a02/adapter-2026-09-16T08-09-38.259Z/summary.json`。后端 build、workspace lint、文件长度与差异检查通过。
 - 本包仍只使用 synthetic/mock 数据；未执行真实供应商、真实教师资料、Windows 或跨设备验收。P6-READABLE 的 `check-04.log` 是本包之前的根门禁，本包新增改动尚未重跑完整入口。
 
+## A05-FEEDBACK-CONTEXT
+
+- 教学 registry 仅接入 `feedback.list` 只读工具，查询固定绑定认证教师并支持状态/分页；`feedback.create` 与 `feedback.updateStatus` 不进入教学 runtime。反馈列表的更新时间被映射为 `ParentFeedback` 来源引用，继续接受来源版本重查。
+- 隔离 PostgreSQL 17.10 联动测试 24/24 通过（`/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/a05-feedback-context-integration.log`），含上下文准入 4 项、任务恢复 3 项、runtime runner 17 项；后端 lint/build、文件大小与 diff 检查通过。
+- 该包只证明只读上下文准入，不证明自动保存或真实反馈发送；真实模型、教师资料、Windows、跨设备和渠道仍未验证。
+
 ## A05-TASK-SOURCES 专项
 
 - 教学查询工具按工具名映射来源模型，结果中只采集带版本标记的服务端对象；StepReceipt 保存 `sourceRefs`，DTO 原样返回引用。完成步骤前、成功回执同执行重放前均在事务内按教师和 `updatedAtTs` 重查，来源删除/版本变化会写入 `invalidated` 并拒绝复用。
