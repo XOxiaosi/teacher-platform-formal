@@ -28,6 +28,7 @@
  */
 
 import { createReadStream, createWriteStream } from 'node:fs';
+import { once } from 'node:events';
 import { mkdir } from 'node:fs/promises';
 import { dirname, isAbsolute, resolve, sep } from 'node:path';
 import { pipeline } from 'node:stream/promises';
@@ -138,10 +139,11 @@ function writeChunk(ws, buf) {
  * @param {string} options.outputPath 输出 .zip 路径（父目录自动创建）
  * @param {Array<{name:string, data?:Buffer|string, sourcePath?:string}>} options.entries
  *   条目（data 与 sourcePath 二选一；sourcePath 流式读，支持大媒体文件）
+ * @param {boolean} [options.exclusive=false] Reject an existing archive instead of overwriting it.
  * @param {Date} [options.now] DOS 时间戳（测试注入固定时间可复现；缺省当前时间）
  * @returns {Promise<{entryCount:number, sizeBytes:number}>} 条目数与产物字节数
  */
-export async function createStoreOnlyZip({ outputPath, entries, now }) {
+export async function createStoreOnlyZip({ outputPath, entries, now, exclusive = false }) {
   if (!outputPath || typeof outputPath !== 'string') {
     throw new Error('SAFETY_BLOCK: zip outputPath required');
   }
@@ -152,7 +154,8 @@ export async function createStoreOnlyZip({ outputPath, entries, now }) {
 
   const { time, date } = dosDateTime(now);
   const central = []; // { nameBuf, crc, size, offset }
-  const ws = createWriteStream(outputPath);
+  const ws = createWriteStream(outputPath, { flags: exclusive ? 'wx' : 'w', mode: 0o600 });
+  await once(ws, 'open');
   // 同一 ws 上串行执行多次 write/pipeline/end（每条目 write + 每文件 pipeline）——
   // 每次调用都会注册 listener，Node 默认 10 上限会警告；这里是预期用法，放开上限。
   ws.setMaxListeners(0);

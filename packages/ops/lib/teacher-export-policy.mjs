@@ -1,0 +1,238 @@
+/** P6-EXPORT explicit model and field classification. Never infer new fields.
+ * Business values retain their stored encoding; credentials are never exported. */
+import { Prisma } from '@prisma/client';
+
+export const EXPORT_POLICY = {
+  TeacherRegistry: { source: 'account',
+    fields: ["id","email","displayName","status","databaseName","createdAtTs","updatedAtTs"],
+    exclude: ["passwordHash"], relations: ["sessions","requirements","providerConfigs","providerUsages","channelIdentities"],
+  },
+  TeacherInvitation: { source: 'excluded',
+    fields: [],
+    exclude: ["id","tokenHash","email","status","expiresAtTs","acceptedAtTs","revokedAtTs","createdAtTs","updatedAtTs"], relations: [],
+  },
+  SessionStore: { source: 'excluded',
+    fields: [],
+    exclude: ["id","tokenHash","teacherId","expiresAtTs","createdAtTs","updatedAtTs"], relations: ["teacher"],
+  },
+  UserRequirement: { source: 'shared_db',
+    fields: ["id","teacherId","verbatimQuote","sourceType","sourceDbName","sourceTurnId","contextSummary","occurredAtTs","parsedIntent","category","priority","status","linkedDesignDoc","linkedTaskId","linkedCommitSha","moderationFlagged","moderationReasons","createdAtTs","updatedAtTs"],
+    exclude: [], relations: ["teacher"],
+  },
+  ProviderConfig: { source: 'shared_db',
+    fields: ["id","teacherId","providerKind","providerName","displayName","baseUrl","model","isPrimary","status","createdAtTs","updatedAtTs"],
+    exclude: ["apiKeyEnc"], relations: ["teacher"],
+  },
+  ProviderUsage: { source: 'shared_db',
+    fields: ["id","teacherId","providerConfigId","providerName","model","promptTokens","completionTokens","estimatedCostUsd","conversationId","requestAt","createdAtTs"],
+    exclude: [], relations: ["teacher"],
+  },
+  ChannelIdentity: { source: 'shared_db',
+    fields: ["id","teacherId","platform","externalUserId","providerChannelId","createdAtTs","updatedAtTs"],
+    exclude: [], relations: ["teacher"],
+  },
+  ChannelMessage: { source: 'shared_db',
+    fields: ["id","teacherId","channel","externalMessageId","fromExternalUserId","toExternalUserId","direction","contentType","contentText","status","errorMsg","processedAtTs","createdAtTs"],
+    exclude: [], relations: [],
+  },
+  ChannelConversation: { source: 'shared_db',
+    fields: ["id","teacherId","channel","externalConversationId","conversationId","status","lastMessageAtTs","createdAtTs","updatedAtTs"],
+    exclude: [], relations: [],
+  },
+  AdminAccount: { source: 'excluded',
+    fields: [],
+    exclude: ["id","email","passwordHash","status","createdAtTs","updatedAtTs"], relations: [],
+  },
+  AdminAuditLog: { source: 'excluded',
+    fields: [],
+    exclude: ["id","actorEmail","action","objectType","objectId","detail","ip","createdAtTs"], relations: [],
+  },
+  AINote: { source: 'teacher_db',
+    fields: ["id","teacherId","inputType","rawInput","audioFileRef","intent","extractedData","confidence","pendingFields","routedTo","routedModuleId","status","createdAtTs","updatedAtTs"],
+    exclude: [], relations: [],
+  },
+  CaptureEvent: { source: 'teacher_db',
+    fields: ["id","teacherId","clientRequestId","sourceType","sourceChannel","rawText","occurredAtTs","createdAtTs","redactedAtTs"],
+    exclude: [], relations: ["tasks","candidates","deletionReceipt"],
+  },
+  CaptureTask: { source: 'teacher_db',
+    fields: ["id","teacherId","eventId","taskType","processorVersion","status","attemptCount","retryable","lastErrorCode","startedAtTs","completedAtTs","createdAtTs","updatedAtTs"],
+    exclude: [], relations: ["event","candidates"],
+  },
+  CaptureCandidate: { source: 'teacher_db',
+    fields: ["id","teacherId","eventId","taskId","candidateType","payload","originalPayload","position","revision","reviewStatus","confidence","candidateVersion","confirmationRequestId","confirmationRevision","confirmedRecordId","confirmedAtTs","createdAtTs","updatedAtTs","redactedAtTs"],
+    exclude: [], relations: ["event","task"],
+  },
+  CaptureDeletionReceipt: { source: 'teacher_db',
+    fields: ["id","teacherId","eventId","clientRequestId","status","attemptCount","retryable","lastErrorCode","claimExpiresAtTs","createdAtTs","updatedAtTs","completedAtTs"],
+    exclude: ["claimToken"], relations: ["event"],
+  },
+  Conversation: { source: 'teacher_db',
+    fields: ["id","teacherId","status","summary","runtimeOwner","nextEventSeq","createdAtTs","updatedAtTs"],
+    exclude: [], relations: ["turns","pendingActions","executions","tasks"],
+  },
+  ConversationTurn: { source: 'teacher_db',
+    fields: ["id","conversationId","teacherId","role","content","toolCalls","toolResults","audioFileRef","taskId","executionId","seq","eventKey","eventKind","invalidatedAtTs","redactedAtTs","createdAtTs"],
+    exclude: [], relations: ["conversation"],
+  },
+  AgentExecution: { source: 'teacher_db',
+    fields: ["id","teacherId","conversationId","taskId","clientRequestId","requestFingerprint","userTurnId","status","stage","reply","error","completedToolCallIds","startedAtTs","finishedAtTs","createdAtTs","updatedAtTs"],
+    exclude: [], relations: ["conversation","task","steps"],
+  },
+  PendingAction: { source: 'teacher_db',
+    fields: ["id","teacherId","conversationId","toolCallId","actionName","targetType","targetId","parameters","beforeSummary","afterSummary","status","expiresAtTs","consumedAtTs","cancelledAtTs","createdAtTs","updatedAtTs"],
+    exclude: [], relations: ["conversation"],
+  },
+  Payment: { source: 'teacher_db',
+    fields: ["id","teacherId","studentId","amount","lessonCount","clientRequestId","paidAtTs","note","createdAtTs","updatedAtTs"],
+    exclude: [], relations: ["student","lessonLedgerEntries"],
+  },
+  LessonLedgerEntry: { source: 'teacher_db',
+    fields: ["id","teacherId","studentId","entryType","lessonDelta","amount","reasonCiphertext","paymentId","lessonId","adjustmentConfirmationId","clientRequestId","createdAtTs"],
+    exclude: [], relations: ["student","payment","lesson","adjustmentConfirmation","completionSnapshot"],
+  },
+  LessonLedgerAdjustmentConfirmation: { source: 'teacher_db',
+    fields: ["id","teacherId","studentId","entryType","lessonDelta","reasonCiphertext","clientRequestId","status","confirmedAtTs","createdAtTs","updatedAtTs"],
+    exclude: [], relations: ["student","ledgerEntry"],
+  },
+  DailyReview: { source: 'teacher_db',
+    fields: ["id","teacherId","dateTs","plannedCount","actualCount","cancelledCount","missedCount","rescheduledCount","pendingCount","deviations","corrections","tomorrowSuggestion","createdAtTs","updatedAtTs"],
+    exclude: [], relations: [],
+  },
+  PushRecord: { source: 'teacher_db',
+    fields: ["id","teacherId","type","scheduledAtTs","sentAtTs","channel","content","status","errorMsg","createdAtTs","updatedAtTs"],
+    exclude: [], relations: [],
+  },
+  ChangeLog: { source: 'teacher_db',
+    fields: ["id","teacherId","timestampTs","module","action","targetType","targetId","before","after","diff","source","operatorId","createdAtTs"],
+    exclude: [], relations: [],
+  },
+  Memo: { source: 'teacher_db',
+    fields: ["id","teacherId","title","content","status","dueAtTs","tags","source","createdAtTs","updatedAtTs"],
+    exclude: [], relations: [],
+  },
+  MediaAsset: { source: 'teacher_db',
+    fields: ["id","teacherId","mediaType","sourceEntityType","sourceEntityId","sha256","duplicateOf","mimeType","sizeBytes","privacyLevel","scanStatus","transcriptionStatus","transcriptionText","transcriptionConfidence","transcriptionJobId","ocrStatus","ocrText","ocrConfidence","ocrLayoutBlocks","ocrJobId","scanJobId","scanThreatName","encryptionVersion","orphanStatus","orphanMarkedAtTs","originalPath","createdAtTs"],
+    exclude: [], relations: [],
+  },
+  ParentFeedback: { source: 'teacher_db',
+    fields: ["id","teacherId","studentId","lessonId","title","content","status","channel","parentName","sentAtTs","moderationFlagged","moderationReasons","createdAtTs","updatedAtTs"],
+    exclude: [], relations: ["student","lesson","contextSnapshot"],
+  },
+  StudentSourceRecord: { source: 'teacher_db',
+    fields: ["id","teacherId","studentId","sourceType","sourceEntityType","sourceEntityId","occurredAtTs","rawText","contentHash","captureStatus","createdAtTs","updatedAtTs"],
+    exclude: [], relations: ["student","records"],
+  },
+  StudentRecord: { source: 'teacher_db',
+    fields: ["id","teacherId","studentId","sourceRecordId","category","occurredAtTs","summary","structuredData","confidence","reviewStatus","visibility","importance","supersedesId","createdAtTs","updatedAtTs"],
+    exclude: [], relations: ["student","sourceRecord","supersedes","supersededBy","assessment","communicationDetail"],
+  },
+  AssessmentDetail: { source: 'teacher_db',
+    fields: ["id","teacherId","studentRecordId","examName","subject","examDateTs","score","fullScore","classRank","gradeRank","percentile","previousScore","note","createdAtTs","updatedAtTs"],
+    exclude: [], relations: ["studentRecord"],
+  },
+  CommunicationDetail: { source: 'teacher_db',
+    fields: ["id","teacherId","studentRecordId","direction","channel","parentType","parentConcerns","teacherResponses","agreements","followUps","nextContactAtTs","moderationFlagged","moderationReasons","createdAtTs","updatedAtTs"],
+    exclude: [], relations: ["studentRecord"],
+  },
+  FeedbackContextSnapshot: { source: 'teacher_db',
+    fields: ["id","teacherId","feedbackId","windowStartTs","windowEndTs","assembledAtTs","createdAtTs","updatedAtTs"],
+    exclude: [], relations: ["feedback","evidence"],
+  },
+  FeedbackEvidence: { source: 'teacher_db',
+    fields: ["id","teacherId","snapshotId","recordId","type","occurredAtTs","category","summary","examName","subject","score","fullScore","previousScore","parentConcerns","followUps","mediaAssetId","sortOrder","createdAtTs"],
+    exclude: [], relations: ["snapshot"],
+  },
+  TaskRuntime: { source: 'teacher_db',
+    fields: ["id","teacherId","conversationId","originExecutionId","currentExecutionId","status","title","runtimeVersion","dshSessionRef","dshCheckpoint","contextEpoch","version","leaseEpoch","leaseExpiresAtTs","attemptCount","lastError","resumeFromVersion","resumeExecutionId","createdAtTs","updatedAtTs"],
+    exclude: ["leaseToken"], relations: ["conversation","executions","steps"],
+  },
+  StepReceipt: { source: 'teacher_db',
+    fields: ["id","teacherId","taskId","executionId","stepKey","kind","inputFingerprint","status","attemptCount","leaseEpoch","pendingActionId","resultRef","sourceRefs","error","createdAtTs","updatedAtTs"],
+    exclude: [], relations: ["task","execution"],
+  },
+  Student: { source: 'teacher_db',
+    fields: ["id","teacherId","name","grade","source","currentStatus","stageGoal","createdAtTs","updatedAtTs"],
+    exclude: [], relations: ["schedules","scheduleParticipants","recurrenceRuleParticipants","lessons","payments","lessonLedgerEntries","lessonLedgerAdjustmentConfirmations","completionSnapshots","parentFeedbacks","studentRecords","studentSourceRecords"],
+  },
+  Schedule: { source: 'teacher_db',
+    fields: ["id","teacherId","studentId","type","title","locationCiphertext","classFormat","operationalNoteCiphertext","clientRequestId","scheduledStartTs","scheduledEndTs","status","confidence","pendingFields","sourceInput","parentId","recurrenceRuleId","recurrenceDay","createdAtTs","updatedAtTs"],
+    exclude: [], relations: ["student","participants","lessons","parent","children","recurrenceRule","revisions","completionSnapshots"],
+  },
+  RecurrenceRule: { source: 'teacher_db',
+    fields: ["id","teacherId","clientRequestId","startDate","endDate","weekdays","enabled","startTime","endTime","locationCiphertext","classFormat","operationalNoteCiphertext","createdAtTs","updatedAtTs"],
+    exclude: [], relations: ["participants","schedules"],
+  },
+  RecurrenceRuleParticipant: { source: 'teacher_db',
+    fields: ["id","teacherId","recurrenceRuleId","studentId","createdAtTs"],
+    exclude: [], relations: ["recurrenceRule","student"],
+  },
+  ScheduleRevision: { source: 'teacher_db',
+    fields: ["id","teacherId","scheduleId","clientRequestId","beforeCiphertext","afterCiphertext","createdAtTs"],
+    exclude: [], relations: ["schedule"],
+  },
+  ScheduleCompletionSnapshot: { source: 'teacher_db',
+    fields: ["id","teacherId","scheduleId","studentId","lessonId","lessonLedgerEntryId","balanceBefore","balanceAfter","createdAtTs"],
+    exclude: [], relations: ["schedule","student","lesson","lessonLedgerEntry"],
+  },
+  TeacherWorkspacePreference: { source: 'teacher_db',
+    fields: ["teacherId","studioName","modelChoice","wechatChannel","updatedAtTs"],
+    exclude: [], relations: [],
+  },
+  WebMutationReceipt: { source: 'teacher_db',
+    fields: ["id","teacherId","clientRequestId","fingerprint","ciphertext","createdAtTs"],
+    exclude: [], relations: [],
+  },
+  SchedulingWebMutationReceipt: { source: 'teacher_db',
+    fields: ["id","teacherId","clientRequestId","fingerprint","createdAtTs"],
+    exclude: [], relations: [],
+  },
+  ScheduleParticipant: { source: 'teacher_db',
+    fields: ["id","teacherId","scheduleId","studentId","createdAtTs","updatedAtTs"],
+    exclude: [], relations: ["schedule","student"],
+  },
+  Lesson: { source: 'teacher_db',
+    fields: ["id","teacherId","studentId","scheduleId","dateTs","status","progress","studentState","homework","teacherNote","sourceNoteId","createdAtTs","updatedAtTs"],
+    exclude: [], relations: ["student","schedule","parentFeedbacks","lessonLedgerEntries","completionSnapshots"],
+  },
+};
+
+export const TEACHER_DB_TABLES = Object.keys(EXPORT_POLICY).filter(name => EXPORT_POLICY[name].source === 'teacher_db');
+export const SHARED_DB_TABLES = Object.keys(EXPORT_POLICY).filter(name => EXPORT_POLICY[name].source === 'shared_db');
+export const BUSINESS_TABLES = [...TEACHER_DB_TABLES, ...SHARED_DB_TABLES];
+const SOURCES = new Set(['teacher_db', 'shared_db', 'account', 'excluded']);
+const SECRETS = new Set(['passwordHash', 'tokenHash', 'apiKeyEnc', 'leaseToken', 'claimToken']);
+
+/** Fail before any DB export/output when a new model or field is unclassified. */
+export function validateExportPolicy(models = Prisma.dmmf.datamodel.models, policy = EXPORT_POLICY) {
+  const actual = new Set(models.map(model => model.name));
+  if (actual.size !== models.length || Object.keys(policy).length !== actual.size) throw new Error('SAFETY_BLOCK: export model classification mismatch');
+  for (const model of models) {
+    const entry = policy[model.name];
+    if (!entry || !SOURCES.has(entry.source)) throw new Error('SAFETY_BLOCK: unclassified export model');
+    const classified = [...entry.fields, ...entry.exclude, ...entry.relations];
+    const names = new Set(classified);
+    if (names.size !== classified.length || names.size !== model.fields.length || model.fields.some(field => !names.has(field.name))) {
+      throw new Error('SAFETY_BLOCK: unclassified or duplicate export field');
+    }
+    if (entry.fields.some(field => SECRETS.has(field))) throw new Error('SAFETY_BLOCK: credential field cannot be exported');
+    if (entry.source === 'excluded' && entry.fields.length) throw new Error('SAFETY_BLOCK: excluded model contains export fields');
+    if (entry.source === 'account' && model.name !== 'TeacherRegistry') throw new Error('SAFETY_BLOCK: invalid account model');
+    for (const field of model.fields) {
+      if ((field.kind === 'object') !== entry.relations.includes(field.name)) throw new Error('SAFETY_BLOCK: export relation classification mismatch');
+    }
+    if (['teacher_db', 'shared_db'].includes(entry.source) && !entry.fields.includes('teacherId')) throw new Error('SAFETY_BLOCK: export model has no tenant filter');
+  }
+  return true;
+}
+
+export function assertExportTeacherId(value) {
+  if (typeof value !== 'string' || !/^[A-Za-z0-9_-]+$/.test(value)) throw new Error('SAFETY_BLOCK: explicit teacher identity is required');
+  return value;
+}
+export function exportModelPolicy(name) {
+  validateExportPolicy();
+  const entry = Object.hasOwn(EXPORT_POLICY, name) ? EXPORT_POLICY[name] : undefined;
+  if (!entry || !['teacher_db', 'shared_db'].includes(entry.source)) throw new Error('SAFETY_BLOCK: model is not approved for teacher export');
+  return entry;
+}

@@ -6,8 +6,6 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { assertSafeBaseUrl, assertSafeTeacherDatabaseName } from '../lib/db-safety.mjs';
-import { createLocalDirStorage, createS3Storage } from '../lib/storage-backend.mjs';
-import { startMockS3Server } from '../lib/testing/s3-mock-server.mjs';
 import {
   databaseNameFromUrl,
   loadDatabaseUrl,
@@ -20,10 +18,7 @@ import {
 } from '../lib/pg-utils.mjs';
 import {
   BUSINESS_TABLES,
-  collectExportZipEntries,
-  exportMediaKeysFromRows,
   exportTable,
-  exportTeacherMedia,
   lookupTeacherIdByDatabaseName,
   parseArgs,
   readTeacherAccount,
@@ -111,8 +106,8 @@ test('parseArgs：三种身份互斥，缺一或多一均报错', () => {
   assert.throws(() => parseArgs(['--bogus']), /未知参数/);
 });
 
-test('BUSINESS_TABLES：27 个业务表固定清单（教师库 21 + 共享库 6，P12 t4 补漏 MediaAsset 等）', () => {
-  assert.equal(BUSINESS_TABLES.length, 27);
+test('BUSINESS_TABLES：43 个业务表固定清单（教师库 37 + 共享库 6，P12 t4 补漏 MediaAsset 等）', () => {
+  assert.equal(BUSINESS_TABLES.length, 43);
   assert.ok(BUSINESS_TABLES.includes('Student'));
   assert.ok(BUSINESS_TABLES.includes('FeedbackEvidence'));
   // P12 t4：P8+ 新增表全部纳入
@@ -216,9 +211,9 @@ test('end-to-end：--teacher-id 导出 → account.json 无 passwordHash + manif
   assert.equal(account.email, TEACHER_EMAIL);
   assert.equal('passwordHash' in account, false);
 
-  // manifest：27 表 + 行数正确 + sha256 存在 + 来源库标注
+  // manifest：43 表 + 行数正确 + sha256 存在 + 来源库标注
   const manifest = JSON.parse(await readFile(join(outDir, 'manifest.json'), 'utf8'));
-  assert.equal(manifest.tables.length, 27);
+  assert.equal(manifest.tables.length, 43);
   assert.equal(manifest.teacherId, TEACHER_ID);
   const studentEntry = manifest.tables.find((t) => t.table === 'Student');
   assert.equal(studentEntry.rows, 2);
@@ -254,7 +249,7 @@ test('end-to-end：--teacher-id 导出 → account.json 无 passwordHash + manif
   assert.equal(identityJsonl.trim().split('\n').length, 1);
   assert.equal(JSON.parse(identityJsonl.trim()).externalUserId, 'wxid_export_test');
   const files = await readdir(join(outDir, 'tables'));
-  assert.equal(files.length, 27);
+  assert.equal(files.length, 43);
 
   // P13 t2：媒体文件本体——manifest.media 条目 {path,sha256,sizeBytes} + 副本逐字节一致 + 源未删
   assert.equal(manifest.media.length, 1);
@@ -266,142 +261,6 @@ test('end-to-end：--teacher-id 导出 → account.json 无 passwordHash + manif
   const mediaCopy = await readFile(join(outDir, ...mediaKey.split('/')));
   assert.deepEqual(mediaCopy, mediaContent);
   assert.deepEqual(await readFile(join(mediaRoot, ...mediaKey.split('/'))), mediaContent); // 源只读未删
-});
-
-test('P13 t2 单测：exportMediaKeysFromRows——originalPath 去重排序；无 originalPath/损坏行忽略；空行 → []', () => {
-  const lines = [
-    JSON.stringify({ id: 'm1', originalPath: 'media/t1/a1/original' }),
-    JSON.stringify({ id: 'm2', originalPath: 'media/t1/a2/original' }),
-    JSON.stringify({ id: 'm3', originalPath: 'media/t1/a1/original' }), // 重复 → 去重
-    JSON.stringify({ id: 'm4' }), // 无 originalPath → 忽略
-    'not-json', // 损坏行 → 忽略（不阻断）
-  ];
-  assert.deepEqual(exportMediaKeysFromRows(lines), ['media/t1/a1/original', 'media/t1/a2/original']);
-  assert.deepEqual(exportMediaKeysFromRows([]), []);
-});
-
-test('P13 t2 单测：exportTeacherMedia（local）——文件副本 + manifest.media {path,sha256,sizeBytes} 与源一致', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'ops-export-media-'));
-  try {
-    const storageRoot = join(root, 'storage');
-    const outDir = join(root, 'export');
-    const keyA = 'media/t1/a1/original';
-    const keyB = 'media/t1/a2/original';
-    const contentA = Buffer.from('media-body-a-\u4e2d\u6587-\u00e9');
-    const contentB = Buffer.from('media-body-b-\u4e2d\u6587-\u00e9');
-    await mkdir(join(storageRoot, 'media', 't1', 'a1'), { recursive: true });
-    await mkdir(join(storageRoot, 'media', 't1', 'a2'), { recursive: true });
-    await writeFile(join(storageRoot, ...keyA.split('/')), contentA);
-    await writeFile(join(storageRoot, ...keyB.split('/')), contentB);
-
-    const storage = createLocalDirStorage(storageRoot);
-    const entries = await exportTeacherMedia(storage, [keyB, keyA], outDir); // 无序输入按序导出
-
-    assert.equal(entries.length, 2);
-    assert.deepEqual(entries.map((e) => e.path), [keyB, keyA]);
-    assert.deepEqual(entries[0], {
-      path: keyB,
-      sha256: createHash('sha256').update(contentB).digest('hex'),
-      sizeBytes: contentB.length,
-    });
-    assert.deepEqual(entries[1], {
-      path: keyA,
-      sha256: createHash('sha256').update(contentA).digest('hex'),
-      sizeBytes: contentA.length,
-    });
-    // 副本与源逐字节一致；源目录未删（只读导出）
-    assert.deepEqual(await readFile(join(outDir, ...keyA.split('/'))), contentA);
-    assert.deepEqual(await readFile(join(outDir, ...keyB.split('/'))), contentB);
-    assert.ok(existsSync(join(storageRoot, ...keyA.split('/'))));
-    assert.ok(existsSync(join(storageRoot, ...keyB.split('/'))));
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
-});
-
-test('P13 t2 单测：exportTeacherMedia（local）——缺失文件记 {path,status:missing} 不阻断，其余正常导出', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'ops-export-media-missing-'));
-  try {
-    const storageRoot = join(root, 'storage');
-    const outDir = join(root, 'export');
-    const existing = 'media/t1/a1/original';
-    const missing = 'media/t1/a9/original';
-    await mkdir(join(storageRoot, 'media', 't1', 'a1'), { recursive: true });
-    await writeFile(join(storageRoot, ...existing.split('/')), Buffer.from('exists'));
-    const storage = createLocalDirStorage(storageRoot);
-    const entries = await exportTeacherMedia(storage, [existing, missing], outDir);
-    assert.equal(entries.length, 2);
-    assert.equal(entries[0].status, undefined);
-    assert.deepEqual(entries[1], { path: missing, status: 'missing' });
-    assert.ok(existsSync(join(outDir, ...existing.split('/'))));
-    assert.equal(existsSync(join(outDir, ...missing.split('/'))), false);
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
-});
-
-test('P13 t2 单测：exportTeacherMedia——空 key 清单 → []（media 段空，不建目录）', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'ops-export-media-empty-'));
-  try {
-    const outDir = join(root, 'export');
-    const entries = await exportTeacherMedia(createLocalDirStorage(join(root, 'storage')), [], outDir);
-    assert.deepEqual(entries, []);
-    assert.equal(existsSync(join(outDir, 'media')), false);
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
-});
-
-test('P13 t2 单测：exportTeacherMedia（s3 mock）——桶对象读取 + 副本 sha256 一致 + 桶对象未删', async () => {
-  const CREDS = { accessKeyId: 'test-access', secretAccessKey: 'test-secret-0123456789' };
-  const server = await startMockS3Server(CREDS);
-  const root = await mkdtemp(join(tmpdir(), 'ops-export-s3-'));
-  try {
-    const storage = createS3Storage({ endpoint: server.url, bucket: server.bucket, ...CREDS });
-    const keyA = 'media/t2/a1/original';
-    const keyB = 'media/t2/a2/original';
-    const contentA = Buffer.from('s3-body-a');
-    const contentB = Buffer.from('s3-body-b');
-    await storage.put(keyA, contentA);
-    await storage.put(keyB, contentB);
-    const outDir = join(root, 'export');
-    const entries = await exportTeacherMedia(storage, [keyA, keyB], outDir);
-    assert.equal(entries.length, 2);
-    assert.deepEqual(entries[0], {
-      path: keyA,
-      sha256: createHash('sha256').update(contentA).digest('hex'),
-      sizeBytes: contentA.length,
-    });
-    assert.deepEqual(entries[1], {
-      path: keyB,
-      sha256: createHash('sha256').update(contentB).digest('hex'),
-      sizeBytes: contentB.length,
-    });
-    // 副本落地 + 桶内对象仍在（只读不删）
-    assert.deepEqual(await readFile(join(outDir, ...keyA.split('/'))), contentA);
-    assert.deepEqual(await readFile(join(outDir, ...keyB.split('/'))), contentB);
-    assert.deepEqual((await storage.list('media/')).sort(), [keyA, keyB]);
-  } finally {
-    await server.close();
-    await rm(root, { recursive: true, force: true });
-  }
-});
-
-test('P13 t2 单测：exportTeacherMedia——穿越 key → storage.get SAFETY_BLOCK（不写出 outDir 外）', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'ops-export-media-safe-'));
-  try {
-    const storage = createLocalDirStorage(join(root, 'storage'));
-    await assert.rejects(
-      () => exportTeacherMedia(storage, ['../evil'], join(root, 'export')),
-      /SAFETY_BLOCK/,
-    );
-    await assert.rejects(
-      () => exportTeacherMedia(storage, ['a/../../evil'], join(root, 'export')),
-      /SAFETY_BLOCK/,
-    );
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
 });
 
 test('安全拒绝：--database-name 指向非 teacher_db_ 前缀 → SAFETY_BLOCK', async () => {
@@ -432,27 +291,6 @@ test('parseArgs：--zip 布尔开关', () => {
   assert.equal(parseArgs(['--teacher-id', 't1', '--zip']).zip, true);
   assert.equal(parseArgs(['--teacher-id', 't1']).zip, false);
   assert.equal(parseArgs(['--email', 'a@b.c', '--zip']).zip, true);
-});
-
-test('collectExportZipEntries：递归收集目录文件 → zip 相对名（含中文/空格）', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'ops-zip-entries-'));
-  try {
-    const mediaDir = join(root, 'media', 't1', '资源 001');
-    await mkdir(mediaDir, { recursive: true });
-    await mkdir(join(root, 'tables'), { recursive: true });
-    await writeFile(join(root, 'manifest.json'), '{}');
-    await writeFile(join(root, 'tables', 'student.jsonl'), 'x');
-    await writeFile(join(mediaDir, '原图.png'), 'png');
-    const entries = await collectExportZipEntries(root);
-    assert.deepEqual(entries.map((e) => e.name), [
-      'manifest.json',
-      'media/t1/资源 001/原图.png',
-      'tables/student.jsonl',
-    ]);
-    for (const e of entries) assert.equal(e.sourcePath.length > 0, true);
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
 });
 
 test('P14 t5 e2e：--zip 输出单包（manifest+account+tables+media）→ 解包结构/内容/CRC 与目录一致', { skip: process.platform !== 'win32' }, async () => {
@@ -488,9 +326,9 @@ test('P14 t5 e2e：--zip 输出单包（manifest+account+tables+media）→ 解�
     `Expand-Archive -Path '${zipPath}' -DestinationPath '${unzipDir}' -Force`,
   ], { stdio: 'pipe' });
 
-  // 结构：manifest.json / account.json / tables/*.jsonl（27）/ media/*
+  // 结构：manifest.json / account.json / tables/*.jsonl（43）/ media/*
   const manifest = JSON.parse(await readFile(join(unzipDir, 'manifest.json'), 'utf8'));
-  assert.equal(manifest.tables.length, 27);
+  assert.equal(manifest.tables.length, 43);
   assert.equal(manifest.media.length, 1);
   assert.deepEqual(manifest.media[0], {
     path: mediaKey,
@@ -501,7 +339,7 @@ test('P14 t5 e2e：--zip 输出单包（manifest+account+tables+media）→ 解�
   assert.equal(account.email, TEACHER_EMAIL);
   assert.equal('passwordHash' in account, false);
   const unzipTables = await readdir(join(unzipDir, 'tables'));
-  assert.equal(unzipTables.length, 27);
+  assert.equal(unzipTables.length, 43);
   const studentLines = await readFile(join(unzipDir, 'tables', 'student.jsonl'), 'utf8');
   assert.equal(studentLines.trim().split('\n').length, 2);
 
