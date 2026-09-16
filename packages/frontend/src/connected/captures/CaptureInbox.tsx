@@ -3,6 +3,7 @@ import { getCapture, listCaptures, type CaptureRecord } from '../../api/captures
 import { CandidateCard, type CaptureStudent } from './CandidateCard';
 import { retainOnlyTeacherCaptureDrafts } from './drafts';
 import './captures.css';
+import { formatDateTime } from '../../shared/date-format';
 
 interface Props { teacherId: string; students: CaptureStudent[]; onRecordsChanged?: () => Promise<void> }
 function AccountCaptureInbox({ teacherId, students, onRecordsChanged }: Props) {
@@ -55,7 +56,7 @@ function AccountCaptureInbox({ teacherId, students, onRecordsChanged }: Props) {
       const candidates = item.candidates ?? [item.candidate];
       const pending = candidates.filter((v) => v.reviewStatus === 'pending' || v.reviewStatus === 'deferred').length;
       return <button key={item.id} className="capture-list-item" disabled={busy} aria-current={selected?.id === item.id ? 'true' : undefined} onClick={() => void open(item.id)}><span>{item.rawText.slice(0, 70)}</span><small>{pending ? `${pending} 项待核对` : '核对已处理'} · {candidates.length} 项</small></button>;
-    })}</nav>{selected && <section aria-label="材料详情"><h2>核对材料</h2><p>提交时间：{new Date(selected.createdAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}（北京时间）</p><h3>原始内容</h3><p className="capture-raw">{selected.rawText}</p>
+      })}</nav>{selected && <section aria-label="材料详情"><h2>核对材料</h2><p>提交时间：{formatDateTime(selected.createdAt)}（北京时间）</p><h3>原始内容</h3><p className="capture-raw">{selected.rawText}</p>
       {(selected.candidates ?? [selected.candidate]).map((item) => <CandidateCard key={`${selected.id}:${item.id}`} teacherId={teacherId} item={item} captureId={selected.id} students={students} onChange={refreshAfterChange} />)}
     </section>}</div>
   </section>;

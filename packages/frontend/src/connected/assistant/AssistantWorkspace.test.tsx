@@ -22,6 +22,14 @@ beforeEach(() => {
 });
 
 describe('A03 server-backed assistant conversations', () => {
+  it('uses the shared Beijing date format for conversation and turn timestamps', async () => {
+    api.list.mockResolvedValue({ items: [{ ...detail(), lastTurnAt: '2026-09-15T12:00:00Z' }], nextCursor: null });
+    api.turns.mockResolvedValue({ items: [userTurn('recent', '最近材料')], previousCursor: null });
+    render(<AssistantWorkspace teacherId="teacher-a" />);
+    expect((await screen.findAllByText('2026年9月15日 20:00')).length).toBe(2);
+    expect(await screen.findByText('最近材料')).toBeInTheDocument();
+  });
+
   it('opens a saved URL, shows true service availability and never calls the old executor', async () => {
     render(<AssistantWorkspace teacherId="teacher-a" />);
     await screen.findByRole('heading', { name: '会话one' });

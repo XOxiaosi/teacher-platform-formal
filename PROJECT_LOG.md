@@ -366,3 +366,11 @@ V009 是产品语义版本，不为每个实现 commit 升版；同一任务允�
 - 浏览器证据：本地 `preview.html` 合成数据在桌面 1278px 与 375×844 下核验日程列表/详情、重复规则、学生时间线和缴费记录；页面显示中文日期，原始记录见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/web-content-debug-03.log`。桌面 body/document `scrollWidth=1278`，窄视口 body/document `scrollWidth=375`，未观察横向溢出。
 - 测试：网页相关专项 4 文件/26 项通过；代码冻结后完整 `npm run check` 退出 0，证据为 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/check-18-web-date-format.log`：治理 19/19，后端 323 文件/2783 测试，前端 47 文件/297 测试，管理端 13 文件/84 测试，运维 151 项中 149 通过、2 项 Windows PowerShell 专属跳过，类型、lint、隔离 PostgreSQL 与构建通过。
 - 边界与下一步：网页内容调试继续进行；真实 DeepSeek/DSH、Windows、实体手机、跨设备、真实教师资料、渠道和正式发布仍未进入范围。只有网页 Gate 成熟后才进入 Windows 与手机开发；真实模型验证前需要安全注入平台 DeepSeek 配置，不把 API Key 粘贴到聊天或提交到仓库。
+
+### WEB-CONTENT-DEBUG-04｜2026-09-16｜连接版网页时间显示统一
+
+- 问题：助手会话、任务进展、材料收件箱和学生记录各自使用 `toLocaleString` 或独立 `Intl` 格式，设备语言或实现差异可能造成教师看到的时间不一致。
+- 修复：`TurnContent`、`ConversationPanel`、`AssistantWorkspace`、`CaptureInbox` 和学生记录 `displayTime` 统一复用 `shared/date-format.ts` 的 `formatDateTime`（Asia/Shanghai）；原始 ISO 值继续用于 `dateTime` 属性、排序、表单和接口提交，无效学生记录时间继续显示“时间未知”。
+- 测试：连接版助手、材料、学生记录专项 3 文件/34 项通过；完整 `npm run check` 退出 0，证据为 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/check-19-connected-date-format.log`：治理 19/19，后端 323 文件/2783 测试，前端 47 文件/298 测试，管理端 13 文件/84 测试，运维 151 项中 149 通过、2 项 Windows PowerShell 专属跳过，类型、lint、隔离 PostgreSQL 与构建通过。
+- 浏览器证据：正式连接版本地隔离后端以合成账号登录，学生档案页面显示 `2026年9月15日 18:00`、`2026年9月17日 02:36` 等中文北京时间；375×844 viewport 下 DOM `innerWidth=375`、`body.scrollWidth=375`、`document.documentElement.scrollWidth=375`，默认视口已恢复。完整记录见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/web-content-debug-04.log`。
+- 边界与下一步：继续网页端内容调试；真实 DeepSeek/DSH、真实教师资料、Windows、实体手机、跨设备、渠道和正式发布仍未进入范围。网页 Gate 成熟后才进入 Windows 与手机开发；真实模型验证前需要安全注入平台 DeepSeek 配置，不把 API Key 粘贴到聊天或提交到仓库。

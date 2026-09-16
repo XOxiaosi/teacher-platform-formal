@@ -11,6 +11,7 @@ describe('complete formal record panel', () => {
   it('uses business labels and keeps internal identifiers in optional trace details', async () => {
     mock.list.mockResolvedValue({ items: [record({ category: 'lesson_observation', structuredData: { observation: '自主检查步骤', captureEventId: 'capture-123', scheduleId: 'schedule-456', unknownSystemField: '技术内部值' } })], total: 1 });
     mount(); await screen.findByRole('article');
+    expect(screen.getByText('2026年9月16日 09:00')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '课堂观察' })).toBeInTheDocument();
     expect(screen.getByText('观察内容')).toBeInTheDocument(); expect(screen.getByText('自主检查步骤')).toBeInTheDocument();
     expect(screen.getByText('来源材料编号：capture-123').closest('details')).not.toHaveAttribute('open');

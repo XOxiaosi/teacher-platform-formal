@@ -17,6 +17,7 @@ describe('persistent material inbox', () => {
     const onRecordsChanged = vi.fn().mockResolvedValue(undefined);
     render(<CaptureInbox teacherId="teacher-a" students={students} onRecordsChanged={onRecordsChanged} />);
     fireEvent.click(await screen.findByRole('button', { name: /今天主动订正/ }));
+    expect(await screen.findByText('提交时间：2026年9月16日 08:00（北京时间）')).toBeInTheDocument();
     const first = within((await screen.findAllByRole('article'))[0]);
     expect(onRecordsChanged).not.toHaveBeenCalled();
     fireEvent.change(first.getByLabelText('归入学生'), { target: { value: 's1' } });

@@ -6,6 +6,7 @@ import { useConversationList } from './useConversationList';
 import { useAssistantMessages } from './useAssistantMessages';
 import type { AssistantTransport } from './transport';
 import './assistant.css';
+import { formatDateTime } from '../../shared/date-format';
 
 interface Props { teacherId: string; transport?: AssistantTransport }
 function routeConversation(): string | null {
@@ -34,7 +35,7 @@ function AccountWorkspace({ teacherId, transport }: Props) {
         {list.busy && <p role="status">正在读取会话列表…</p>}
         {list.error && <div role="alert"><p>{list.error}</p><button type="button" onClick={() => { void list.load(); }}>重试读取列表</button></div>}
         {!list.busy && !list.error && list.items.length === 0 && <p>{status === 'archived' ? '还没有已归档会话。' : '还没有会话，先新建一条。'}</p>}
-        <ul>{list.items.map(item => <li key={item.id}><button type="button" aria-current={conversationId === item.id ? 'page' : undefined} onClick={() => select(item.id)}><strong>{item.displayTitle}</strong>{item.summary && <span>{item.summary}</span>}<small>{item.lastTurnAt ? new Date(item.lastTurnAt).toLocaleString('zh-CN') : '尚无消息'}</small></button></li>)}</ul>
+        <ul>{list.items.map(item => <li key={item.id}><button type="button" aria-current={conversationId === item.id ? 'page' : undefined} onClick={() => select(item.id)}><strong>{item.displayTitle}</strong>{item.summary && <span>{item.summary}</span>}<small>{item.lastTurnAt ? formatDateTime(item.lastTurnAt) : '尚无消息'}</small></button></li>)}</ul>
         {list.cursor && <button type="button" disabled={list.busy} onClick={() => { void list.load(true); }}>加载更多会话</button>}
       </aside>
       {conversationId ? <ConversationPanel key={conversationId} teacherId={teacherId} conversationId={conversationId} transport={transport} messageState={messages[conversationId]} send={send} onArchive={() => { void list.load(); }} />

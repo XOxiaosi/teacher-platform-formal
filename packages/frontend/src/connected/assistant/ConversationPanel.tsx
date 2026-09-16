@@ -4,6 +4,7 @@ import { useConversation } from './useConversation';
 import { TurnContent } from './TurnContent';
 import { taskLabels, type AssistantTransport } from './transport';
 import type { MessageState } from './useAssistantMessages';
+import { formatDateTime } from '../../shared/date-format';
 
 interface Props {
   teacherId: string; conversationId: string; transport?: AssistantTransport; messageState?: MessageState;
@@ -38,7 +39,7 @@ export function ConversationPanel({ teacherId, conversationId, transport, messag
       </section>
       {session.events.length > 0 && <section className="assistant-task-events" aria-label="任务进展记录">
         <h3>任务进展记录</h3>
-        <ol>{session.events.map(event => <li key={event.eventKey}><time dateTime={event.createdAt}>{new Date(event.createdAt).toLocaleString('zh-CN')}</time> <span>{event.content}</span></li>)}</ol>
+        <ol>{session.events.map(event => <li key={event.eventKey}><time dateTime={event.createdAt}>{formatDateTime(event.createdAt)}</time> <span>{event.content}</span></li>)}</ol>
       </section>}
       {session.previousCursor && <button type="button" disabled={session.loadingHistory || session.busy} onClick={() => { void session.loadOlder(); }}>{session.loadingHistory ? '正在加载较早内容…' : '加载较早内容'}</button>}
       <div className="assistant-turns" aria-label="会话内容">{session.turns.map(turn => <TurnContent key={turn.id} turn={turn} />)}</div>

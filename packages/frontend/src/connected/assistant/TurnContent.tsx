@@ -1,5 +1,6 @@
 import type { AgentTurnDto, ObjectReferenceDto } from '../../api/conversations';
 import type { PresentationDocument } from '@teacher-platform/contracts';
+import { formatDateTime } from '../../shared/date-format';
 
 function References({ references }: { references: ObjectReferenceDto[] }) {
   // Only app-local routes are navigable. Labels remain visible for unsupported routes.
@@ -21,7 +22,7 @@ function Presentation({ document }: { document: PresentationDocument }) {
 export function TurnContent({ turn }: { turn: AgentTurnDto }) {
   if (turn.kind === 'tool') return null;
   return <article className={`assistant-turn assistant-turn-${turn.kind}`}>
-    <header><strong>{turn.kind === 'user' ? '我' : '教学助手'}</strong><time dateTime={turn.createdAt}>{new Date(turn.createdAt).toLocaleString('zh-CN')}</time></header>
+    <header><strong>{turn.kind === 'user' ? '我' : '教学助手'}</strong><time dateTime={turn.createdAt}>{formatDateTime(turn.createdAt)}</time></header>
     {(turn.kind === 'user' || turn.kind === 'assistant') && <p>{turn.content}</p>}
     {turn.kind === 'assistant' && <>{turn.presentation && <Presentation document={turn.presentation} />}<References references={turn.references} /></>}
     {turn.kind === 'error' && <p role="status">这一步未完成。已保存的会话仍可回看。</p>}

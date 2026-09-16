@@ -1,5 +1,6 @@
 import { listStudentRecords } from '../../api/students';
 import type { StudentRecordItem } from '../../api/types';
+import { formatDateTime } from '../../shared/date-format';
 
 /** A bounded page reader: failures never turn a partial result into “all records”. */
 export async function loadRecords(teacherId: string, studentId: string): Promise<StudentRecordItem[]> {
@@ -37,8 +38,5 @@ export function messageOf(error: unknown): string {
 
 export function displayTime(value: string): string {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? '时间未知' : new Intl.DateTimeFormat('zh-CN', {
-    timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-  }).format(date);
+  return Number.isNaN(date.getTime()) ? '时间未知' : formatDateTime(value);
 }
