@@ -431,3 +431,10 @@ V009 是产品语义版本，不为每个实现 commit 升版；同一任务允�
 - 代码冻结后完整 `npm run check` 退出 0，证据为 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/check-26-web-content-09.log`。
 - 本轮治理、文件长度、类型检查、lint、隔离 PostgreSQL 17 全量测试和构建均通过：后端 323 文件/2783 测试，前端 47 文件/304 测试，管理端 13 文件/84 测试，运维 151 项中 149 通过、2 项 Windows 专属跳过。
 - 本包不改变网页端外部服务边界；真实 DeepSeek/DSH、Windows/手机、跨设备、真实资料、渠道和用户验收仍未验证。
+
+### A02-REAL-DEEPSEEK-PREFLIGHT｜2026-09-16｜真实 DeepSeek Provider 路由 Gate
+
+- 用户明确提供 DeepSeek API Key 并授权直接写入本机配置；密钥保存于仓库外的受限文件 `/Users/xiaosi/.config/teacher-platform-formal/deepseek.env`（权限 600），未进入源码、Git 或日志明文。
+- 使用当前隔离 PostgreSQL 合成账号 `a06-browser@example.com`，临时创建一条 `deepseek` / `deepseek-flash` ProviderConfig，服务层加密落库；通过 `createProviderConfigRouter`、`createRoutingAiClient` 和 `runAsTeacher` 发起最小合成请求，返回 `OK`，随后删除临时 ProviderConfig。复核数据库中该教师剩余 ProviderConfig 为 0，未发现明文 `apiKeyEnc`。
+- 外部接口预检 `GET https://api.deepseek.com/models` 成功，当前可用模型返回 `deepseek-flash` 与 `deepseek-v4-pro`。路由 Gate 使用 `https://api.deepseek.com/chat/completions`，未发送真实教师资料或业务写操作。原始结果见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/real-deepseek-routing-gate.log`。
+- 完成边界：真实 DeepSeek API Key、OpenAI 兼容端点、加密 ProviderConfig 和按教师路由已验证；当前网页教学任务仍使用显式 `scripted-test-only` DSH 运行时，前端 transport 仍如实显示 `AI 服务尚不可用`，因此不能把本 Gate 记为网页端真实 DSH 完成。Windows/手机、真实资料、跨设备、渠道和用户验收继续后置。
