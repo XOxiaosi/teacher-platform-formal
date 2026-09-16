@@ -211,8 +211,8 @@ export function createStudentRecordsService(
       const { prisma } = await resolve();
       const page = input.page ?? 1;
       const pageSize = input.pageSize ?? 20;
-      if (page < 1) return err(validationError('页码必须大于等于 1', 'page'));
-      if (pageSize < 1) return err(validationError('每页数量必须大于等于 1', 'pageSize'));
+      if (!Number.isSafeInteger(page) || page < 1) return err(validationError('页码必须是大于等于 1 的整数', 'page'));
+      if (!Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 100) return err(validationError('每页数量必须是 1 至 100 的整数', 'pageSize'));
       const skip = (page - 1) * pageSize;
 
       const where = { teacherId: input.teacherId, studentId: input.studentId };
@@ -220,7 +220,7 @@ export function createStudentRecordsService(
         const [items, total] = await Promise.all([
           prisma.studentRecord.findMany({
             where,
-            orderBy: { occurredAtTs: 'desc' },
+            orderBy: [{ occurredAtTs: 'desc' }, { id: 'desc' }],
             skip,
             take: pageSize,
           }),
@@ -248,11 +248,15 @@ export function createStudentRecordsService(
       const before = await prisma.studentRecord.findFirst({ where: owner });
       if (!before) return err(notFound('记录不存在'));
 
-      const transition = validateStudentRecordReviewTransition(
-        before.reviewStatus,
-        input.reviewStatus,
-      );
-      if (!transition.ok) return transition;
+      const visibilityChange = before.reviewStatus === 'confirmed' && input.reviewStatus === 'confirmed'
+        && input.visibility !== undefined && input.visibility !== before.visibility;
+      if (visibilityChange && input.expectedUpdatedAt === undefined) {
+        return err(validationError('调整分享范围需要当前记录版本', 'expectedUpdatedAt'));
+      }
+      if (!visibilityChange) {
+        const transition = validateStudentRecordReviewTransition(before.reviewStatus, input.reviewStatus);
+        if (!transition.ok) return transition;
+      }
 
       if (input.expectedUpdatedAt !== undefined) {
         const trimmed = input.expectedUpdatedAt.trim();
@@ -277,7 +281,9 @@ export function createStudentRecordsService(
 
       const data: Prisma.StudentRecordUpdateManyMutationInput = {
         reviewStatus: input.reviewStatus,
-        updatedAtTs: now.value,
+        // Millisecond timestamps also serve as the public edit version. A same-tick
+        // write must advance it so a stale displayed version cannot be reused.
+        updatedAtTs: new Date(Math.max(now.value.getTime(), before.updatedAtTs.getTime() + 1)),
       };
       if (input.visibility !== undefined) {
         data.visibility = input.visibility;

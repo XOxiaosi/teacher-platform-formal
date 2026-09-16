@@ -1,0 +1,16 @@
+.record-panel-heading,.formal-record-card>header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.student-record-panel { min-width:0; }
+.record-count,.record-meta { color:#5f6876; font-size:13px; line-height:1.7; }
+.formal-record-card { margin:16px 0; padding:18px; background:#fafbfc; border:1px solid #dce2e8; border-radius:12px; min-width:0; }
+.formal-record-card h3,.formal-record-card h4 { margin:10px 0; }
+.formal-record-card>header>span { font-size:13px; flex-shrink:0; }
+.record-full-text { white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.8; font:inherit; }
+.record-source { margin:14px 0; padding:12px 0; border-top:1px solid #e0e5eb; }
+.record-review-controls { display:flex; flex-wrap:wrap; gap:10px; align-items:end; margin-top:16px; }
+.record-review-controls label { display:flex; flex-direction:column; gap:5px; font-size:13px; }
+.record-review-controls select { background:white; border:1px solid #bac5ce; border-radius:7px; padding:8px; }
+.record-review-controls .record-meta { width:100%; margin:0; }
+.formal-record-card [role=alert] { color:#a22d22; line-height:1.7; }
+.formal-record-card [role=status] { color:#206446; line-height:1.7; }
+.record-version { font-size:13px; overflow-wrap:anywhere; }
+@media(max-width:640px) { .formal-record-card { padding:12px; } .record-panel-heading { flex-wrap:wrap; } }

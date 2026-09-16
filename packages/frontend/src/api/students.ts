@@ -12,6 +12,7 @@ import type {
   StudentProfileChanges,
   StudentProfileView,
   StudentRecordItem,
+  StudentRecordSource,
   TimelineEntry,
 } from './types';
 
@@ -65,8 +66,12 @@ export function getStudentTimeline(
 export function listStudentRecords(
   teacherId: string,
   studentId: string,
+  options: { page?: number; pageSize?: number } = {},
 ): Promise<ListResult<StudentRecordItem>> {
-  return apiRequest(`/students/${encodeURIComponent(studentId)}/records`, {
+  const query = new URLSearchParams();
+  if (options.page !== undefined) query.set('page', String(options.page));
+  if (options.pageSize !== undefined) query.set('pageSize', String(options.pageSize));
+  return apiRequest(`/students/${encodeURIComponent(studentId)}/records${query.size ? `?${query}` : ''}`, {
     teacherId,
   });
 }
@@ -77,16 +82,24 @@ export function reviewStudentRecord(
   recordId: string,
   reviewStatus: 'confirmed' | 'rejected',
   visibility?: string,
+  expectedUpdatedAt?: string,
 ): Promise<StudentRecordItem> {
   const body: Record<string, string> = { reviewStatus };
   if (visibility !== undefined) {
     body.visibility = visibility;
   }
+  if (expectedUpdatedAt !== undefined) body.expectedUpdatedAt = expectedUpdatedAt;
   return apiRequest(`/students/${encodeURIComponent(studentId)}/records/${encodeURIComponent(recordId)}/review`, {
     method: 'POST',
     teacherId,
     body,
   });
+}
+
+export function getStudentRecordSource(
+  teacherId: string, studentId: string, recordId: string,
+): Promise<StudentRecordSource> {
+  return apiRequest(`/students/${encodeURIComponent(studentId)}/records/${encodeURIComponent(recordId)}/source`, { teacherId });
 }
 
 export function captureScoreFromText(

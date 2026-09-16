@@ -15,6 +15,7 @@ import { createAgendaRouter } from './agenda.routes.js';
 import { createEditRouter } from './edit.routes.js';
 import { createFeedbackRouter } from './feedback.routes.js';
 import { createStudentRecordsRouter } from './student-records.routes.js';
+import { createStudentRecordSourceRouter } from './student-record-source.routes.js';
 import { createRequirementRouter } from './requirements.routes.js';
 import { createProviderConfigRouter as createProviderConfigRoutes } from './provider-config.routes.js';
 import { createUsageRouter } from './usage.routes.js';
@@ -68,6 +69,7 @@ export function createCoreRouter(prisma: PrismaClient, options?: CoreRouterOptio
   router.use(createStudentRouter(dependencies.students));
   if (dependencies.teachingTasks) router.use(createTeachingTaskRouter(dependencies.teachingTasks));
   router.use(createStudentRecordsRouter(dependencies.studentRecords));
+  router.use(createStudentRecordSourceRouter(dependencies.studentRecords));
   router.use(createScheduleRouter(dependencies.schedules));
   router.use(createPaymentRouter(dependencies.payments));
   router.use(createDailyReviewRouter(dependencies.dailyReview));

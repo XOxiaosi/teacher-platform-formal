@@ -266,6 +266,19 @@ export interface StudentRecordItem {
 }
 
 // ---- 成绩明细 ----
+export interface StudentRecordSource {
+  recordId: string;
+  state: 'available' | 'none' | 'deleted' | 'unavailable';
+  source: null | {
+    id: string;
+    sourceType: string;
+    captureStatus: string;
+    rawText: string | null;
+    occurredAt: string;
+    updatedAt: string;
+  };
+}
+
 export interface AssessmentDetailData {
   id: string;
   teacherId: string;

@@ -3,11 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConnectedWorkspace } from './ConnectedWorkspace';
 import { createDemoData } from '../preview/data';
 
-const mock = vi.hoisted(() => ({ load: vi.fn(), command: vi.fn(), schedule: vi.fn(), payment: vi.fn(), update: vi.fn(), logout: vi.fn() }));
+const mock = vi.hoisted(() => ({ load: vi.fn(), command: vi.fn(), schedule: vi.fn(), payment: vi.fn(), update: vi.fn(), logout: vi.fn(), records: vi.fn() }));
 vi.mock('../app/teacher-context', () => ({ useAuth: () => ({ teacherId: 'teacher-a', displayName: '验收老师', email: 'a@example.test', logout: mock.logout }) }));
 vi.mock('./workspace-api', () => ({ loadWorkspace: mock.load, workspaceCommand: mock.command, schedulingCommand: mock.schedule }));
 vi.mock('../api/payments', () => ({ createPayment: mock.payment }));
-vi.mock('../api/students', () => ({ updateStudentProfile: mock.update }));
+vi.mock('../api/students', () => ({ updateStudentProfile: mock.update, listStudentRecords: mock.records, reviewStudentRecord: vi.fn(), getStudentRecordSource: vi.fn() }));
 vi.mock('./ModelConfiguration', () => ({ ModelConfiguration: ({ teacherId }: { teacherId: string }) => <div>具体模型配置：{teacherId}</div> }));
 vi.mock('../connected/assistant', () => ({ AssistantWorkspace: ({ teacherId }: { teacherId: string }) => <section aria-label="正式教学助手入口"><h1>教学助手</h1><p>当前账号：{teacherId}</p></section> }));
 
@@ -15,6 +15,23 @@ const snapshot = () => ({ data: createDemoData(), studentVersions: { s1: 'v1', s
 beforeEach(() => { vi.clearAllMocks(); location.hash = '#/students'; mock.load.mockResolvedValue(snapshot()); mock.command.mockResolvedValue({}); mock.schedule.mockResolvedValue({}); });
 
 describe('connected workspace server-backed writes', () => {
+  it('mounts complete server record details and reloads them with the workspace', async () => {
+    location.hash = '#/students/s1';
+    mock.records.mockResolvedValue({ items: [{
+      id: 'record-server', teacherId: 'teacher-a', studentId: 's1', sourceRecordId: null,
+      category: 'general_note', summary: '服务端完整记录全文', occurredAt: '2026-09-01T00:00:00Z',
+      updatedAt: '2026-09-01T00:00:00Z', createdAt: '2026-09-01T00:00:00Z',
+      reviewStatus: 'confirmed', visibility: 'internal_only', confidence: 'high', importance: 'normal',
+      supersedesId: null, structuredData: null,
+    }], total: 1 });
+    render(<ConnectedWorkspace />);
+    await screen.findByText('服务端完整记录全文');
+    expect(mock.records).toHaveBeenCalledWith('teacher-a', 's1', expect.objectContaining({ page: 1 }));
+    const before = mock.records.mock.calls.length;
+    mock.load.mockResolvedValue(snapshot());
+    fireEvent.click(screen.getByRole('button', { name: '刷新资料' }));
+    await waitFor(() => expect(mock.records.mock.calls.length).toBeGreaterThan(before));
+  });
   it('connects settings to actual model configuration rather than response preferences', async () => {
     location.hash = '#/settings/models';
     render(<ConnectedWorkspace />);
