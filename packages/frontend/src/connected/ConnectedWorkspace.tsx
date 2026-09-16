@@ -15,6 +15,7 @@ import { loadWorkspace, schedulingCommand, workspaceCommand, type WorkspaceSnaps
 import '../preview/preview.css';
 import './connected.css';
 import { ModelConfiguration } from './ModelConfiguration';
+import { CaptureInbox } from './captures/CaptureInbox';
 import { createTeachingTaskTransport } from './assistant/teaching-task-transport';
 
 const routeParts = () => location.hash.replace(/^#\/?/, '').split('?')[0].split('/').filter(Boolean);
@@ -125,9 +126,9 @@ export function ConnectedWorkspace() {
   };
   const page = route[0] || 'today';
   const normalized = page === 'schedule' ? 'schedules' : page === 'ai' ? 'agent' : page;
-  const content = page === 'students' ? <StudentPages actions={actions} studentId={route[1]} /> : ['agent', 'schedules', 'finance', 'feedback', 'settings'].includes(normalized) ? <Workflows page={normalized} actions={actions} teacherId={auth.teacherId!} assistantTransport={assistantTransport} modelSettings={<ModelConfiguration key={auth.teacherId} teacherId={auth.teacherId!} onIdentityChanged={() => void auth.refresh()} />} /> : <TodayPage actions={actions} />;
+  const content = page === 'captures' ? <CaptureInbox key={auth.teacherId} teacherId={auth.teacherId!} onRecordsChanged={reload} students={snapshot.data.students} /> : page === 'students' ? <StudentPages actions={actions} studentId={route[1]} /> : ['agent', 'schedules', 'finance', 'feedback', 'settings'].includes(normalized) ? <Workflows page={normalized} actions={actions} teacherId={auth.teacherId!} assistantTransport={assistantTransport} modelSettings={<ModelConfiguration key={auth.teacherId} teacherId={auth.teacherId!} onIdentityChanged={() => void auth.refresh()} />} /> : <TodayPage actions={actions} />;
   return <><div inert={busy || undefined} aria-busy={busy}>
-    <Shell page={normalized} studioName={snapshot.data.studioName} displayName={auth.displayName || '教师'} accountActions={<><span>{auth.email}</span><button className="button secondary small" onClick={retry}>刷新资料</button><button className="button secondary small" onClick={() => void auth.logout()}>退出登录</button></>}>
+    <Shell page={normalized} studioName={snapshot.data.studioName} displayName={auth.displayName || '教师'} accountActions={<><a className="button secondary small" href="#/captures">待核对材料</a><span>{auth.email}</span><button className="button secondary small" onClick={retry}>刷新资料</button><button className="button secondary small" onClick={() => void auth.logout()}>退出登录</button></>}>
       {(error || auth.error) && <div className="connected-error" role="alert">{error || auth.error}</div>}{content}
     </Shell>{dialog && <Dialog title={dialog.title} onClose={close}>{dialog.body}</Dialog>}
   </div>{busy && <div className="connected-busy" role="status">正在处理，请稍候…</div>}{notice && <div className={`preview-toast ${notice.kind}`} role="status"><span>{notice.text}</span><button aria-label="关闭消息" onClick={() => setNotice(null)}>×</button></div>}</>;

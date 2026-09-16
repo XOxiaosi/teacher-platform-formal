@@ -29,7 +29,7 @@ model CaptureEvent {
   redactedAtTs    DateTime? @db.Timestamptz(3)
 
   tasks           CaptureTask[]
-  candidate       CaptureCandidate?
+  candidates      CaptureCandidate[]
   deletionReceipt CaptureDeletionReceipt?
 
   @@unique([teacherId, clientRequestId])
@@ -52,7 +52,7 @@ model CaptureTask {
   updatedAtTs      DateTime @db.Timestamptz(3)
 
   event            CaptureEvent @relation(fields: [eventId], references: [id])
-  candidate        CaptureCandidate?
+  candidates       CaptureCandidate[]
 
   @@unique([eventId, taskType, processorVersion])
   @@index([teacherId, status])
@@ -61,14 +61,18 @@ model CaptureTask {
 model CaptureCandidate {
   id               String   @id @default(cuid())
   teacherId        String
-  eventId          String   @unique
-  taskId           String   @unique
+  eventId          String
+  taskId           String
   candidateType    String   @default("verbatim_note")
   payload          Json?
+  originalPayload  Json?
+  position         Int      @default(0)
+  revision         Int      @default(1)
   reviewStatus     String   @default("pending")
   confidence       String?
   candidateVersion String   @default("text-verbatim-v1")
   confirmationRequestId String?
+  confirmationRevision Int?
   confirmedRecordId String?
   confirmedAtTs    DateTime? @db.Timestamptz(3)
   createdAtTs      DateTime @db.Timestamptz(3)
@@ -78,6 +82,8 @@ model CaptureCandidate {
   event            CaptureEvent @relation(fields: [eventId], references: [id])
   task             CaptureTask  @relation(fields: [taskId], references: [id])
 
+  @@unique([eventId, position])
+  @@index([taskId])
   @@index([teacherId, reviewStatus])
   @@unique([teacherId, confirmationRequestId])
 }

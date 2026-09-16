@@ -1,0 +1,11 @@
+.capture-inbox { max-width: 1100px; margin: auto; padding: 24px; }
+.capture-layout { display: grid; grid-template-columns: minmax(180px, 280px) minmax(0, 1fr); gap: 24px; margin-top: 24px; }
+.capture-list-item { display: grid; text-align: left; width: 100%; padding: 14px; margin-bottom: 10px; gap: 8px; border: 1px solid #d9d4cc; background: #fff; border-radius: 10px; overflow-wrap: anywhere; }
+.capture-list-item[aria-current=true] { border-color: #72543e; background: #f5f0e9; }
+.capture-candidate { margin: 18px 0; border: 1px solid #d9d4cc; padding: 18px; border-radius: 12px; }
+.capture-candidate label { display: grid; gap: 8px; margin: 14px 0; }
+.capture-candidate textarea, .capture-candidate select { width: 100%; box-sizing: border-box; padding: 10px; font: inherit; }
+.capture-candidate textarea { min-height: 100px; resize: vertical; }
+.capture-raw { white-space: pre-wrap; overflow-wrap: anywhere; }
+.capture-inbox .button-row { display: flex; flex-wrap: wrap; gap: 8px; }
+@media (max-width: 680px) { .capture-inbox { padding: 16px; } .capture-layout { grid-template-columns: minmax(0, 1fr); } }

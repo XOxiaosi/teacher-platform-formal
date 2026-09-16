@@ -114,7 +114,7 @@ describe('T-015 capture service persistence', () => {
     });
     expect(retried).toMatchObject({ ok: true, value: { receipt: { status: 'completed', retryable: false } } });
     const event = await prisma.captureEvent.findUniqueOrThrow({ where: { id: created.value.capture.id } });
-    const candidate = await prisma.captureCandidate.findUniqueOrThrow({ where: { eventId: created.value.capture.id } });
+    const candidate = await prisma.captureCandidate.findFirstOrThrow({ where: { eventId: created.value.capture.id } });
     expect(event.rawText).toBeNull();
     expect(candidate.payload).toBeNull();
   });

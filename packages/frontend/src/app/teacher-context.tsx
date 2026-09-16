@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { logout as requestLogout, me } from '../api/auth';
 import { onSessionExpired } from '../api/client';
+import { clearCaptureDrafts } from '../connected/captures/drafts';
 import { clearAssistantDrafts } from '../connected/assistant/drafts';
 
 export type AuthStatus = 'loading' | 'authed' | 'anon';
@@ -86,7 +87,7 @@ export function TeacherProvider({ children }: { children: ReactNode }) {
     try {
       await requestLogout();
       if (!mountedRef.current) return;
-      if (identityRef.current) clearAssistantDrafts(identityRef.current.teacherId);
+      if (identityRef.current) { clearAssistantDrafts(identityRef.current.teacherId); clearCaptureDrafts(identityRef.current.teacherId); }
       identityRef.current = null;
       setIdentity(null);
       setStatus('anon');

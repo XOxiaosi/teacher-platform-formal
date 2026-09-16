@@ -2,6 +2,7 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TeacherProvider, useAuth } from './teacher-context';
 import * as authApi from '../api/auth';
+import { readCaptureDraft, writeCaptureDraft } from '../connected/captures/drafts';
 import type { MeData } from '../api/auth';
 
 vi.mock('../api/auth');
@@ -112,6 +113,8 @@ describe('TeacherProvider session 化', () => {
   it('logout 调用 auth logout 并转 anon（best-effort）', async () => {
     vi.mocked(authApi.me).mockResolvedValue(demoMe);
     vi.mocked(authApi.logout).mockResolvedValue(undefined);
+    writeCaptureDraft('teacher-1', 'event', 'candidate', { generation: 'g1', text: '甲的材料草稿', studentId: '', baseVersion: 1 });
+    writeCaptureDraft('teacher-2', 'event', 'candidate', { generation: 'g2', text: '乙的材料草稿', studentId: '', baseVersion: 1 });
 
     function LogoutProbe() {
       const { logout } = useAuth();
@@ -130,6 +133,8 @@ describe('TeacherProvider session 化', () => {
 
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('anon'));
     expect(authApi.logout).toHaveBeenCalledTimes(1);
+    expect(readCaptureDraft('teacher-1', 'event', 'candidate')).toBeUndefined();
+    expect(readCaptureDraft('teacher-2', 'event', 'candidate')?.text).toBe('乙的材料草稿');
   });
 
   it('logout 请求失败保留 authed 并带错误，不伪装已退出', async () => {
