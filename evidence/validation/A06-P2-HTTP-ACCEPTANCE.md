@@ -13,20 +13,25 @@
 | 反馈只使用当前教师、当前学生的有效可分享依据 | `packages/backend/tests/e2e/a05-feedback-draft-save-workflow.test.ts`、`packages/backend/tests/functional/routes/feedback-generate.routes.snapshot.test.ts` | 通过服务层与路由契约；依据带 `sourceVersion`，版本变化保存返回 `VERSION_CONFLICT` 且零反馈写入 |
 | 生成结果是待核对草稿，明确保存后才写入 | `packages/frontend/src/connected/ConnectedWorkspace.test.tsx`、`packages/frontend/src/prototype-v009/App.test.tsx`、`packages/backend/tests/e2e/a05-feedback-draft-save-workflow.test.ts` | 通过；正式入口携带课次、依据、窗口和 `clientRequestId`，生成本身不创建 `ParentFeedback` |
 | 保存可重放且不重复归档/写入 | `packages/backend/tests/e2e/a05-feedback-draft-save-workflow.test.ts` | 通过；同一请求编号返回原回执，数据库仅一条反馈 |
-| 反馈与发送分离 | `packages/backend/tests/e2e/a05-feedback-draft-save-workflow.test.ts`、`a06-browser-feedback.log` | 通过；保存/核对后 `sentAt=null`，复制只提示教师自行发送 |
+| 反馈与发送分离 | `packages/backend/tests/e2e/a05-feedback-draft-save-workflow.test.ts`、`a06-auth-http-browser.log` | 通过；保存/核对后 `sentAt=null`，浏览器复制只提示教师自行发送 |
 | 离页后仍能继续编辑未保存草稿 | `packages/frontend/src/prototype-v009/App.test.tsx`、`a06-browser-feedback.log` | 通过本地原型回归和 375×844 浏览器任务；草稿保存在当前浏览器会话 |
 
 ## 正式入口契约补充
 
 `POST /feedback` 的路由回归现在明确覆盖 `lessonId`、`channel`、`parentName`、`clientRequestId`、`evidence` 和时间窗口的完整透传；路由只从认证上下文取得 `teacherId`。正式 `ConnectedWorkspace` 的单测覆盖生成→显式保存，并断言相同字段进入 API 调用。
 
+## 认证浏览器合成闭环
+
+本地合成账号在 Vite 页面完成认证后，进入正式 `/#/feedback`，选择合成学生并生成反馈。页面显示生成说明和 1 条已核对依据；编辑正文后保存，列表显示草稿和“已保存”；点击复制后剪贴板读回标题与编辑后的正文，页面显示“已复制”。视口 `1278×1235`，`scrollWidth=1278`，未观察到横向溢出。
+
+完整步骤和可复核输出见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/a06-auth-http-browser.log`。该证据使用项目 fake AI 依赖、隔离数据库和合成邀请账号，不代表真实模型或真实教师环境。
+
 ## 未关闭 Gate
 
-- 真实认证 HTTP 登录后的浏览器任务尚未执行；当前 API 证据来自路由契约、服务层隔离数据库和正式入口单测。
-- 真实模型/DeepSeek Harness 效果、真实 Windows/手机、跨设备草稿恢复、真实教师资料、渠道发送和用户体验验收仍待相应环境与授权。
+- 真实认证 HTTP 登录后的本地合成浏览器任务已执行；真实模型/DeepSeek Harness 效果、真实 Windows/手机、跨设备草稿恢复、真实教师资料、渠道发送和用户体验验收仍待相应环境与授权。
 - 本记录不授予发送、发布、部署或读取真实资料的权限。
 
-原始浏览器日志：`/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/a06-browser-feedback.log`。
+历史原始浏览器日志：`/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/a06-browser-feedback.log`。
 
 ## Gate 复核
 
