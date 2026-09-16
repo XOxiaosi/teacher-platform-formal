@@ -225,7 +225,10 @@ function toSourceData(record: any, cipher: FieldCipher | undefined): StudentSour
     sourceEntityType: record.sourceEntityType,
     sourceEntityId: record.sourceEntityId,
     occurredAt: record.occurredAtTs,
-    rawText: record.rawText === null ? null : decryptFieldValue(cipher, record.rawText),
+    // Capture 原件删除后保留来源 ID/哈希用于审计，但绝不能通过来源读接口重新暴露副本。
+    rawText: record.captureStatus === 'deleted' || record.rawText === null
+      ? null
+      : decryptFieldValue(cipher, record.rawText),
     contentHash: record.contentHash,
     captureStatus: record.captureStatus,
     createdAt: record.createdAtTs,
