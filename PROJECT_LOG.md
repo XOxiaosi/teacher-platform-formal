@@ -344,3 +344,10 @@ V009 是产品语义版本，不为每个实现 commit 升版；同一任务允�
 - 手工编辑正文为“浏览器核对后的反馈：小雨主动验算，下一次继续保持。”后点击“保存草稿”，列表显示标题、合成学生、草稿状态、编辑后的正文和“已保存”回执。点击“复制草稿”后剪贴板读回标题与正文，页面显示“已复制”。
 - 桌面视口实测 `innerWidth=1278`、`innerHeight=1235`、`scrollWidth=1278`、`scrollHeight=1235`；另以浏览器 viewport override `375×844` 完成同一生成→编辑→保存→复制流程，窄视口 `bodyWidth=375`、`scrollWidth=375`、`scrollHeight=844`，均未观察到横向溢出。完整步骤、AX/UI 结果和边界记录见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/a06-auth-http-browser.log`。
 - 验证边界：本包仍只使用 fake AI、隔离数据库和合成账号；真实模型/DSH、Windows/手机、跨设备草稿、真实教师资料、渠道发送和用户验收未验证。下一步在不新增外部授权的前提下保留工程回归，等待相应环境再做真实设备 Gate。
+
+### WEB-CONTENT-DEBUG-01｜2026-09-16｜网页端内容与窄屏复核
+
+- 问题：反馈生成依据把 RFC3339 原始时间直接展示给教师，例如 `2026-08-17T17:28:13.335Z`，与平台其他中文日期不一致。
+- 修复：`FeedbackSettings` 统一使用共享 `formatDate`（Asia/Shanghai）展示反馈依据时间窗和已保存反馈更新时间；数据提交仍保留原始 RFC3339 值，不改变接口契约。
+- 浏览器证据：本地隔离 PostgreSQL、合成邀请账号和 fake AI 下完成反馈生成→明确保存；页面显示“本次使用 1 条已核对依据，范围 2026年8月18日 至 2026年9月17日”，保存列表显示“2026年9月17日”。同一轮审计了今日、学生、日程、缴费、AI 助手、反馈、设置和模型设置页；375×844 viewport 下 `body.scrollWidth=375`、`preview-main.scrollWidth=375`，未观察横向溢出。原始记录见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/web-content-debug-01.log`。
+- 验证：反馈组件专项 3/3、前端完整 47 文件/297 测试通过，`git diff --check` 通过；本包完整根门禁退出 0，证据见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/check-15-web-content.log`（后端 323/2783、前端 47/297、管理端 13/84、运维 149/151，2 项 Windows 专属跳过，构建通过）。真实 DeepSeek、Windows、实体手机、真实资料和渠道仍未进入范围。
