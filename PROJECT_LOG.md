@@ -374,3 +374,11 @@ V009 是产品语义版本，不为每个实现 commit 升版；同一任务允�
 - 测试：连接版助手、材料、学生记录专项 3 文件/34 项通过；完整 `npm run check` 退出 0，证据为 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/check-19-connected-date-format.log`：治理 19/19，后端 323 文件/2783 测试，前端 47 文件/298 测试，管理端 13 文件/84 测试，运维 151 项中 149 通过、2 项 Windows PowerShell 专属跳过，类型、lint、隔离 PostgreSQL 与构建通过。
 - 浏览器证据：正式连接版本地隔离后端以合成账号登录，学生档案页面显示 `2026年9月15日 18:00`、`2026年9月17日 02:36` 等中文北京时间；375×844 viewport 下 DOM `innerWidth=375`、`body.scrollWidth=375`、`document.documentElement.scrollWidth=375`，默认视口已恢复。完整记录见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/web-content-debug-04.log`。
 - 边界与下一步：继续网页端内容调试；真实 DeepSeek/DSH、真实教师资料、Windows、实体手机、跨设备、渠道和正式发布仍未进入范围。网页 Gate 成熟后才进入 Windows 与手机开发；真实模型验证前需要安全注入平台 DeepSeek 配置，不把 API Key 粘贴到聊天或提交到仓库。
+
+### WEB-CONTENT-DEBUG-05｜2026-09-16｜预览版修订历史时间显示
+
+- 问题：预览版已完成课程的修订历史仍使用独立 `Intl.DateTimeFormat` 输出斜杠日期（如 `2026/09/10 03:30`），与同一网页其他教师可见时间的中文北京时间不一致。
+- 修复：`ScheduleDetails.revisionTimeLabel` 改用共享 `formatDateTime`（Asia/Shanghai）；原始 ISO 值继续用于数据、排序和接口语义，仅统一展示格式。回归断言覆盖 UTC 跨日转换及实际修订记录渲染。
+- 测试：预览版 `ui-repair` 与 `schedule-interaction` 专项 2 文件/15 项通过；代码冻结后完整 `npm run check` 退出 0，证据为 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/check-20-preview-revision-date.log`：治理 19/19，后端 323 文件/2783 测试，前端 47 文件/298 测试，管理端 13 文件/84 测试，运维 151 项中 149 通过、2 项 Windows PowerShell 专属跳过，类型、lint、文件长度、隔离 PostgreSQL 与构建通过。
+- 浏览器证据：本地 `preview.html` 合成数据桌面端实际完成已完成课程编辑并查看修订记录，时间显示为中文北京时间，原扣课记录保留；375×844 下排期列表/详情显示中文日期，`innerWidth=375`、body/document `scrollWidth=375`，无横向溢出，默认视口已恢复。完整步骤见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/web-content-debug-05.log`。
+- 边界与下一步：继续网页端内容与交互成熟度核对；真实 DeepSeek/DSH、真实教师资料、Windows、实体手机、跨设备、渠道和正式发布仍未进入范围。网页 Gate 成熟后才进入 Windows 与手机开发；真实模型验证前需要安全注入平台 DeepSeek 配置，不把 API Key 粘贴到聊天或提交到仓库。

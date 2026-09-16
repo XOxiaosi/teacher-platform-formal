@@ -3,7 +3,7 @@ import { commitAction } from './action-result';
 import { Confirm, type PreviewActions, studentName } from './PreviewApp';
 import { ruleFor, scheduleConflict, schedulesInRange } from './recurrence';
 import { openScheduleEditor } from './ScheduleForm';
-import { formatDate } from '../shared/date-format';
+import { formatDate, formatDateTime } from '../shared/date-format';
 
 function participantNames(actions: PreviewActions, item: Schedule) {
   return item.participants.map((id) => studentName(actions.data, id)).join('、') || '待补充参与人';
@@ -23,7 +23,7 @@ function revisionHistory(actions: PreviewActions, revisions: ScheduleRevision[])
 }
 
 export function revisionTimeLabel(value: string) {
-  return new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(value));
+  return formatDateTime(value);
 }
 
 export function recurrenceScopeStart(item: Schedule) {
