@@ -85,6 +85,9 @@ export function validateGovernance(bundle, options = {}) {
     }
   }
   const projection = Object.fromEntries(rows(section(log, '当前投影')).map(([key, value]) => [key, value]));
+  for (const field of ['长任务目标及结束条件', '当前可执行任务', '被阻塞任务及解除条件']) {
+    if (!projection[field]?.trim()) errors.push(`缺少连续执行状态: ${field}`);
+  }
   const version = rows(product).find(([key]) => key === '需求版本')?.[1];
   if (!version || !projection['需求版本']?.startsWith(version)) errors.push('产品与日志版本不一致');
   if (!projection['历史进度']?.includes('V008') || /\d+%/.test(projection['V009 进度'] ?? '')) {
@@ -94,7 +97,7 @@ export function validateGovernance(bundle, options = {}) {
   const task = tasks.find(([id]) => id === currentTask);
   if (!task || !projection['当前任务状态']?.startsWith(task[4])) errors.push('当前任务状态与计划不一致');
   if (task?.[4] === '已完成' && projection['交付门禁'] !== '通过') errors.push('未通过交付门禁不能标为已完成');
-  for (const heading of ['三份文档的职责', '与用户的交互方式', '测试与交付门禁', 'Git 提交与回滚追踪']) {
+  for (const heading of ['三份文档的职责', '与用户的交互方式', '长任务连续推进', '测试与交付门禁', 'Git 提交与回滚追踪']) {
     if (!agents.includes(`## ${heading}`)) errors.push(`缺少工作规则: ${heading}`);
   }
   const requiredRules = [
@@ -103,6 +106,14 @@ export function validateGovernance(bundle, options = {}) {
     ['只问关键问题', '只追问会实质改变产品目标、验收或授权边界的问题'],
     ['中途补充保留目标', '回答状态问题后继续原任务'],
     ['用户停止即停止', '用户明确要求停止时，立即停止当前任务及其子任务的执行'],
+    ['整体目标决定结束', '单个工作包、测试通过、commit 或子 Agent 完成都不是长任务结束条件'],
+    ['工作包后立即续接', '选择并立即执行下一个已授权且依赖满足的任务'],
+    ['阶段汇报不结束', '阶段汇报使用进度消息，不以最终回复结束执行'],
+    ['主 Agent 持续调度', '主 Agent 必须检查、整合和安排后续任务'],
+    ['局部阻塞继续独立任务', '局部阻塞只暂停受影响任务'],
+    ['结束前检查剩余任务', '最终回复前检查剩余任务'],
+    ['规则修改不启动业务', '只修改规则、评估或回答问题，不自动启动文档中列出的业务长任务'],
+    ['连续执行不扩大授权', '不以连续推进扩大授权'],
     ['新项目必须 Git 管理', '每个新项目从创建开始必须纳入 Git 版本管理'],
     ['检查仓库归属', '先确认项目目录和仓库归属'],
     ['已有仓库保留历史', '不重复初始化或随意创建嵌套仓库'],

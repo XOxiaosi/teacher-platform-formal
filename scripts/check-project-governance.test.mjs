@@ -107,3 +107,32 @@ test('reject weakening of new-project Git requirements and repository boundaries
     '不得把依赖、构建产物、密钥或真实教学资料提交到 Git',
   ]) rejects(changed('AGENTS.md', rule, '可自行省略'), /缺少必要约束/);
 });
+
+test('reject loss of continuous orchestration, stop checks and scope boundaries', () => {
+  for (const rule of [
+    '单个工作包、测试通过、commit 或子 Agent 完成都不是长任务结束条件',
+    '选择并立即执行下一个已授权且依赖满足的任务',
+    '阶段汇报使用进度消息，不以最终回复结束执行',
+    '主 Agent 必须检查、整合和安排后续任务',
+    '局部阻塞只暂停受影响任务',
+    '最终回复前检查剩余任务',
+    '只修改规则、评估或回答问题，不自动启动文档中列出的业务长任务',
+    '不以连续推进扩大授权',
+  ]) rejects(changed('AGENTS.md', rule, '可自行省略'), /缺少必要约束/);
+});
+
+test('reject missing or empty continuation state in the current projection', () => {
+  for (const field of ['长任务目标及结束条件', '当前可执行任务', '被阻塞任务及解除条件']) {
+    const row = baseline.files['PROJECT_LOG.md'].split('\n').find((line) => line.startsWith(`| ${field} |`));
+    assert.ok(row);
+    rejects(changed('PROJECT_LOG.md', row, ''), /缺少连续执行状态/);
+    rejects(changed('PROJECT_LOG.md', row, `| ${field} |  |`), /缺少连续执行状态/);
+  }
+});
+
+test('historical continuation fields cannot replace the current projection', () => {
+  const row = baseline.files['PROJECT_LOG.md'].split('\n').find((line) => line.startsWith('| 当前可执行任务 |'));
+  const bundle = changed('PROJECT_LOG.md', row, '');
+  bundle.files['PROJECT_LOG.md'] += `\n## 旧续接快照\n${row}\n`;
+  rejects(bundle, /缺少连续执行状态: 当前可执行任务/);
+});
