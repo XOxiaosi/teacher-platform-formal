@@ -38,6 +38,7 @@ export function registerFeedbackTools(
         type: 'object',
         properties: {
           studentId: { type: 'string', description: '学生 ID' },
+          clientRequestId: { type: 'string', description: '可选的租户内幂等请求编号（1-128 字符）' },
           lessonId: { type: 'string', description: '关联课程 ID，可选' },
           title: { type: 'string', description: '反馈标题' },
           content: { type: 'string', description: '反馈内容' },
@@ -84,6 +85,10 @@ export function registerFeedbackTools(
       if (typeof a.content !== 'string' || a.content.trim() === '') {
         return { ok: false, error: validationError('content 必须是非空字符串', 'content') };
       }
+      if (a.clientRequestId !== undefined && a.clientRequestId !== null
+        && (typeof a.clientRequestId !== 'string' || a.clientRequestId.trim() === '' || a.clientRequestId.length > 128)) {
+        return { ok: false, error: validationError('clientRequestId 必须是 1-128 个字符的非空字符串', 'clientRequestId') };
+      }
 
       const evidence = a.evidence;
       if (evidence !== undefined && evidence !== null && !Array.isArray(evidence)) {
@@ -102,6 +107,7 @@ export function registerFeedbackTools(
 
       return feedback.createFeedback({
         teacherId: context.teacherId,
+        clientRequestId: typeof a.clientRequestId === 'string' ? a.clientRequestId.trim() : undefined,
         studentId: a.studentId,
         lessonId: typeof a.lessonId === 'string' ? a.lessonId : undefined,
         title: a.title,

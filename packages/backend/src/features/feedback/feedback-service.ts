@@ -277,9 +277,11 @@ export function createFeedbackService(options: CreateFeedbackServiceOptions): Fe
           orderBy: { sortOrder: 'asc' },
         });
 
-        const evidence: FeedbackEvidenceSnapshotInput[] = evidenceRecords.map((rec) => ({
-          id: rec.recordId ?? undefined,
-          type: rec.type as EvidenceType,
+          const evidence: FeedbackEvidenceSnapshotInput[] = evidenceRecords.map((rec) => ({
+            id: rec.recordId ?? undefined,
+          sourceVersion: rec.sourceVersion ?? undefined,
+          originalDeleted: rec.originalDeletedAtSave ?? undefined,
+            type: rec.type as EvidenceType,
           occurredAt: rec.occurredAtTs.toISOString(),
           category: rec.category,
           // P8 phase-3 批5：summary/parentConcerns/followUps 解密（双读：明文旧行直通）

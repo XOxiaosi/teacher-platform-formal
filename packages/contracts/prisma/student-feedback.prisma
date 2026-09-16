@@ -3,6 +3,9 @@ model ParentFeedback {
   teacherId  String
   studentId  String
   lessonId   String?
+  clientRequestId String? // A05 optional legacy-compatible tenant request key
+  requestFingerprint String? // Immutable canonical creation request SHA-256
+  creationReceiptCiphertext String? // Encrypted JSON {version:1, feedback: original creation response}
   title      String
   content    String
   status     String    @default("draft") // draft | reviewed | sent | archived
@@ -18,6 +21,7 @@ model ParentFeedback {
   lesson  Lesson? @relation(fields: [lessonId], references: [id])
   contextSnapshot FeedbackContextSnapshot?
 
+  @@unique([teacherId, clientRequestId])
   @@index([studentId])
   @@index([lessonId])
 }
@@ -144,6 +148,8 @@ model FeedbackEvidence {
   teacherId      String
   snapshotId     String
   recordId       String? // 引用的源 StudentRecord id（若适用）
+  sourceVersion String? // Server evidence fingerprint at save; legacy unknown stays null
+  originalDeletedAtSave Boolean? // Provenance at save, not current source state; legacy unknown stays null
   type           String // assessment | record | lesson | media（media=多媒体证据，S3 线扩展）
   occurredAtTs   DateTime  @db.Timestamptz(3)
   category       String?

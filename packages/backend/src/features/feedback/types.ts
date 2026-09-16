@@ -69,6 +69,8 @@ export interface ParentFeedbackData {
   moderationReasons: string[] | null;
   createdAt: Date;
   updatedAt: Date;
+  /** 首次保存返回 false，使用同一请求编号重放时返回 true。 */
+  replayed?: boolean;
 }
 
 export interface CreateFeedbackInput {
@@ -82,6 +84,8 @@ export interface CreateFeedbackInput {
   evidence?: FeedbackEvidenceSnapshotInput[];
   windowStart?: string;
   windowEnd?: string;
+  /** 可选的租户内幂等请求编号（1-128 字符）。 */
+  clientRequestId?: string;
 }
 
 export interface GetFeedbackInput {

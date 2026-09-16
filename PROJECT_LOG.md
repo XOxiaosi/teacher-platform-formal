@@ -252,3 +252,7 @@ V009 是产品语义版本，不为每个实现 commit 升版；同一任务允�
 - P6-EXPORT收口提交：48模型全部字段分类、43业务表强制教师隔离、凭据排除、媒体源路径及输出/ZIP保护通过同波完整门禁；stored_encoding边界明确。A05-EVIDENCE已提交30722ebca9b96a5573a702370064b94b4b1bd740；本包9文件，提交关联feat(P6-EXPORT)。下一波A05-SAVE/P6-READABLE/P6-RETENTION依赖已满足，立即开工；不启用真实调用、资料或清理。
 
 - 第三波 P6-RETENTION：新增纯 `planRetention`，按可信 UTC 年龄达到 30 天过期，支持 dump/manifest/media 关联组；未知格式、未来时间、无效日期和组内异常 fail-closed。`applyRetention(maxAgeDays)` 的 dry-run 只列 keys，不调用 get/put/delete；db-backup 已切换 30 天年龄入口。合成 retention-policy + 兼容 retention 测试 13/13 通过。P6-READABLE 和 A05-SAVE 尚未完成，完整 check 需待三包收口后重跑。
+
+- 第三波 A05-SAVE：ParentFeedback 增加可选租户请求编号、请求指纹和加密创建回执；FeedbackEvidence 保存服务器来源版本及保存时原件删除状态。创建事务先以教师/请求编号 advisory lock 查找回执，再执行时钟、学生/课次归属和依据锁定；同指纹只解密不可变回执重放并标记 `replayed=true`，指纹冲突零写入，旧无请求编号调用保持兼容。HTTP、workspace-web 和 feedback.create 工具均透传请求编号，快照读取返回保存时来源元数据。
+- A05-SAVE 验证：后端构建通过；隔离 PostgreSQL 17.10 下 A05-SAVE 3 项（同键重放/加密回执、指纹冲突、旧调用兼容）通过，既有 feedback.create 5 项通过。证据日志待写入 `V009-next-20260916/a05-save-idempotency.log`；完整 `npm run check` 需在 P6-READABLE 收口后重跑。
+- A05-SAVE 提交：仅提交保存回执服务、类型/路由/工具透传、Prisma schema/迁移、聚焦测试和本日志；提交 SHA 在紧随其后的日志校准提交中记录。P6-READABLE 仍未实现，TASK-SOURCES/TASK-INVALIDATION 仍是后续依赖；不调用真实模型、资料或外部服务。

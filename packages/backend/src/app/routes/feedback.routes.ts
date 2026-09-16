@@ -44,6 +44,7 @@ export function createFeedbackRouter(dependencies: FeedbackGenerateRouteDependen
       lessonId: parsed.value.lessonId,
       channel: parsed.value.channel,
       parentName: parsed.value.parentName,
+      clientRequestId: parsed.value.clientRequestId,
       evidence: parsed.value.evidence as CreateFeedbackInput['evidence'],
       windowStart: parsed.value.windowStart,
       windowEnd: parsed.value.windowEnd,
@@ -130,6 +131,7 @@ function parseCreateFeedbackBody(body: unknown): Result<
     lessonId?: string;
     channel?: string;
     parentName?: string;
+    clientRequestId?: string;
     evidence?: unknown[];
     windowStart?: string;
     windowEnd?: string;
@@ -168,6 +170,12 @@ function parseCreateFeedbackBody(body: unknown): Result<
     return { ok: false, error: validationError('parentName 必须是字符串', 'parentName') };
   }
 
+  const clientRequestId = record.clientRequestId;
+  if (clientRequestId !== undefined && clientRequestId !== null
+    && (typeof clientRequestId !== 'string' || clientRequestId.trim() === '' || clientRequestId.length > 128)) {
+    return { ok: false, error: validationError('clientRequestId 必须是 1-128 个字符的非空字符串', 'clientRequestId') };
+  }
+
   const evidence = record.evidence;
   if (evidence !== undefined && evidence !== null && !Array.isArray(evidence)) {
     return { ok: false, error: validationError('evidence 必须是数组', 'evidence') };
@@ -192,6 +200,7 @@ function parseCreateFeedbackBody(body: unknown): Result<
       lessonId: typeof lessonId === 'string' ? lessonId : undefined,
       channel: typeof channel === 'string' ? channel : undefined,
       parentName: typeof parentName === 'string' ? parentName : undefined,
+      clientRequestId: typeof clientRequestId === 'string' ? clientRequestId.trim() : undefined,
       evidence: Array.isArray(evidence) ? evidence : undefined,
       windowStart: typeof windowStart === 'string' ? windowStart : undefined,
       windowEnd: typeof windowEnd === 'string' ? windowEnd : undefined,

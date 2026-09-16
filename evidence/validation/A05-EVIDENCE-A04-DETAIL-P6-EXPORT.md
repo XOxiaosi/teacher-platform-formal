@@ -51,3 +51,10 @@
 - 第二次 `npm run check`（check-02.log）实际退出0：后端319文件/2772项、前端47文件/293项、管理端13文件/84项全部通过；运维139项通过、2项Windows专属跳过。治理19项、文件长度、类型、lint及最终构建全部通过。
 - 236项源码指纹在结束后核验一致，check-02-hashes.json留证；最终文档另外运行治理/长度/差异检查。
 - 首轮邀请404在本轮3项全部通过，但原因未知；额外shuffle afterAll失败未被包装成通过。P6仅存储格式导出完成，后续可读导出和30天保留仍待实现。A05真实模型效果、Windows和真实用户验收未执行。
+
+## 第三波 A05-SAVE
+
+- ParentFeedback 采用可选 `clientRequestId`（租户内唯一）、不可变 SHA-256 请求指纹和 `enc:v1` 创建回执；回执中只保存原始创建响应，重放在时钟、归属和来源重查之前完成，指纹变化返回 VERSION_CONFLICT。FeedbackEvidence 记录 `sourceVersion` 与 `originalDeletedAtSave`，旧行保持 nullable 兼容。
+- 实现覆盖服务、HTTP 路由、workspace-web、feedback.create 工具和 Prisma 第39项增量迁移；同事务完成回执、反馈、审计、快照及证据写入，旧无键调用不产生回执。
+- 隔离 PostgreSQL 17.10 证据：A05-SAVE 3/3 通过（`a05-save-idempotency.log`），既有 feedback.create 5/5 通过；后端 TypeScript build 退出0。测试使用 harness 合成教师/学生和随机密钥，未使用真实资料、模型或外部服务。
+- 当前边界：完整 `npm run check` 尚未因 P6-READABLE 未收口而重跑；P6-EXPORT 当前只证明 stored_encoding，不能当作可读解密 ZIP；TASK-SOURCES/TASK-INVALIDATION 仍未完成。
