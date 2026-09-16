@@ -67,6 +67,16 @@ describe('TeacherProvider session 化', () => {
     expect(screen.getByTestId('error')).toHaveTextContent('');
   });
 
+  it('首次匿名 me 401 触发全局回调时不显示会话过期', async () => {
+    vi.mocked(authApi.me).mockResolvedValue(null);
+
+    render(<TeacherProvider><Probe /></TeacherProvider>);
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('anon'));
+    act(() => { sessionExpiredHandlers[0]?.(); });
+
+    expect(screen.getByTestId('error')).toHaveTextContent('');
+  });
+
   it('me 网络失败转 anon 并带可重试错误文案', async () => {
     vi.mocked(authApi.me).mockRejectedValue(new Error('network down'));
 
@@ -122,7 +132,7 @@ describe('TeacherProvider session 化', () => {
     expect(authApi.logout).toHaveBeenCalledTimes(1);
   });
 
-  it('logout 请求失败仍本地清态转 anon', async () => {
+  it('logout 请求失败保留 authed 并带错误，不伪装已退出', async () => {
     vi.mocked(authApi.me).mockResolvedValue(demoMe);
     vi.mocked(authApi.logout).mockRejectedValue(new Error('network down'));
 
@@ -141,7 +151,9 @@ describe('TeacherProvider session 化', () => {
 
     screen.getByRole('button', { name: '退出' }).click();
 
-    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('anon'));
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('authed'));
+    expect(screen.getByTestId('teacherId')).toHaveTextContent('teacher-1');
+    expect(screen.getByTestId('error')).toHaveTextContent('退出登录失败');
   });
 
   it('业务 401 全局回调（onSessionExpired）→ anon + 「会话已过期，请重新登录」', async () => {
