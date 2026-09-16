@@ -125,3 +125,32 @@ test('applyRetention：dry-run 不删除不归档，返回清单', async () => {
   assert.equal(result.dryRun, true);
   assert.equal((await storage.list('daily/')).length, 8); // 未删除
 });
+
+test('applyRetention：maxAgeDays 按年龄清理并保留未知项', async () => {
+  const calls = [];
+  const storage = {
+    async list(prefix) {
+      return prefix === 'daily/'
+        ? ['daily/teacher_20260816-000000.dump', 'daily/teacher_20260820-000000.dump', 'daily/notes.txt']
+        : [];
+    },
+    async get(key) { calls.push(`get:${key}`); throw new Error('dry-run must not read'); },
+    async put(key) { calls.push(`put:${key}`); },
+    async delete(key) { calls.push(`delete:${key}`); },
+  };
+  const result = await applyRetention(storage, { now: new Date('2026-09-16T00:00:00.000Z'), maxAgeDays: 30, dryRun: true });
+  assert.deepEqual(result.deletedDaily, ['teacher_20260816-000000.dump']);
+  assert.deepEqual(result.blocked, ['daily/notes.txt']);
+  assert.deepEqual(calls, []);
+});
+
+test('applyRetention：maxAgeDays 执行删除只删除过期键', async () => {
+  const deleted = [];
+  const storage = {
+    async list(prefix) { return prefix === 'daily/' ? ['daily/teacher_20260816-000000.dump'] : []; },
+    async delete(key) { deleted.push(key); },
+  };
+  const result = await applyRetention(storage, { now: new Date('2026-09-16T00:00:00.000Z'), maxAgeDays: 30 });
+  assert.deepEqual(result.deletedDaily, ['teacher_20260816-000000.dump']);
+  assert.deepEqual(deleted, ['daily/teacher_20260816-000000.dump']);
+});

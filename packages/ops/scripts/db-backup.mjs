@@ -321,14 +321,18 @@ async function main() {
   await chmod(manifestPath, 0o600);
   process.stdout.write(JSON.stringify({ tool: 'db-backup', ...manifest.summary, runId }) + '\n');
 
-  // 轮转：daily 7 天 / monthly 12 个月；归档后再次收紧新建 monthly 文件。
-  const retention = await applyRetention(storage, { now: new Date(), dryRun: false });
+  // 轮转：所有备份产物按可信 UTC 年龄最多保留 30 天；未知格式会进入
+  // blocked 清单而不会被删除。归档和清理均不读取备份正文以外的额外资料。
+  const retention = await applyRetention(storage, { now: new Date(), maxAgeDays: 30, dryRun: false });
   await hardenBackupPermissions(root);
   if (retention.deletedDaily.length > 0) {
     process.stdout.write(`retention: deleted daily ${retention.deletedDaily.length}\n`);
   }
   if (retention.deletedMonthly.length > 0) {
     process.stdout.write(`retention: deleted monthly ${retention.deletedMonthly.length}\n`);
+  }
+  if (retention.deletedDeactivated?.length > 0) {
+    process.stdout.write(`retention: deleted deactivated ${retention.deletedDeactivated.length}\n`);
   }
 
   if (manifest.summary.failed > 0) process.exitCode = 1;

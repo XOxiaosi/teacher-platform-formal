@@ -9,6 +9,8 @@
  * dry-run：只算不动，返回将被处理清单。
  */
 
+import { planRetention, retentionTimestampFromKey } from './retention-policy.mjs';
+
 /** 从 dump 文件名解析时间戳；不匹配返回 null。 */
 export function parseBackupTimestamp(filename) {
   const match = /^(.+)_(\d{8})-(\d{6})\.dump$/.exec(filename);
@@ -48,6 +50,50 @@ export function computeMonthlyExpired(filenames, { keepMonths = 12 } = {}) {
 }
 
 /**
+ * Apply the age-based policy used by production backups.  The older count-based
+ * behavior remains available when maxAgeDays is omitted for compatibility with
+ * existing callers.  A dry run only lists keys; it never reads, writes, or
+ * deletes backup bytes.
+ */
+async function applyAgeRetention(storage, options) {
+  const {
+    now = new Date(), maxAgeDays = 30, dryRun = false,
+    dailyPrefix = 'daily/', monthlyPrefix = 'monthly/', deactivatedPrefix = 'deactivated/',
+  } = options;
+  const prefixes = [
+    [dailyPrefix, 'dump'],
+    [monthlyPrefix, 'dump'],
+    [deactivatedPrefix, 'media'],
+  ];
+  const inventory = [];
+  for (const [prefix, defaultKind] of prefixes) {
+    const keys = await storage.list(prefix);
+    for (const key of keys) {
+      const base = key.slice(prefix.length);
+      const kind = base.startsWith('MANIFEST-') ? 'manifest' : defaultKind;
+      inventory.push({ key, kind, timestamp: retentionTimestampFromKey(key) });
+    }
+  }
+  const plan = planRetention(inventory, { now, maxAgeDays });
+  const expire = new Set(plan.expire);
+  const deletedDaily = plan.expire.filter((key) => key.startsWith(dailyPrefix));
+  const deletedMonthly = plan.expire.filter((key) => key.startsWith(monthlyPrefix));
+  const deletedDeactivated = plan.expire.filter((key) => key.startsWith(deactivatedPrefix));
+  if (!dryRun) {
+    for (const key of expire) await storage.delete(key);
+  }
+  return {
+    archived: [],
+    deletedDaily: deletedDaily.map((key) => key.slice(dailyPrefix.length)),
+    deletedMonthly: deletedMonthly.map((key) => key.slice(monthlyPrefix.length)),
+    deletedDeactivated: deletedDeactivated.map((key) => key.slice(deactivatedPrefix.length)),
+    blocked: plan.blocked,
+    plan,
+    dryRun,
+  };
+}
+
+/**
  * 执行保留策略。
  * @param {import('./storage-backend.mjs').StorageBackend} storage
  * @param {object} options
@@ -58,6 +104,7 @@ export function computeMonthlyExpired(filenames, { keepMonths = 12 } = {}) {
  * @returns {Promise<{archived: string[], deletedDaily: string[], deletedMonthly: string[], dryRun: boolean}>}
  */
 export async function applyRetention(storage, options = {}) {
+  if (options.maxAgeDays !== undefined) return applyAgeRetention(storage, options);
   const {
     now = new Date(),
     keepDays = 7,

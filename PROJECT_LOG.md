@@ -250,3 +250,5 @@ V009 是产品语义版本，不为每个实现 commit 升版；同一任务允�
 - A05-EVIDENCE收口提交：服务器权威依据、生成前后版本校验、事务内重查和加密/审计回滚通过同波最终完整门禁；工具要求真实正式记录ID和透传版本。A04-DETAIL已提交a2e5fcaa129bf8c2d055696a9db20a9b38477850，本包35个源码/测试文件，提交关联feat(A05-EVIDENCE)；下一项立即提交P6-EXPORT。
 
 - P6-EXPORT收口提交：48模型全部字段分类、43业务表强制教师隔离、凭据排除、媒体源路径及输出/ZIP保护通过同波完整门禁；stored_encoding边界明确。A05-EVIDENCE已提交30722ebca9b96a5573a702370064b94b4b1bd740；本包9文件，提交关联feat(P6-EXPORT)。下一波A05-SAVE/P6-READABLE/P6-RETENTION依赖已满足，立即开工；不启用真实调用、资料或清理。
+
+- 第三波 P6-RETENTION：新增纯 `planRetention`，按可信 UTC 年龄达到 30 天过期，支持 dump/manifest/media 关联组；未知格式、未来时间、无效日期和组内异常 fail-closed。`applyRetention(maxAgeDays)` 的 dry-run 只列 keys，不调用 get/put/delete；db-backup 已切换 30 天年龄入口。合成 retention-policy + 兼容 retention 测试 13/13 通过。P6-READABLE 和 A05-SAVE 尚未完成，完整 check 需待三包收口后重跑。
