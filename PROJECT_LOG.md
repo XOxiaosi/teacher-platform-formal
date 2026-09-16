@@ -310,3 +310,8 @@ V009 是产品语义版本，不为每个实现 commit 升版；同一任务允�
 - 补充正式 `POST /feedback` 路由回归：成功路径同时断言 `lessonId`、`channel`、`parentName`、`clientRequestId`、`evidence` 及 `windowStart/windowEnd` 完整透传，认证教师身份仍来自请求上下文。专项 `feedback-generate.routes.snapshot.test.ts` 9/9 通过。
 - 验收矩阵集中记录于 [A06/P2 正式入口与合成任务证据](evidence/validation/A06-P2-HTTP-ACCEPTANCE.md)，与现有 A05 服务层、A06 ConnectedWorkspace、原型离页回归及浏览器日志相互引用；没有新增真实服务调用或产品范围。
 - 当前投影仍为进行中：正式认证 HTTP 的真实登录浏览器、真实模型/DSH、真实 Windows/手机、跨设备草稿恢复、真实教师资料、渠道发送及用户验收 Gate 尚未关闭。下一步继续做可在本地完成的 HTTP/设备验收准备，并在代码冻结后重跑完整 `npm run check`。
+
+### A06-P2-GATE-RECHECK｜2026-09-16｜全量瞬时失败复核
+
+- 新增路由契约后的首次完整 Gate 在后端 322 文件/2782 测试中通过 321/2781，唯一失败为 `tests/e2e/teaching-tasks.routes.test.ts` 一次 `socket hang up`；原始日志保留在 `V009-next-20260916/check-11-a06-http-contract.log`，不将该轮标为通过。
+- 同一隔离 PostgreSQL 17 harness 单独重跑该文件 5/5 通过，证据为 `V009-next-20260916/teaching-tasks-rerun-11.log`，暂未发现可复现源码缺陷。完整 Gate 仍需在本次复核后重新执行并以最终退出码为准。

@@ -27,3 +27,7 @@
 - 本记录不授予发送、发布、部署或读取真实资料的权限。
 
 原始浏览器日志：`/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/a06-browser-feedback.log`。
+
+## Gate 复核
+
+首次在新增路由契约之后运行完整 `npm run check` 时，后端 322 个文件中 321 个通过、2782 个测试中 2781 个通过；唯一失败是 `tests/e2e/teaching-tasks.routes.test.ts` 的一次 `socket hang up`。随后用同一隔离 PostgreSQL 17 harness 单独重跑该文件，5/5 通过，原始日志为 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/teaching-tasks-rerun-11.log`。完整 Gate 仍需在这次复核后重跑并以最终退出码为准。
