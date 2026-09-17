@@ -11,13 +11,12 @@ vi.mock('./useAssistantMessages', () => ({ useAssistantMessages: () => ({ messag
 
 beforeEach(() => { location.hash = '#/agent/one'; });
 
-describe('assistant three-column layout', () => {
-  it('places the task board before the session column and main conversation', async () => {
+describe('assistant conversation-first layout', () => {
+  it('keeps the session column beside the main conversation without an embedded board', async () => {
     render(<AssistantWorkspace teacherId="teacher-a" />);
-    const board = screen.getByLabelText('任务看板');
+    expect(screen.queryByLabelText('任务看板')).not.toBeInTheDocument();
     const sessions = screen.getByLabelText('会话列表');
     const conversation = await screen.findByLabelText('当前会话');
-    expect(board.compareDocumentPosition(sessions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(sessions.compareDocumentPosition(conversation) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

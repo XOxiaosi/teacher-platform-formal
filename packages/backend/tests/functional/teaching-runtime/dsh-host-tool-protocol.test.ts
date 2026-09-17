@@ -10,10 +10,17 @@ const request: DshHostRunRequest = {
 };
 const response = (callId = 1) => ({ type: 'tool_result', sessionId: request.sessionId, executionId: request.executionId, callId, result: { ok: true, value: { balance: 8 } } });
 
-describe('DSH host only-read bidirectional JSONL contract', () => {
+describe('DSH host scoped bidirectional JSONL contract', () => {
   it('accepts an explicit read-only request without teacher identity or credentials', () => {
     expect(parseHostRequest(request)).toEqual(request);
     expect(parseHostRequest({ ...request, tools: [] }).tools).toEqual([]);
+  });
+  it('accepts the explicitly scoped teacher-owned student write', () => {
+    const parsed = parseHostRequest({ ...request, tools: [{
+      name: 'students.create', description: '创建学生', sideEffect: 'create',
+      parameters: { type: 'object', properties: { name: { type: 'string' }, grade: { type: 'string' } }, required: ['name', 'grade'] },
+    }] });
+    expect(parsed.tools[0]).toMatchObject({ name: 'students.create', sideEffect: 'create' });
   });
   it.each([
     { tools: undefined }, { sessionRoot: 'relative' }, { sessionRoot: undefined }, { resume: undefined },

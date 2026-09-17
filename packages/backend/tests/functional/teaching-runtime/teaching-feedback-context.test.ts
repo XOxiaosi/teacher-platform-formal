@@ -17,6 +17,7 @@ describe('A05 feedback context admission', () => {
   it('只将 feedback.list 作为教师范围只读工具接入，不注册反馈写工具', () => {
     const { registry } = fixture();
     const definitions = registry.list();
+    expect(definitions.find(tool => tool.name === 'students.create')).toMatchObject({ sideEffect: 'create' });
     expect(definitions.map(tool => tool.name)).toContain('feedback.list');
     expect(definitions.find(tool => tool.name === 'feedback.list')).toMatchObject({ sideEffect: 'read' });
     expect(definitions.map(tool => tool.name)).not.toContain('feedback.create');
@@ -37,7 +38,7 @@ describe('A05 feedback context admission', () => {
     expect(count).toHaveBeenCalledWith({ where: { teacherId: 'teacher-a', studentId: 'student-a', status: 'draft' } });
   });
 
-  it('教学 query 端口仍只暴露已审计的反馈读取，不能执行 feedback.create', async () => {
+  it('教学工具端口只暴露已审计的反馈读取，不能执行 feedback.create', async () => {
     const { registry } = fixture();
     const tools = createTeachingQueryTools(registry, 'teacher-a');
     expect(tools.definitions.map(tool => tool.name)).toContain('feedback.list');

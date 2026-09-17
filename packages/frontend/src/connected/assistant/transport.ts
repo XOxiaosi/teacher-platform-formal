@@ -14,7 +14,7 @@ export interface AssistantCapabilities {
   canRead: boolean;
   /** Can the connected assistant perform formal workspace writes in this session? */
   canWrite: boolean;
-  /** Formal writes still require an explicit teacher confirmation. */
+  /** High-impact formal writes still require an explicit teacher confirmation. */
   writeRequiresConfirmation: boolean;
 }
 export type AssistantTaskEvent = TeachingTaskEventDto;

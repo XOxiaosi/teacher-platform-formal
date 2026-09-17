@@ -26,7 +26,8 @@ function toAssistantTask(task: TeachingTaskDto): AssistantTask {
 }
 
 /** Formal assistant transport. It only calls the persisted teaching-task API;
- * model execution remains server-side and unavailable until a verified DSH
+ * teacher-scoped reads and student-list writes are handled by the server-side
+ * runtime, while model execution remains unavailable until a verified DSH
  * runtime is explicitly configured. */
 export function createTeachingTaskTransport(
   options: {
@@ -36,7 +37,7 @@ export function createTeachingTaskTransport(
 ): AssistantTransport {
   return {
     runtimeAvailability: options.runtimeAvailability ?? 'unavailable',
-    capabilities: options.capabilities ?? { canRead: true, canWrite: false, writeRequiresConfirmation: true },
+    capabilities: options.capabilities ?? { canRead: true, canWrite: true, writeRequiresConfirmation: false },
     async createConversation({ teacherId }) {
       return (await createTeachingConversation(teacherId)).id;
     },

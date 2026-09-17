@@ -27,6 +27,8 @@ type ModuleLoader = (relativePath: string) => Promise<Record<string, any>>;
 
 const QUERY_NAMES = new Set(['students.get', 'students.list', 'students.balance', 'scheduling.list',
   'lessons.list', 'payments.list', 'feedback.list', 'memos.list']);
+const WRITE_NAMES = new Set(['students.create']);
+const ALLOWED_TOOL_NAMES = new Set([...QUERY_NAMES, ...WRITE_NAMES]);
 const FORBIDDEN_ARGUMENTS = ['teacherId', 'prisma', 'credentials', 'apiKey'];
 const MAX_FRAME_BYTES = 1024 * 1024;
 /** DeepSeek function names accept only letters, numbers, `_` and `-`; the
@@ -40,12 +42,13 @@ export function parseHostRequest(value: unknown): HostRequest {
     || !Array.isArray(value.history) || value.history.some(item => !object(item) || !['user', 'assistant'].includes(item.role) || typeof item.content !== 'string')
     || typeof value.sessionRoot !== 'string' || !isAbsolute(value.sessionRoot)
     || typeof value.resume !== 'boolean'
-    || !Array.isArray(value.tools) || value.tools.length > QUERY_NAMES.size
+    || !Array.isArray(value.tools) || value.tools.length > ALLOWED_TOOL_NAMES.size
     || FORBIDDEN_ARGUMENTS.some(key => Object.hasOwn(value, key))) throw protocolError();
   const names = new Set<string>();
   for (const definition of value.tools) {
-    if (!object(definition) || !QUERY_NAMES.has(definition.name) || names.has(definition.name)
-      || definition.sideEffect !== 'read' || ![undefined, 'none'].includes(definition.confirmation)
+    if (!object(definition) || !ALLOWED_TOOL_NAMES.has(definition.name) || names.has(definition.name)
+      || (QUERY_NAMES.has(definition.name) ? definition.sideEffect !== 'read' : definition.sideEffect !== 'create')
+      || ![undefined, 'none'].includes(definition.confirmation)
       || typeof definition.description !== 'string' || !object(definition.parameters)
       || definition.parameters.type !== 'object' || !object(definition.parameters.properties)
       || FORBIDDEN_ARGUMENTS.some(key => Object.hasOwn(definition.parameters.properties, key))) throw protocolError();
@@ -54,8 +57,9 @@ export function parseHostRequest(value: unknown): HostRequest {
   return structuredClone(value) as HostRequest;
 }
 
-/** One invocation, no direct database/network/shell access. Parent-side execute
- * is the step-bound runtime query, so successful and denied calls are auditable. */
+/** One invocation, no direct database/network/shell access. Parent-side
+ * execute is the step-bound runtime tool, so successful and denied calls are
+ * auditable. */
 export function createHostToolBridge(request: HostRequest, write: (frame: DshHostToolCall) => void, timeoutMs = 30_000) {
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 120_000) throw protocolError();
   const allowed = new Set(request.tools.map(tool => tool.name));
@@ -155,7 +159,7 @@ export async function runDshHost(root: string, request: HostRequest, bridge: Ret
         '你是教师平台的教学助手。',
         '只处理教学记录、学生、课程、课时和家长反馈相关工作。',
         '没有足够事实时先说明缺少哪些信息，不要编造学生或课程数据。',
-        '当前运行只允许回答和整理，不执行任何外部写入。',
+        '教师明确提供姓名和年级时，可以创建当前教师的学生；其他正式写入不在本次运行范围内。',
       ].join('\n'),
     });
     await ctx.plugin(ToolRuntime);

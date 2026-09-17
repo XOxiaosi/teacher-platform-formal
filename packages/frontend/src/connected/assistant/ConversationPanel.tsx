@@ -3,7 +3,7 @@ import { readDraft, writeDraft, type AssistantDraft } from './drafts';
 import { useConversation } from './useConversation';
 import { TurnContent } from './TurnContent';
 import { taskLabels, type AssistantTransport } from './transport';
-import type { AssistantCapabilities, AssistantTask, AssistantTaskEvent } from './transport';
+import type { AssistantTask, AssistantTaskEvent } from './transport';
 import type { MessageState } from './useAssistantMessages';
 import { formatDateTime } from '../../shared/date-format';
 
@@ -11,8 +11,6 @@ interface Props {
   teacherId: string; conversationId: string; transport?: AssistantTransport; messageState?: MessageState;
   send: (conversationId: string, draft: AssistantDraft) => Promise<void>; onArchive: () => void;
 }
-const readOnlyCapabilities: AssistantCapabilities = { canRead: true, canWrite: false, writeRequiresConfirmation: true };
-
 function compactTasks(tasks: AssistantTask[]): Array<{ task: AssistantTask; count: number }> {
   return tasks.reduce<Array<{ task: AssistantTask; count: number }>>((groups, task) => {
     const group = groups.find(item => item.task.status === task.status && item.task.summary === task.summary);
@@ -39,18 +37,6 @@ function compactEvents(events: AssistantTaskEvent[]): Array<AssistantTaskEvent &
   }, []);
 }
 
-function PermissionSummary({ capabilities }: { capabilities: AssistantCapabilities }) {
-  const canWrite = capabilities.canWrite;
-  return <section className="assistant-permission" aria-label="本次会话权限">
-    <header><h3>权限与下一步</h3><strong>{canWrite ? '可整理，变更需确认' : '只读查询与整理'}</strong></header>
-    <dl>
-      <div><dt>可以做</dt><dd>读取已有资料、核对信息、整理待处理草稿。</dd></div>
-      <div><dt>正式写入</dt><dd>{canWrite ? '可提出待确认的学生、课程、课时或提醒变更。' : '本轮未开放；没有学生、课程、课时或提醒写入回执。'}</dd></div>
-      <div><dt>下一步</dt><dd>{canWrite ? '先核对变更内容，再确认执行。' : '需要落库时，请切换到已开放写入的操作环境，并重新核对结果。'}</dd></div>
-    </dl>
-  </section>;
-}
-
 export function ConversationPanel({ teacherId, conversationId, transport, messageState, send, onArchive }: Props) {
   const session = useConversation(teacherId, conversationId, transport, messageState?.acceptedRequestId);
   const [draft, setDraft] = useState(() => readDraft(teacherId, conversationId));
@@ -58,7 +44,6 @@ export function ConversationPanel({ teacherId, conversationId, transport, messag
   const tasks = session.tasks.length ? session.tasks : messageState?.task ? [messageState.task] : [];
   const visibleTasks = compactTasks(tasks);
   const visibleEvents = compactEvents(session.events);
-  const capabilities = transport?.capabilities ?? readOnlyCapabilities;
   const changeDraft = (text: string) => {
     if (draft.awaitingReceipt || messageState?.sending) return;
     const next = { text, requestId: crypto.randomUUID() };
@@ -73,10 +58,9 @@ export function ConversationPanel({ teacherId, conversationId, transport, messag
     {session.busy && <p role="status">正在读取会话…</p>}
     {session.error && <div role="alert"><p>{session.error}</p><button type="button" disabled={session.busy} onClick={() => { void session.load(); }}>重新读取会话</button></div>}
     {session.conversation && <>
-      <PermissionSummary capabilities={capabilities} />
       <section className="assistant-tasks" aria-label="任务进度" aria-live="polite">
         {visibleTasks.map(({ task, count }) => <article key={`${task.status}:${task.summary}`}>
-          <header><strong>{taskLabels[task.status]}</strong><span>结果范围：{capabilities.canWrite ? '查询与待确认变更' : '查询与整理'}</span></header>
+          <header><strong>{taskLabels[task.status]}</strong></header>
           <p>{task.summary}</p>
           {count > 1 && <small>相同状态已合并显示 · {count} 个任务仍可从下方会话内容回看</small>}
           {task.canResume && transport?.resumeTask && <button type="button" disabled={session.resumingTaskId !== null}

@@ -26,6 +26,10 @@ const task = (overrides: Partial<TeachingTaskDto> = {}): TeachingTaskDto => ({
 beforeEach(() => vi.clearAllMocks());
 
 describe('formal teaching task transport', () => {
+  it('grants the teacher role student-list writes while keeping confirmation metadata', () => {
+    expect(createTeachingTaskTransport().capabilities).toEqual({ canRead: true, canWrite: true, writeRequiresConfirmation: false });
+  });
+
   it('uses the durable teaching task API and keeps unavailable explicit', async () => {
     api.create.mockResolvedValue({ id: 'conversation-1', createdAt: '2026-09-15T12:00:00Z' });
     api.send.mockResolvedValue({ task: task(), receipt: { executionId: 'execution-1', userTurnId: 'turn-1', clientRequestId: 'request-1', receivedAt: '2026-09-15T12:00:00Z' }, replayed: false });

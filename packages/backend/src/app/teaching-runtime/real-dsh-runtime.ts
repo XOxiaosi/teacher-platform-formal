@@ -113,11 +113,16 @@ async function recordUsage(
 }
 
 const FORBIDDEN_TOOL_ARGUMENTS = new Set(['teacherId', 'prisma', 'credentials', 'apiKey']);
+/** The teacher role may create a teacher-owned student from explicit chat
+ * details. Other writes remain outside the real DSH bridge. */
+export const REAL_DSH_WRITE_TOOL_NAMES = new Set(['students.create']);
 function wireToolName(name: string): string { return name.replaceAll('.', '_'); }
 
 function safeToolDefinitions(input: TeachingRuntimeInput): ToolDefinition[] {
   return input.tools.definitions
-    .filter((definition) => definition.sideEffect === 'read' && definition.confirmation !== 'required')
+    .filter((definition) => (definition.sideEffect === 'read'
+      || REAL_DSH_WRITE_TOOL_NAMES.has(definition.name) && definition.sideEffect === 'create')
+      && definition.confirmation !== 'required')
     .map((definition) => {
       const parameters = structuredClone(definition.parameters);
       const normalizedParameters = Object.keys(parameters).length === 0
@@ -127,7 +132,7 @@ function safeToolDefinitions(input: TeachingRuntimeInput): ToolDefinition[] {
         name: definition.name,
         description: definition.description,
         parameters: normalizedParameters,
-        sideEffect: 'read' as const,
+        sideEffect: definition.sideEffect,
         ...(definition.confirmation ? { confirmation: definition.confirmation } : {}),
       };
     });

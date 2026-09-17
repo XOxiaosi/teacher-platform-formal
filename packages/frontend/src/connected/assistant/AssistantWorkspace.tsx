@@ -7,15 +7,13 @@ import { useAssistantMessages } from './useAssistantMessages';
 import type { AssistantTransport } from './transport';
 import './assistant.css';
 import { formatDateTime } from '../../shared/date-format';
-import type { DemoData } from '../../preview/data';
-import { AssistantDashboard } from './AssistantDashboard';
 
-interface Props { teacherId: string; transport?: AssistantTransport; dashboard?: DemoData }
+interface Props { teacherId: string; transport?: AssistantTransport }
 function routeConversation(): string | null {
   const match = /^#\/agent\/([^/?#]+)$/.exec(window.location.hash);
   try { return match ? decodeURIComponent(match[1]) : null; } catch { return null; }
 }
-function AccountWorkspace({ teacherId, transport, dashboard }: Props) {
+function AccountWorkspace({ teacherId, transport }: Props) {
   const [conversationId, setConversationId] = useState(routeConversation);
   const [status, setStatus] = useState<ConversationStatus>('active');
   const list = useConversationList(teacherId, status, transport);
@@ -30,9 +28,6 @@ function AccountWorkspace({ teacherId, transport, dashboard }: Props) {
   return <div className="assistant-workspace">
     <header className="assistant-page-heading"><h1>教学助手</h1><p>整理教学记录、核对课时，接着完成手头的工作。</p></header>
     <div className="assistant-layout">
-      <aside className="assistant-board-column" aria-label="任务看板">
-        <AssistantDashboard data={dashboard} transport={transport} />
-      </aside>
       <aside className="assistant-session-column" aria-label="会话列表">
         <section className="assistant-session-panel">
         <button type="button" className="assistant-new" disabled={list.creating} onClick={() => { void list.create().then(id => { if (id) { setStatus('active'); select(id); } }); }}>{list.creating ? '正在新建…' : '新建会话'}</button>

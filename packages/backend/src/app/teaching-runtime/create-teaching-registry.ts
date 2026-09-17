@@ -5,17 +5,42 @@ import { registerP0ReadTools } from '../tools/register-p0-read-tools.js';
 import { createBalanceCalcUseCase } from '../use-cases/balance-calc/balance-calc-use-case.js';
 import { createFeedbackService } from '../../features/feedback/index.js';
 import type { FeedbackStatus } from '../../features/feedback/index.js';
+import { createStudentService } from '../../features/students/index.js';
 import { parsePageArg } from '../tools/tool-arg-parsers.js';
 
 function isFeedbackStatus(value: unknown): value is FeedbackStatus {
   return value === 'draft' || value === 'reviewed' || value === 'sent' || value === 'archived';
 }
 
-/** Independently assembled query registry. No legacy write executor, provider
- * configuration, shell, or automatic notifier is registered. */
+/** Independently assembled teaching registry. It contains audited reads and
+ * the teacher-scoped student-list write used by the conversation runtime;
+ * scheduling, payment, feedback and other writes stay outside this port. */
 export function createTeachingRegistry(getClient: () => Promise<PrismaClient>) {
   const registry = createToolRegistry();
   registerP0ReadTools(registry, { getClient });
+  const students = createStudentService({ getClient });
+  registry.register({
+    name: 'students.create', description: '创建当前老师的学生；姓名和年级需由教师在对话中明确提供', sideEffect: 'create',
+    parameters: {
+      type: 'object', properties: {
+        name: { type: 'string', description: '学生姓名' },
+        grade: { type: 'string', description: '年级' },
+        source: { type: 'string', description: '来源，可选' },
+        stageGoal: { type: 'string', description: '阶段目标，可选' },
+      }, required: ['name', 'grade'], additionalProperties: false,
+    },
+  }, async (args, context) => {
+    const a = args && typeof args === 'object' && !Array.isArray(args) ? args as Record<string, unknown> : {};
+    if (typeof a.name !== 'string' || !a.name.trim()) return err(validationError('需要明确学生姓名', 'name'));
+    if (typeof a.grade !== 'string' || !a.grade.trim()) return err(validationError('需要明确学生年级', 'grade'));
+    return students.createStudent({
+      teacherId: context.teacherId,
+      name: a.name,
+      grade: a.grade,
+      source: typeof a.source === 'string' ? a.source : undefined,
+      stageGoal: typeof a.stageGoal === 'string' ? a.stageGoal : undefined,
+    });
+  });
   const balance = createBalanceCalcUseCase({ getClient });
   registry.register({
     name: 'students.balance', description: '查询学生当前课时余额，以正式账本为准；不扣课',

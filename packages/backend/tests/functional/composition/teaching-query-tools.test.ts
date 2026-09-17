@@ -6,6 +6,7 @@ import type { ToolDefinition, ToolRegistry } from '../../../src/shared/tool-regi
 function fixture() {
   const definitions: ToolDefinition[] = [
     { name: 'students.get', description: '查询学生', parameters: {}, sideEffect: 'read' },
+    { name: 'students.create', description: '创建学生', parameters: { type: 'object', properties: { name: { type: 'string' }, grade: { type: 'string' } } }, sideEffect: 'create' },
     { name: 'scheduling.complete', description: '完课', parameters: {}, sideEffect: 'update', confirmation: 'required' },
     { name: 'shell', description: 'Shell', parameters: {}, sideEffect: 'read' },
   ];
@@ -17,7 +18,7 @@ function fixture() {
 describe('A02 teaching query boundary', () => {
   it('exposes only audited reads and blocks legacy confirmation and arbitrary plugins', async () => {
     const { tools, execute } = fixture();
-    expect(tools.definitions.map((tool) => tool.name)).toEqual(['students.get']);
+    expect(tools.definitions.map((tool) => tool.name)).toEqual(['students.get', 'students.create']);
     expect((await tools.execute('scheduling.complete', {})).ok).toBe(false);
     expect((await tools.execute('shell', {})).ok).toBe(false);
     expect(execute).not.toHaveBeenCalled();
@@ -32,6 +33,12 @@ describe('A02 teaching query boundary', () => {
       expect((await tools.execute('students.get', args)).ok).toBe(false);
     }
     expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('binds the student-list write to the authenticated teacher', async () => {
+    const { tools, execute } = fixture();
+    expect((await tools.execute('students.create', { name: '新学生', grade: '高一' })).ok).toBe(true);
+    expect(execute).toHaveBeenCalledWith('students.create', { name: '新学生', grade: '高一' }, { teacherId: 'teacher-a' });
   });
 
   it('rechecks side effects at execution and does not trust a mutable tool list', async () => {

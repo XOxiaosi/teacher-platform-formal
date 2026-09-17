@@ -30,11 +30,11 @@ describe('A03 server-backed assistant conversations', () => {
     expect(await screen.findByText('最近材料')).toBeInTheDocument();
   });
 
-  it('opens a saved URL, shows true service availability and never calls the old executor', async () => {
+  it('opens a saved URL and never calls the old executor or renders a board', async () => {
     render(<AssistantWorkspace teacherId="teacher-a" />);
     await screen.findByRole('heading', { name: '会话one' });
     expect(api.detail).toHaveBeenCalledWith('teacher-a', 'one');
-    expect(screen.getByText(/AI 服务尚不可用/)).toBeInTheDocument();
+    expect(screen.queryByLabelText('任务看板')).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('交给教学助手的工作'), { target: { value: '整理记录' } });
     expect(screen.getByRole('button', { name: '发送' })).toBeDisabled();
     expect(api.sendLegacy).not.toHaveBeenCalled(); expect(api.confirmLegacy).not.toHaveBeenCalled();
