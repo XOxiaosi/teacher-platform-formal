@@ -486,10 +486,14 @@ V009 是产品语义版本，不为每个实现 commit 升版；同一任务允�
 - 实现：新增 `AssistantDashboard.tsx`，从正式 `DemoData` 投影今日课程、待补充、待核对、最近完成、AI 服务状态、快捷入口和最近学生；`AssistantWorkspace` 将看板与会话列表合并为助手侧栏，主对话增大为主要视觉区域；`ConnectedWorkspace` 将真实工作区快照传入看板；增加响应式样式与专项测试。
 - 当前验证：专项测试与真实浏览器桌面/窄屏检查待执行；不改变现有会话、任务、草稿、重试、恢复和人工业务接口，不新增服务、凭据、真实资料传输或平台范围。
 - 边界：外部 DSH 插件未安装；Windows、手机、真实教师资料和正式发布继续后置。完成条件为专项测试、浏览器证据和完整 `npm run check` 通过后提交实际 SHA。
-
 ### WEB-ASSISTANT-DASHBOARD-01-FINAL-GATE｜2026-09-17｜网页聊天优先与侧栏看板收口
 
 - 真实浏览器：已登录合成教师 `a@example.test` 进入 `/#/agent`，确认工作看板、会话列表和主对话均可见；选择已有会话后输入框仍位于主对话区域。桌面 viewport 1278px 下主对话宽 670px、侧栏宽 292px、页面 `scrollWidth=1278`，未见横向溢出。证据见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260917/web-assistant-dashboard-browser.log`。
 - 测试：专项助手测试 2 文件/18 项通过；完整前端测试 48 文件/306 项通过。`npm run check` 最终退出 0：治理、文件长度、类型、lint、隔离 PostgreSQL 17 全量测试和构建通过；后端 326 文件/2822 测试，前端 48 文件/306 测试，管理端 13 文件/84 测试，运维 151 项中 149 通过、2 项 Windows 专属跳过。原始输出见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260917/check-web-assistant-dashboard.log`。
 - 失败记录：第一次根门禁因本次 PRODUCT 新增段落使文档达到 501 行而在文件长度阶段退出；已压缩同一需求表述并重新执行，最终根门禁退出 0。期间后端日志中的微信未配置与幂等冲突为既有测试演练输出，未形成失败断言。
 - 完成边界：本工作包只改变网页助手布局和显示投影，不新增 API、服务、凭据或教师资料传输；外部 DSH 插件未安装。窄屏 CSS 已实现，但本次 in-app browser 未提供 viewport override，375/390/430 的实际浏览器尺寸仍未验证；Windows、手机、真实教师资料和正式发布继续后置。
+### WEB-ASSISTANT-THREE-COLUMN-02｜2026-09-17｜任务看板与会话列拆分
+- 用户补充要求：助手内容区域采用 Codex/DSH 风格的列关系，最左是任务看板，第二列是会话列表，当前对话保持主要宽度。
+- 实现：`AssistantWorkspace` 将看板、会话列表和 `ConversationPanel` 拆为三个相邻列；桌面宽度使用 220px / 240px / 剩余空间，窄窗口按看板→会话→对话顺序堆叠；会话路由、草稿、任务恢复、归档和发送逻辑保持不变。
+- 验证：新增三列 DOM 顺序测试；专项前端测试 3 文件/19 项、完整前端测试 49 文件/307 项、前端构建和 `git diff --check` 通过；浏览器 1278px 实测任务看板最左、会话列表第二、对话宽 490px，页面无横向溢出。`npm run check` 最终退出 0，后端 326 文件/2822 测试，前端 49 文件/307 测试，管理端 13 文件/84 测试，运维 149 项通过、2 项 Windows 专属跳过；证据见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260917/check-web-assistant-three-column.log`。
+- 边界：本包仍不安装外部 DSH 插件，不新增服务、凭据、资料传输或设备端开发；窄屏实际 viewport 仍待后续可用浏览器能力验证。

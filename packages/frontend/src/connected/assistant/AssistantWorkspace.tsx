@@ -30,9 +30,11 @@ function AccountWorkspace({ teacherId, transport, dashboard }: Props) {
   return <div className="assistant-workspace">
     <header className="assistant-page-heading"><h1>教学助手</h1><p>整理教学记录、核对课时，接着完成手头的工作。</p></header>
     <div className="assistant-layout">
-      <aside className="assistant-sidebar">
+      <aside className="assistant-board-column" aria-label="任务看板">
         <AssistantDashboard data={dashboard} transport={transport} />
-        <section className="assistant-session-panel" aria-label="会话列表">
+      </aside>
+      <aside className="assistant-session-column" aria-label="会话列表">
+        <section className="assistant-session-panel">
         <button type="button" className="assistant-new" disabled={list.creating} onClick={() => { void list.create().then(id => { if (id) { setStatus('active'); select(id); } }); }}>{list.creating ? '正在新建…' : '新建会话'}</button>
         <label>查看会话<select value={status} onChange={event => setStatus(event.target.value as ConversationStatus)}><option value="active">进行中的会话</option><option value="archived">已归档的会话</option></select></label>
         {list.busy && <p role="status">正在读取会话列表…</p>}
