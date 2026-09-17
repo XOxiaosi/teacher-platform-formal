@@ -24,7 +24,7 @@ export const EXPORT_POLICY = {
     exclude: ["apiKeyEnc"], relations: ["teacher"],
   },
   ProviderUsage: { source: 'shared_db',
-    fields: ["id","teacherId","providerConfigId","providerName","model","promptTokens","completionTokens","estimatedCostUsd","conversationId","requestAt","createdAtTs"],
+    fields: ["id","teacherId","providerConfigId","providerName","model","promptTokens","completionTokens","estimatedCostUsd","conversationId","taskId","executionId","sessionId","eventKey","outcome","usageStatus","synthetic","requestAt","createdAtTs"],
     exclude: [], relations: ["teacher"],
   },
   ChannelIdentity: { source: 'shared_db',
