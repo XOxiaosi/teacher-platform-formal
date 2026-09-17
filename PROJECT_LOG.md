@@ -12,15 +12,15 @@
 | 更新时间 | 2026-09-16（洛杉矶） |
 | 需求版本 | V009；已作为交互设计基线，D/B 待决定项仍未确认 |
 | 当前任务 | A02：网页真实 DeepSeek/DSH 持久化、刷新恢复与只读工具 Gate 收口 |
-| 当前任务状态 | 进行中（网页内容修复 01–09 已完成本地浏览器与工程验证；真实 DSH 文本链路、连接版网页后端、持久化会话、刷新恢复、跨进程只读教学工具和用量账本已通过合成教师 Gate；完整根门禁仍有两项负载敏感失败，双教师隔离与重启恢复回归待继续，Windows/手机开发按用户要求后置） |
+| 当前任务状态 | 进行中（网页工程 Gate 已完成：网页内容修复 01–09、真实 DSH 文本链路、持久化会话、刷新恢复、跨进程只读教学工具、双教师隔离、服务重启恢复和完整根门禁均已通过合成教师验证）；真实教师资料、跨设备和用户体验验收仍单列，Windows/手机开发按用户要求后置 |
 | 已有实现 | V008 正式人工业务；A01 持久消息、只读回执和租约恢复基础通过本地验证。A02 已有租约运行器、检查点校验、查询 StepReceipt、失败重试、显式 worker/心跳围栏、固定 DSH HEAD 的 opt-in DeepSeek/DSH JSONL bridge、仓库外 JSONL session persistence、双向只读工具桥、显式 local-safe 开关和带 task/execution/session/eventKey 的 ProviderUsage 记录；A03 已有正式助手任务/事件全分页恢复入口、恢复刷新和按教师清理草稿；A04 已在 Capture 删除事务中清理复制来源原文并保留 deleted 投影。真实教师资料、跨设备和设备端仍未验收 |
 | V009 进度 | 不报完成百分比；P0–P6 工程尚未按新版验收，方案完成不代表实现完成 |
 | 历史进度 | V008 工程基线 43%，只供追溯，不换算成 V009 进度 |
-| 交付门禁 | 网页内容与布局本地 Gate 通过；A02 真实 DeepSeek/DSH 文本、连接版网页后端、持久化会话、刷新后会话恢复、跨进程只读工具和用量账本定向 Gate 通过；完整根 `npm run check` 仍记录两项负载敏感失败；真实教师资料、Windows/跨设备/用户验收和发布仍独立未验证 |
-| 验证概况 | `check-26-web-content-09.log` 对应网页内容包完整 `npm run check` 退出 0：后端 323 文件/2783 项、前端 47 文件/304 项、管理端 13 文件/84 项全部通过；运维 151 项中149通过及2项Windows专属跳过。A02 真实 `deepseek-flash`、host 协议 27/27、离线桥 8/8、网页持久化/只读查询和 ProviderUsage 账本通过，证据见 `real-dsh-web-persistence-tools.log`；最新 `check-29-real-dsh-persistence.log` 记录完整根门禁退出 1（后端 324/326 文件、2818/2822 测试、3 项跳过），同两文件在隔离 PostgreSQL 17 与 60 秒 hookTimeout 下 2 文件/10 测试通过 |
-| 下一步 | 继续网页 Gate 的双教师隔离与重启恢复回归；若验收要求根门禁无条件退出 0，再单独处理既有测试默认钩子预算与并行负载抖动；网页 Gate 成熟后才按用户要求评估 Windows/手机开发 |
+| 交付门禁 | 网页内容与布局本地 Gate 通过；A02 真实 DeepSeek/DSH 文本、连接版网页后端、持久化会话、刷新后会话恢复、跨进程只读工具、双教师隔离、重启恢复和用量账本 Gate 通过；完整根 `npm run check` 已退出 0；真实教师资料、Windows/跨设备/用户验收和发布仍独立未验证 |
+| 验证概况 | `check-26-web-content-09.log` 对应网页内容包完整 `npm run check` 退出 0：后端 323 文件/2783 项、前端 47 文件/304 项、管理端 13 文件/84 项全部通过；运维 151 项中149通过及2项Windows专属跳过。最新 `check-30-real-dsh-web-final.log` 完整根门禁退出 0：后端 326 文件/2822 测试、前端 47 文件/304 测试、管理端 13 文件/84 测试、运维 151 项中149通过及2项Windows专属跳过，类型、lint、文件长度、隔离 PostgreSQL 17 和三端构建通过；A02 真实 `deepseek-flash`、host 协议 27/27、离线桥 8/8、网页持久化/只读查询、双教师隔离与重启恢复证据见 `real-dsh-web-persistence-tools.log`、`web-dsh-isolation-restart-rerun.log` |
+| 下一步 | 网页工程进入真实教师资料与网页用户验收边界；Windows/手机开发继续按用户要求后置，待网页体验 Gate 明确后再评估 |
 | 长任务目标及结束条件 | 持续推进 V009 当前计划已授权本地工程；每包核验、完整门禁、日志和 commit 后立即安排下游。仅整体完成、用户停止，或剩余任务均需决定/外部条件且无独立可执行工作时结束；真实模型和设备验收单列 |
-| 当前可执行任务 | 继续用合成教师做网页端双教师隔离与服务重启恢复回归；真实 DeepSeek/DSH 持久化与只读工具桥已具备定向证据，Windows/手机保持后置 |
+| 当前可执行任务 | 网页本地工程 Gate 已收口；下一步仅剩真实教师资料、跨设备与用户体验验收等外部边界，Windows/手机保持后置 |
 | 被阻塞任务及解除条件 | 根门禁无条件 0 退出受既有测试默认 hookTimeout 与并行负载抖动影响，低负载提高预算后可复跑；真实教师资料/渠道/设备验收仍需对应授权与环境；A05 状态迁移依赖 B01、P3 计费写入依赖 B02 决定。仅阻塞受影响部分，其他工作仍须核对依赖及授权；详见当前边界和待决定表 |
 
 ### 当前授权和运行边界
@@ -470,3 +470,11 @@ V009 是产品语义版本，不为每个实现 commit 升版；同一任务允�
 - 同一两文件在隔离 PostgreSQL 17、`--hookTimeout=60000` 下复跑 2 文件/10 测试通过（退出 0，11.52 秒），未复现产品断言失败；默认预算下的并行负载抖动仍记录为未关闭项。完整证据见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/check-29-real-dsh-persistence.log`。
 - DSH/网页真实路径证据仍见 `real-dsh-web-persistence-tools.log`：合成本地教师、真实 DeepSeek、持久化会话、刷新恢复、只读学生查询和用量账本均已通过。真实教师资料、渠道发送、正式发布、Windows、手机和跨设备继续后置；固定上游 DSH host 的完整构建仍受外部 `unrun` 插件缺失影响，未宣称已验证。
 - 下一步：若验收标准要求根门禁无条件退出 0，再在低负载下提高既有测试钩子预算并复跑；这属于现有测试稳定性包，不扩大本次网页 DSH 产品范围。
+
+### A02-REAL-DEEPSEEK-WEB-ISOLATION-RESTART-GATE｜2026-09-16｜双教师隔离与重启恢复回归
+
+- 在 `b0e6149` 修正运维迁移冒烟口径后，使用隔离 PostgreSQL 17 和 `--hookTimeout=60000` 完成双教师、任务重启恢复及完整网页/后端回归；双教师 owner isolation、DSH teaching-task recovery、真实运行时、持久化工具桥均通过。原始运行记录见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/web-dsh-isolation-restart-rerun.log`。
+- 完整 `npm run check` 退出 0，证据见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/check-30-real-dsh-web-final.log`：治理、文件长度、类型检查、lint、隔离 PostgreSQL 17 全量测试和构建均通过；后端 326/326 文件、2822/2822 测试，前端 47/47 文件、304/304 测试，管理端 13/13 文件、84/84 测试，运维 151 项中 149 通过、2 项 Windows PowerShell 专属跳过。
+- 本轮关闭 `check-29-real-dsh-persistence.log` 记录的两个并行负载敏感失败；隔离复跑没有复现 `socket hang up` 或默认 hook 超时。运维迁移计数由历史 39 校准为当前实际 40，相关测试已随 `b0e6149` 提交。
+- 完成边界：网页真实 DeepSeek/DSH 文本、仓库外 session persistence、刷新恢复、只读学生查询、ProviderUsage、双教师隔离、重启恢复和本地工程根门禁均有证据。真实教师资料、真实渠道、跨设备、Windows、手机、部署/发布和用户体验验收仍未验证；固定上游 DSH host 的完整构建仍受外部 `unrun` 插件缺失影响，不把它记为已验证。
+- 下一步：等待网页端真实教师资料与用户体验验收输入；网页 Gate 期间不启动 Windows/手机开发，不扩大产品范围。
