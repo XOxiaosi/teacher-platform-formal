@@ -462,3 +462,11 @@ V009 是产品语义版本，不为每个实现 commit 升版；同一任务允�
 - 数据库核验：两条 `TaskRuntime` 均为 `succeeded`，均有 `dshSessionRef` 与加密 `dshCheckpoint`；两条 `ProviderUsage` 为 `deepseek/deepseek-flash`、`synthetic=false`、`usageStatus=reported`，事件键包含教师会话、执行和事件序号。session.v3 JSONL 已在外部目录生成且权限为 `-rw-------`。完整浏览器、持久化、账本和边界记录见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/real-dsh-web-persistence-tools.log`。
 - 验证：host 协议 27/27、固定上游离线桥接 8/8；backend build/lint、真实运行时配置测试、launcher 配置测试和文件长度检查通过。根完整 `npm run check` 尚未在本轮 smoke 后重跑；此前 `check-27-real-dsh-web.log` 的 `db-routing-workflow` beforeAll 超时记录仍保留，不将其改写为通过。
 - 当前边界与下一步：网页端真实文本、持久化、刷新恢复、只读查询和用量账本已具备本地合成证据；真实教师资料、跨设备、Windows、手机、渠道发送和正式发布仍未验证。下一步继续网页端 Gate（双教师隔离与重启恢复回归），网页成熟后再规划 Windows 与手机。
+
+### A02-REAL-DEEPSEEK-WEB-PERSISTENCE-GATE｜2026-09-16｜完整回归与隔离复跑
+
+- `43bf86` 已把新增 `ProviderUsage` 教学运行字段纳入导出分类策略；隐私导出套件复跑 9/9 通过。
+- 完整 `npm run check` 退出 1：治理、文件长度、类型检查、lint、隐私导出、db-routing workflow 和构建通过；后端 324/326 文件、2818/2822 测试通过，3 项跳过。仅剩两项负载敏感的默认预算失败：`agent-execution-shadow-double-write` 的 `beforeAll` 在默认 10 秒内未完成隔离 PostgreSQL 初始化；`llm-line-workflow` owner-isolation 出现 `socket hang up`。
+- 同一两文件在隔离 PostgreSQL 17、`--hookTimeout=60000` 下复跑 2 文件/10 测试通过（退出 0，11.52 秒），未复现产品断言失败；默认预算下的并行负载抖动仍记录为未关闭项。完整证据见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/check-29-real-dsh-persistence.log`。
+- DSH/网页真实路径证据仍见 `real-dsh-web-persistence-tools.log`：合成本地教师、真实 DeepSeek、持久化会话、刷新恢复、只读学生查询和用量账本均已通过。真实教师资料、渠道发送、正式发布、Windows、手机和跨设备继续后置；固定上游 DSH host 的完整构建仍受外部 `unrun` 插件缺失影响，未宣称已验证。
+- 下一步：若验收标准要求根门禁无条件退出 0，再在低负载下提高既有测试钩子预算并复跑；这属于现有测试稳定性包，不扩大本次网页 DSH 产品范围。
