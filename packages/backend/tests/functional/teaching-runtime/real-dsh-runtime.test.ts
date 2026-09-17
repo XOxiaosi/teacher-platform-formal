@@ -18,6 +18,7 @@ describe('real DSH teaching runtime configuration gate', () => {
     const root = await mkdtemp(join(tmpdir(), 'teacher-platform-dsh-'));
     const keyFile = join(root, 'deepseek.env');
     const hostScript = join(root, 'host.ts');
+    const sessionRoot = join(root, 'sessions');
     try {
       await mkdir(join(root, 'packages/core/agent-loop/src'), { recursive: true });
       await mkdir(join(root, 'node_modules/tsx'), { recursive: true });
@@ -25,7 +26,7 @@ describe('real DSH teaching runtime configuration gate', () => {
       await writeFile(join(root, 'node_modules/tsx/package.json'), '{"name":"tsx"}\n');
       await writeFile(hostScript, '');
       await writeFile(keyFile, 'DEEPSEEK_API_KEY=sk-test-value\n');
-      const options = { runtimeRoot: root, apiKeyFile: keyFile, hostScript };
+      const options = { runtimeRoot: root, apiKeyFile: keyFile, hostScript, sessionRoot };
       const driver = createRealDshTeachingRuntime({ ...options, gitHeadReader: () => DSH_PINNED_COMMIT });
       expect(driver.availability).toBe('ready');
       expect(driver.runtimeVersion).toBe('dsh-v1');

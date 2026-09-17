@@ -43,7 +43,9 @@ export function buildRealDshLocalEnvironment(config, { encryptionKey, actionSecr
     PROVIDER_KEY_ENCRYPTION_KEY: createHmac('sha256', Buffer.from(encryptionKey, 'hex')).update('teacher-platform/provider-config/v1').digest('hex'),
     LOCAL_SAFE_MODE: 'true', PLATFORM_SERVICES_ENABLED: 'false', WECHAT_ILINK_ENABLED: 'false',
     LISTEN_HOST: '127.0.0.1', PORT: String(config.serverPort), LOG_LEVEL: 'error', STORAGE_BACKEND: 'local',
-    DSH_RUNTIME_ENABLED: 'true', DSH_RUNTIME_ROOT: config.runtimeRoot, DEEPSEEK_API_KEY_FILE: config.apiKeyFile,
+    DSH_RUNTIME_ENABLED: 'true', DSH_RUNTIME_ROOT: config.runtimeRoot,
+    DSH_SESSION_ROOT: join(config.directory, 'dsh-sessions'),
+    DEEPSEEK_API_KEY_FILE: config.apiKeyFile,
   };
 }
 

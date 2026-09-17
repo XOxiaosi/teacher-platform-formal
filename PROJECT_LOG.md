@@ -453,3 +453,12 @@ V009 是产品语义版本，不为每个实现 commit 升版；同一任务允�
 - 使用仅含合成教师资料的隔离 PostgreSQL 17 与邀请账号 `a@example.test` 登录正式 `/#/agent`；发送无业务数据的最小消息后页面先显示处理中，刷新任务得到 `已完成`，助手返回可见，浏览器刷新后会话列表和助手消息仍保留。
 - 数据库核验：`TaskRuntime.status=succeeded`；`ConversationTurn` 有持久 assistant 记录；`ProviderUsage` 产生一条 `deepseek/deepseek-flash` 记录，包含 taskId、executionId、sessionId、eventKey、token 用量与 `usageStatus=reported`，重复结算键为教师级唯一约束。完整网页与数据库记录见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/real-dsh-web-smoke.log`。
 - Gate 结果：连接版网页真实 DSH 最小链路通过（登录、202 回执、任务完成、助手回复、刷新恢复、用量落库）；这不等同于 DSH 持久化插件或跨进程只读教学工具已完成。当前仍不进入真实教师资料、渠道发送、Windows、手机或发布。
+
+### A02-REAL-DEEPSEEK-WEB-PERSISTENCE-TOOLS｜2026-09-16｜网页真实 DSH 持久化与只读工具验收
+
+- 适配器已改为双向 JSONL：平台进程保留教师身份与数据库查询执行权，固定 DSH host 只接收白名单只读工具；点号工具名在 host 内转换为 DeepSeek 允许的下划线函数名，回执保留 session/execution/callId 关联并拒绝伪造身份、凭据和未知工具。
+- 固定 checkout 的 JSONL session persistence 已挂载到仓库外 `DSH_SESSION_ROOT`，恢复前比较平台会话历史；完成执行可重放，缺失 resume、历史不一致、未完成或查询失败均进入 `outcome_unknown`/失败，不把模型兜底文本当作成功。
+- 正式网页真实验收使用隔离 PostgreSQL 17、合成邀请教师 `a@example.test` 和无业务资料消息：首条消息返回“真实 DSH 已连接，当前是合成验收环境。”并在浏览器刷新后保留；第二条消息要求先查询学生列表，页面显示“查询步骤已完成”和结果 `3`，证明只读工具经过父进程桥接。
+- 数据库核验：两条 `TaskRuntime` 均为 `succeeded`，均有 `dshSessionRef` 与加密 `dshCheckpoint`；两条 `ProviderUsage` 为 `deepseek/deepseek-flash`、`synthetic=false`、`usageStatus=reported`，事件键包含教师会话、执行和事件序号。session.v3 JSONL 已在外部目录生成且权限为 `-rw-------`。完整浏览器、持久化、账本和边界记录见 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/real-dsh-web-persistence-tools.log`。
+- 验证：host 协议 27/27、固定上游离线桥接 8/8；backend build/lint、真实运行时配置测试、launcher 配置测试和文件长度检查通过。根完整 `npm run check` 尚未在本轮 smoke 后重跑；此前 `check-27-real-dsh-web.log` 的 `db-routing-workflow` beforeAll 超时记录仍保留，不将其改写为通过。
+- 当前边界与下一步：网页端真实文本、持久化、刷新恢复、只读查询和用量账本已具备本地合成证据；真实教师资料、跨设备、Windows、手机、渠道发送和正式发布仍未验证。下一步继续网页端 Gate（双教师隔离与重启恢复回归），网页成熟后再规划 Windows 与手机。

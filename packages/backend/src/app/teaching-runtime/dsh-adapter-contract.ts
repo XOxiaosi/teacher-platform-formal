@@ -1,5 +1,7 @@
 import type { TeachingRuntimeInput, TeachingRuntimeOutput } from './runtime-driver.js';
 import type { TeachingQueryTools } from './teaching-query-tools.js';
+import type { CommonError, Result } from '@teacher-platform/contracts';
+import type { ToolDefinition } from '../../shared/tool-registry/types.js';
 
 export const DSH_PINNED_COMMIT = 'c291e7961a515f6d7af9304e7fd1d257929aef26';
 export const DSH_TEACHING_PLUGINS = [
@@ -48,4 +50,36 @@ export interface DshUsageRecord {
   outcome: DshHostResult['outcome'];
   cost: TeachingRuntimeOutput['cost'];
   currencyAmount: null;
+}
+
+/** Bidirectional JSONL bridge. Identity remains in the platform process:
+ * neither definitions nor model arguments grant teacher impersonation. */
+export interface DshHostRunRequest {
+  sessionId: string;
+  /** External, per-invocation storage/workspace root selected by the platform. */
+  sessionRoot: string;
+  executionId: string;
+  resume: boolean;
+  message: string;
+  model: string;
+  history: Array<{ role: 'user' | 'assistant'; content: string }>;
+  tools: ToolDefinition[];
+}
+
+export interface DshHostToolCall {
+  type: 'tool_call';
+  sessionId: string;
+  executionId: string;
+  /** Positive, strictly increasing within this invocation. */
+  callId: number;
+  name: string;
+  args: Record<string, unknown>;
+}
+
+export interface DshHostToolResult {
+  type: 'tool_result';
+  sessionId: string;
+  executionId: string;
+  callId: number;
+  result: Result<unknown, CommonError>;
 }

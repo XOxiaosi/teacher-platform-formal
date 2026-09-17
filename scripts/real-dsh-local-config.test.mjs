@@ -49,6 +49,7 @@ test('sanitizes ambient services, credentials, database and host while enabling 
   assert.equal(env.LISTEN_HOST, '127.0.0.1'); assert.equal(env.PORT, '3002');
   assert.equal(env.LOCAL_SAFE_MODE, 'true'); assert.equal(env.PLATFORM_SERVICES_ENABLED, 'false');
   assert.equal(env.WECHAT_ILINK_ENABLED, 'false'); assert.equal(env.DSH_RUNTIME_ENABLED, 'true');
+  assert.equal(env.DSH_SESSION_ROOT, join(config.directory, 'dsh-sessions'));
   assert.equal(env.DSH_RUNTIME_ROOT, config.runtimeRoot); assert.equal(env.DEEPSEEK_API_KEY_FILE, config.apiKeyFile);
   for (const key of ['ARK_API_KEY', 'DEEPSEEK_API_KEY', 'DEEPSEEK_MODEL', 'NODE_OPTIONS', 'HOME']) assert.equal(env[key], undefined);
   assert.throws(() => buildRealDshLocalEnvironment(config, { encryptionKey: '', actionSecret: '' }));

@@ -39,7 +39,7 @@ export async function startRealDshLocal(args = process.argv.slice(2)) {
   const keys = { encryptionKey: randomBytes(32).toString('hex'), actionSecret: randomBytes(32).toString('hex') };
   writeFileSync(join(config.directory, 'real-dsh-local.json'), JSON.stringify({ kind: 'teacher-platform-real-dsh-local/v1', ...config, ...keys }), { flag: 'wx', mode: 0o600 });
   const env = buildRealDshLocalEnvironment(config, keys);
-  const bootstrap = Object.fromEntries(Object.entries(env).filter(([key]) => !['DSH_RUNTIME_ENABLED', 'DSH_RUNTIME_ROOT', 'DEEPSEEK_API_KEY_FILE'].includes(key)));
+  const bootstrap = Object.fromEntries(Object.entries(env).filter(([key]) => !['DSH_RUNTIME_ENABLED', 'DSH_RUNTIME_ROOT', 'DSH_SESSION_ROOT', 'DEEPSEEK_API_KEY_FILE'].includes(key)));
   const pgdata = join(config.directory, 'postgres');
   const pgEnv = { ...bootstrap, PGHOST: '127.0.0.1', PGPORT: String(config.databasePort), PGUSER: 'postgres', PGDATABASE: 'postgres' };
   run('initdb', ['--no-locale', '--encoding=UTF8', '--auth=trust', '--username=postgres', '--pgdata', pgdata], bootstrap);

@@ -1,5 +1,4 @@
 import type { PrismaClient } from '@prisma/client';
-import { resolve } from 'node:path';
 import { createStudentService } from '../../features/students/index.js';
 import {
   createStudentRecordsService,
@@ -80,7 +79,7 @@ import {
 import { createMinimalToolRegistry } from '../tool-registration.js';
 import { createPresentationBuilder } from '../presentation/index.js';
 import { createAgendaQuery } from '../agenda/index.js';
-import { createRealDshTeachingRuntime } from '../teaching-runtime/real-dsh-runtime.js';
+import { createConfiguredRealDshDriver } from './real-dsh-config.js';
 import { createTeachingTaskRuntimeWorker } from '../teaching-runtime/teaching-task-runtime-worker.js';
 import { toTaskRuntimeAvailability } from '../teaching-runtime/runtime-driver.js';
 import type {
@@ -119,35 +118,8 @@ export function createCoreRouteDependencies(
   const clientProvider = createClientProvider(prisma);
   // P8 phase-3 批1：字段加密 cipher 统一装配（ENCRYPTION_KEY env；未配置 → undefined 惰性 SAFETY_BLOCK）
   const fieldCipher = createFieldCipherFromEnv();
-  // Real DSH is opt-in and requires an explicit fixed source checkout plus a
-  // repo-external DeepSeek credential file/env. No legacy Agent loop is used as
-  // a fallback when this gate is absent.
   let providerUsageService: ProviderUsageService | undefined;
-  const configuredTeachingDriver = process.env.DSH_RUNTIME_ENABLED !== 'true' || !process.env.DSH_RUNTIME_ROOT
-    ? undefined
-    : createRealDshTeachingRuntime({
-      runtimeRoot: process.env.DSH_RUNTIME_ROOT,
-      apiKeyFile: process.env.DEEPSEEK_API_KEY_FILE,
-      model: process.env.DEEPSEEK_MODEL,
-      projectRoot: resolve(__dirname, '../../../../..'),
-      onUsage: async (record) => {
-        if (!providerUsageService) throw new Error('DSH usage service unavailable');
-        await providerUsageService.record({
-          teacherId: record.teacherId,
-          providerName: 'deepseek',
-          model: process.env.DEEPSEEK_MODEL ?? 'deepseek-flash',
-          promptTokens: record.cost.inputTokens ?? 0,
-          completionTokens: record.cost.outputTokens ?? 0,
-          taskId: record.taskId,
-          executionId: record.executionId,
-          sessionId: record.sessionId,
-          eventKey: record.eventKey,
-          outcome: record.outcome,
-          usageStatus: record.cost.usageStatus ?? 'unknown',
-          synthetic: record.cost.synthetic,
-        });
-      },
-    });
+  const configuredTeachingDriver = createConfiguredRealDshDriver(() => providerUsageService);
   const teachingRuntimeAvailability = options?.teachingRuntimeWorker
     ? toTaskRuntimeAvailability(options.teachingRuntimeWorker.availability)
     : configuredTeachingDriver
