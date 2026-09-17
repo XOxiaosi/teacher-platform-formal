@@ -36,6 +36,14 @@ describe('formal teaching task transport', () => {
     expect(api.send).toHaveBeenCalledWith('teacher-a', { conversationId: 'conversation-1', message: '核对课时', clientRequestId: 'request-1' });
   });
 
+  it('does not present a generic persisted task title as a completed result', async () => {
+    api.list.mockResolvedValue({ items: [task({ title: '任务状态已保存，可从当前会话继续。', status: 'succeeded', lastError: null })], nextCursor: null });
+    const transport = createTeachingTaskTransport();
+    await expect(transport.getTasks?.({ teacherId: 'teacher-a', conversationId: 'conversation-1' })).resolves.toMatchObject([
+      { summary: '未提供任务摘要，请查看会话内容。' },
+    ]);
+  });
+
   it('resumes with the server version and execution id after reloading the task', async () => {
     api.get.mockResolvedValue({ task: task({ status: 'partial', canResume: true, lastError: null }) });
     api.resume.mockResolvedValue({ task: task({ status: 'running', canResume: false }), replayed: false });

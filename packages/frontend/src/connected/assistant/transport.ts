@@ -9,9 +9,18 @@ export interface AssistantTask {
   /** 服务端根据执行版本和运行时能力判断是否可以继续。 */
   canResume?: boolean;
 }
+export interface AssistantCapabilities {
+  /** Can the connected assistant read the teacher's persisted workspace? */
+  canRead: boolean;
+  /** Can the connected assistant perform formal workspace writes in this session? */
+  canWrite: boolean;
+  /** Formal writes still require an explicit teacher confirmation. */
+  writeRequiresConfirmation: boolean;
+}
 export type AssistantTaskEvent = TeachingTaskEventDto;
 export interface AssistantTransport {
   readonly runtimeAvailability?: 'available' | 'unavailable' | 'test_only';
+  readonly capabilities?: AssistantCapabilities;
   createConversation?(input: { teacherId: string }): Promise<string>;
   /** Resolve only after the server has durably accepted this idempotent request. */
   sendMessage(input: { teacherId: string; conversationId: string; message: string; clientRequestId: string }): Promise<{

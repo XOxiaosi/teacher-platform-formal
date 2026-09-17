@@ -8,10 +8,12 @@ import {
   type TeachingTaskDto,
   type TeachingTaskEventDto,
 } from '../../api/teaching-tasks';
-import type { AssistantTask, AssistantTransport } from './transport';
+import type { AssistantCapabilities, AssistantTask, AssistantTransport } from './transport';
 
 function summaryOf(task: TeachingTaskDto): string {
-  return task.title || task.lastError?.message || '任务状态已保存，可从当前会话继续。';
+  const title = task.title?.trim();
+  const genericTitles = new Set(['任务状态已保存，可从当前会话继续。', '任务状态已更新']);
+  return title && !genericTitles.has(title) ? title : task.lastError?.message || '未提供任务摘要，请查看会话内容。';
 }
 
 function toAssistantTask(task: TeachingTaskDto): AssistantTask {
@@ -27,10 +29,14 @@ function toAssistantTask(task: TeachingTaskDto): AssistantTask {
  * model execution remains server-side and unavailable until a verified DSH
  * runtime is explicitly configured. */
 export function createTeachingTaskTransport(
-  options: { runtimeAvailability?: AssistantTransport['runtimeAvailability'] } = {},
+  options: {
+    runtimeAvailability?: AssistantTransport['runtimeAvailability'];
+    capabilities?: AssistantCapabilities;
+  } = {},
 ): AssistantTransport {
   return {
     runtimeAvailability: options.runtimeAvailability ?? 'unavailable',
+    capabilities: options.capabilities ?? { canRead: true, canWrite: false, writeRequiresConfirmation: true },
     async createConversation({ teacherId }) {
       return (await createTeachingConversation(teacherId)).id;
     },
