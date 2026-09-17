@@ -6,12 +6,13 @@ import './workflows.css';
 import type { ReactNode } from 'react';
 import { AssistantWorkspace } from '../connected/assistant';
 import type { AssistantTransport } from '../connected/assistant/transport';
+import type { DemoData } from './data';
 
-export function Workflows({ page, actions, modelSettings, teacherId, assistantTransport }: {
-  page: string; actions: PreviewActions; modelSettings?: ReactNode; teacherId?: string; assistantTransport?: AssistantTransport;
+export function Workflows({ page, actions, modelSettings, teacherId, assistantTransport, dashboard }: {
+  page: string; actions: PreviewActions; modelSettings?: ReactNode; teacherId?: string; assistantTransport?: AssistantTransport; dashboard?: DemoData;
 }) {
   if (page === 'agent') {
-    if (actions.connected && teacherId) return <AssistantWorkspace teacherId={teacherId} transport={assistantTransport} />;
+    if (actions.connected && teacherId) return <AssistantWorkspace teacherId={teacherId} transport={assistantTransport} dashboard={dashboard} />;
     return <AgentPage connected={Boolean(actions.connected)} />;
   }
   if (page === 'schedules') return <SchedulesPage actions={actions} />;
