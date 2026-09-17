@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
+import { resolve } from 'node:path';
 import { createStudentService } from '../../features/students/index.js';
 import {
   createStudentRecordsService,
@@ -57,7 +58,7 @@ import { createCaptureScoreFromTextUseCase } from '../use-cases/capture-score-fr
 import { createCommunicationService } from '../../features/student-communications/index.js';
 import { createRequirementService } from '../../features/requirements/index.js';
 import { createProviderConfigService } from '../../features/provider-configs/index.js';
-import { createProviderUsageService } from '../../features/provider-usage/index.js';
+import { createProviderUsageService, type ProviderUsageService } from '../../features/provider-usage/index.js';
 import { createMediaAssetService } from '../../features/media/index.js';
 import { createCaptureService } from '../../features/capture/index.js';
 import {
@@ -121,13 +122,31 @@ export function createCoreRouteDependencies(
   // Real DSH is opt-in and requires an explicit fixed source checkout plus a
   // repo-external DeepSeek credential file/env. No legacy Agent loop is used as
   // a fallback when this gate is absent.
-  const configuredTeachingDriver = localSafeMode || !process.env.DSH_RUNTIME_ROOT
+  let providerUsageService: ProviderUsageService | undefined;
+  const configuredTeachingDriver = process.env.DSH_RUNTIME_ENABLED !== 'true' || !process.env.DSH_RUNTIME_ROOT
     ? undefined
     : createRealDshTeachingRuntime({
       runtimeRoot: process.env.DSH_RUNTIME_ROOT,
       apiKeyFile: process.env.DEEPSEEK_API_KEY_FILE,
       model: process.env.DEEPSEEK_MODEL,
-      projectRoot: process.cwd(),
+      projectRoot: resolve(__dirname, '../../../../..'),
+      onUsage: async (record) => {
+        if (!providerUsageService) throw new Error('DSH usage service unavailable');
+        await providerUsageService.record({
+          teacherId: record.teacherId,
+          providerName: 'deepseek',
+          model: process.env.DEEPSEEK_MODEL ?? 'deepseek-flash',
+          promptTokens: record.cost.inputTokens ?? 0,
+          completionTokens: record.cost.outputTokens ?? 0,
+          taskId: record.taskId,
+          executionId: record.executionId,
+          sessionId: record.sessionId,
+          eventKey: record.eventKey,
+          outcome: record.outcome,
+          usageStatus: record.cost.usageStatus ?? 'unknown',
+          synthetic: record.cost.synthetic,
+        });
+      },
     });
   const teachingRuntimeAvailability = options?.teachingRuntimeWorker
     ? toTaskRuntimeAvailability(options.teachingRuntimeWorker.availability)
@@ -209,7 +228,9 @@ export function createCoreRouteDependencies(
       return rows as unknown as ProviderConfigRow[];
     },
   });
-  const providerUsageService = localSafeMode ? undefined : createProviderUsageService({ prisma });
+  providerUsageService = (!localSafeMode || configuredTeachingDriver !== undefined)
+    ? createProviderUsageService({ prisma })
+    : undefined;
   const usageLogger = options?.logger ?? createLogger();
   const aiClient = localSafeMode
     ? createAiClient({ provider: defaultAiProvider })

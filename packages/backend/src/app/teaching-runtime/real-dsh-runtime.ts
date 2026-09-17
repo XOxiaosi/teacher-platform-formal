@@ -1,9 +1,12 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { isAbsolute, join, resolve } from 'node:path';
 import { err, ok, type Result } from '@teacher-platform/contracts';
 import type { TeachingRuntimeDriver, TeachingRuntimeError, TeachingRuntimeInput, TeachingRuntimeOutput } from './runtime-driver.js';
 import { dshTeachingSessionId } from './dsh-runtime-driver.js';
+import type { DshUsageRecord } from './dsh-adapter-contract.js';
+
+export const DSH_PINNED_COMMIT = 'c291e7961a515f6d7af9304e7fd1d257929aef26';
 
 export interface RealDshTeachingRuntimeOptions {
   /** Fixed upstream source checkout at DSH_PINNED_COMMIT. */
@@ -18,6 +21,10 @@ export interface RealDshTeachingRuntimeOptions {
   timeoutMs?: number;
   /** Formal project root used to resolve the host bridge when hostScript is omitted. */
   projectRoot?: string;
+  /** Injectable only for synthetic tests; production reads the checkout's HEAD. */
+  gitHeadReader?: (root: string) => string;
+  /** Durable platform-owned usage sink; omitted only for configuration tests. */
+  onUsage?: (record: DshUsageRecord) => Promise<void>;
 }
 
 interface HostResult {
@@ -56,7 +63,12 @@ function validConfig(options: RealDshTeachingRuntimeOptions): boolean {
   const root = resolve(options.runtimeRoot);
   const projectRoot = resolve(options.projectRoot ?? process.cwd());
   const script = resolve(options.hostScript ?? join(projectRoot, 'scripts/dsh-teaching-host.ts'));
-  return isAbsolute(options.runtimeRoot)
+  let pinned = false;
+  try {
+    const readHead = options.gitHeadReader ?? ((directory: string) => execFileSync('git', ['-C', directory, 'rev-parse', 'HEAD'], { encoding: 'utf8', timeout: 5_000, stdio: ['ignore', 'pipe', 'ignore'] }));
+    pinned = readHead(root).trim() === DSH_PINNED_COMMIT;
+  } catch { /* Missing Git metadata is not a verified runtime. */ }
+  return pinned && isAbsolute(options.runtimeRoot)
     && existsSync(join(root, 'packages/core/agent-loop/src/index.ts'))
     && existsSync(join(root, 'node_modules/tsx/package.json'))
     && existsSync(script)
@@ -65,6 +77,33 @@ function validConfig(options: RealDshTeachingRuntimeOptions): boolean {
 
 function hostFailure(message: string, retryable = true): Result<never, TeachingRuntimeError> {
   return error('DSH_HOST_UNAVAILABLE', message, retryable);
+}
+
+async function recordUsage(
+  options: RealDshTeachingRuntimeOptions,
+  input: TeachingRuntimeInput,
+  sessionId: string,
+  eventKey: string,
+  outcome: DshUsageRecord['outcome'],
+  cost: TeachingRuntimeOutput['cost'],
+): Promise<Result<void, TeachingRuntimeError>> {
+  if (!options.onUsage) return ok(undefined);
+  try {
+    await options.onUsage({
+      teacherId: input.teacherId,
+      taskId: input.taskId,
+      executionId: input.executionId,
+      sessionId,
+      eventKey,
+      replayed: false,
+      outcome,
+      cost,
+      currencyAmount: null,
+    });
+    return ok(undefined);
+  } catch {
+    return error('DSH_USAGE_RECORD_FAILED', 'AI 用量记录未能保存，结果待核对', true);
+  }
 }
 
 async function invokeHost(options: RealDshTeachingRuntimeOptions, input: TeachingRuntimeInput): Promise<Result<HostResult, TeachingRuntimeError>> {
@@ -112,7 +151,7 @@ async function invokeHost(options: RealDshTeachingRuntimeOptions, input: Teachin
     child.stdout.on('data', (chunk: string) => { stdout += chunk; });
     child.stderr.on('data', (chunk: string) => { stderr += chunk; });
     child.once('error', () => finish(hostFailure('AI 运行进程未能启动')));
-    child.once('exit', (code) => {
+    child.once('close', (code) => {
       clearTimeout(timer);
       input.signal.removeEventListener('abort', abort);
       if (settled) return;
@@ -150,7 +189,9 @@ export function createRealDshTeachingRuntime(options: RealDshTeachingRuntimeOpti
     availability: ready ? 'ready' : 'unavailable',
     runtimeVersion: 'dsh-v1',
     async run(input) {
-      if (!ready) return hostFailure('真实 DSH 运行配置未就绪');
+      // Recheck before every invocation so a checkout changed after startup
+      // cannot bypass the pinned-source gate.
+      if (!ready || !validConfig(options)) return hostFailure('真实 DSH 运行配置未就绪');
       if (!input.teacherId.trim() || !input.taskId.trim() || !input.executionId.trim()) {
         return error('DSH_IDENTITY_INVALID', '教学任务身份无效', false);
       }
@@ -158,8 +199,28 @@ export function createRealDshTeachingRuntime(options: RealDshTeachingRuntimeOpti
       if (input.sessionRef !== null && input.sessionRef !== sessionRef) {
         return error('DSH_SESSION_MISMATCH', '教学任务上下文已变更，需要重新整理', false);
       }
+      // The one-shot host has no durable DSH persistence yet. Refuse a
+      // checkpoint from a previous run instead of treating a fresh event
+      // sequence as a resumable session.
+      if (input.checkpoint !== null) {
+        return error('DSH_CHECKPOINT_UNSUPPORTED', '真实 DSH 会话尚未持久化，不能安全续接', true);
+      }
       const response = await invokeHost(options, input);
-      if (!response.ok) return response;
+      if (!response.ok) {
+        const unknownCost: TeachingRuntimeOutput['cost'] = {
+          modelCalls: null, inputTokens: null, outputTokens: null, toolCalls: 0,
+          synthetic: false, usageStatus: 'unknown',
+        };
+        const recorded = await recordUsage(
+          options,
+          input,
+          sessionRef,
+          `${sessionRef}:execution:${input.executionId}:unknown`,
+          'outcome_unknown',
+          unknownCost,
+        );
+        return recorded.ok ? response : recorded;
+      }
       const result = response.value;
       if (result.sessionId !== sessionRef || !Number.isSafeInteger(result.lastEventSeq) || result.lastEventSeq < 0) {
         return error('DSH_RESULT_INVALID', 'AI 运行结果无法核验', false);
@@ -170,10 +231,6 @@ export function createRealDshTeachingRuntime(options: RealDshTeachingRuntimeOpti
         || !Number.isSafeInteger(result.toolCalls) || result.toolCalls < 0) {
         return error('DSH_RESULT_INVALID', 'AI 运行结果无法核验', false);
       }
-      if (result.outcome === 'cancelled') return error('DSH_CANCELLED', '教学任务已暂停', true);
-      if (result.outcome === 'outcome_unknown') return error('DSH_OUTCOME_UNKNOWN', '上次操作结果待核对，暂不重试', false);
-      if (result.outcome === 'failed') return error('DSH_RUN_FAILED', 'AI 暂时未完成，可以重试', true);
-      if (!result.reply?.trim()) return error('DSH_EMPTY_REPLY', 'AI 尚未返回完整结果', true);
       const cost: TeachingRuntimeOutput['cost'] = {
         modelCalls: result.modelCalls,
         inputTokens: result.inputTokens,
@@ -182,11 +239,26 @@ export function createRealDshTeachingRuntime(options: RealDshTeachingRuntimeOpti
         synthetic: false,
         usageStatus: result.modelCalls === null || result.inputTokens === null || result.outputTokens === null ? 'unknown' : 'reported',
       };
+      const recorded = await recordUsage(
+        options,
+        input,
+        sessionRef,
+        `${sessionRef}:execution:${input.executionId}:event:${result.lastEventSeq}`,
+        result.outcome,
+        cost,
+      );
+      if (!recorded.ok) return recorded;
+      if (result.outcome === 'cancelled') return error('DSH_CANCELLED', '教学任务已暂停', true);
+      if (result.outcome === 'outcome_unknown') return error('DSH_OUTCOME_UNKNOWN', '上次操作结果待核对，暂不重试', false);
+      if (result.outcome === 'failed') return error('DSH_RUN_FAILED', 'AI 暂时未完成，可以重试', true);
+      if (!result.reply?.trim()) return error('DSH_EMPTY_REPLY', 'AI 尚未返回完整结果', true);
       return ok({
         reply: result.reply,
         sessionRef,
         status: result.outcome === 'waiting_input' ? 'waiting_input' : 'succeeded',
-        checkpoint: { schemaVersion: 1, runtimeVersion: 'dsh-v1', contextEpoch: input.contextEpoch, lastEventKey: `${sessionRef}:event:${result.lastEventSeq}` },
+        // Until the DSH persistence plugin is mounted, this event sequence is
+        // process-local and cannot be used as a durable resume checkpoint.
+        checkpoint: null,
         cost,
       });
     },

@@ -118,6 +118,13 @@ model ProviderUsage {
   completionTokens Int      @default(0)
   estimatedCostUsd Float? // 阶段一留空（单价表阶段二）
   conversationId   String?
+  taskId           String? // 教学任务运行归属（DSH 用量）
+  executionId      String? // 单次 fenced execution
+  sessionId        String? // DSH session identity
+  eventKey         String? // 幂等结算键；旧 routing usage 可为空
+  outcome          String? // completed | waiting_input | failed | outcome_unknown
+  usageStatus      String? // reported | unknown
+  synthetic        Boolean  @default(false)
   requestAt        DateTime @db.Timestamptz(3)
   createdAtTs      DateTime @default(now()) @db.Timestamptz(3)
 
@@ -125,6 +132,8 @@ model ProviderUsage {
 
   @@index([teacherId, requestAt])
   @@index([providerConfigId])
+  @@index([teacherId, taskId, executionId])
+  @@unique([teacherId, eventKey])
 }
 
 // P8 微信接入线（t9，设计 p7-wechat-ilink-design.md §3/§8.2）：渠道身份绑定（共享库表）。

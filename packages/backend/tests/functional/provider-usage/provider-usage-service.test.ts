@@ -94,6 +94,39 @@ describe('provider-usage 服务：采集落库', () => {
     // 无 FK：即使 config 不存在也能落库（历史保留语义）
     expect(row.providerConfigId).toBe('cfg-nonexistent-fk-free');
   });
+
+  it('教学运行用量按 eventKey 幂等落库并保留执行身份', async () => {
+    const teacherId = await createTeacher('usage-runtime');
+    const input = {
+      teacherId,
+      providerName: 'deepseek',
+      model: 'deepseek-flash',
+      promptTokens: 12,
+      completionTokens: 8,
+      taskId: 'task-runtime-1',
+      executionId: 'execution-runtime-1',
+      sessionId: 'session-runtime-1',
+      eventKey: 'session-runtime-1:execution:execution-runtime-1:event:3',
+      outcome: 'completed',
+      usageStatus: 'reported' as const,
+      synthetic: false,
+      requestAt: new Date('2026-09-16T03:00:00.000Z'),
+    };
+    await service.record(input);
+    await service.record(input);
+    const rows = await prisma.providerUsage.findMany({ where: { teacherId, eventKey: input.eventKey } });
+    createdUsageIds.push(...rows.map((row) => row.id));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      taskId: input.taskId,
+      executionId: input.executionId,
+      sessionId: input.sessionId,
+      eventKey: input.eventKey,
+      outcome: 'completed',
+      usageStatus: 'reported',
+      synthetic: false,
+    });
+  });
 });
 
 describe('provider-usage 服务：summary 聚合', () => {

@@ -25,6 +25,14 @@ export interface RecordUsageInput {
   /** 响应 content（无厂商 usage 时兜底估算 completion 用）。 */
   responseContent?: string;
   conversationId?: string | null;
+  /** Teaching-runtime identity and settlement fields (optional for legacy routing rows). */
+  taskId?: string | null;
+  executionId?: string | null;
+  sessionId?: string | null;
+  eventKey?: string | null;
+  outcome?: string | null;
+  usageStatus?: 'reported' | 'unknown' | null;
+  synthetic?: boolean;
   requestAt?: Date;
 }
 
@@ -73,18 +81,34 @@ export function createProviderUsageService(options: CreateProviderUsageServiceOp
       completionTokens = estimateTokens(input.responseContent ?? '');
     }
 
-    await prisma.providerUsage.create({
-      data: {
-        teacherId: input.teacherId,
-        providerConfigId: input.providerConfigId ?? null,
-        providerName: input.providerName,
-        model: input.model,
-        promptTokens,
-        completionTokens,
-        conversationId: input.conversationId ?? null,
-        requestAt: input.requestAt ?? new Date(),
-      },
-    });
+    const data = {
+      teacherId: input.teacherId,
+      providerConfigId: input.providerConfigId ?? null,
+      providerName: input.providerName,
+      model: input.model,
+      promptTokens,
+      completionTokens,
+      conversationId: input.conversationId ?? null,
+      taskId: input.taskId ?? null,
+      executionId: input.executionId ?? null,
+      sessionId: input.sessionId ?? null,
+      eventKey: input.eventKey ?? null,
+      outcome: input.outcome ?? null,
+      usageStatus: input.usageStatus ?? null,
+      synthetic: input.synthetic ?? false,
+      requestAt: input.requestAt ?? new Date(),
+    };
+    if (input.eventKey) {
+      await prisma.providerUsage.upsert({
+        where: { teacherId_eventKey: { teacherId: input.teacherId, eventKey: input.eventKey } },
+        create: data,
+        // A repeated settlement is a successful idempotent replay. The first
+        // durable usage record remains the source of truth.
+        update: {},
+      });
+      return;
+    }
+    await prisma.providerUsage.create({ data });
   }
 
   async function summary(teacherId: string, from: Date, to: Date): Promise<UsageSummary> {
