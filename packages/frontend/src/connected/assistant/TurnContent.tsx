@@ -78,14 +78,14 @@ function Presentation({ document, showSummary = true }: { document: Presentation
     </section>)}
   </div>;
 }
-export function TurnContent({ turn }: { turn: AgentTurnDto }) {
+export function TurnContent({ turn, pendingLabel }: { turn: AgentTurnDto; pendingLabel?: string }) {
   if (turn.kind === 'tool') return null;
   const presentation = turn.kind === 'assistant' ? turn.presentation : undefined;
   const presentationSummaryIsTurnContent = turn.kind === 'assistant' && presentation
     ? presentation.summary.trim() === turn.content.trim()
     : false;
-  return <article className={`assistant-turn assistant-turn-${turn.kind}`}>
-    <header><strong>{turn.kind === 'user' ? '我' : '教学助手'}</strong><time dateTime={turn.createdAt}>{formatDateTime(turn.createdAt)}</time></header>
+  return <article className={`assistant-turn assistant-turn-${turn.kind}${pendingLabel ? ' assistant-turn-pending' : ''}`}>
+    <header><strong>{turn.kind === 'user' ? '我' : '教学助手'}</strong><time dateTime={turn.createdAt}>{formatDateTime(turn.createdAt)}</time>{pendingLabel && <span className="assistant-turn-pending-label" role="status">{pendingLabel}</span>}</header>
     {(turn.kind === 'user' || turn.kind === 'assistant') && (turn.kind === 'assistant' ? <MarkdownContent content={turn.content} /> : <p>{turn.content}</p>)}
     {turn.kind === 'assistant' && <>{presentation && <Presentation document={presentation} showSummary={!presentationSummaryIsTurnContent} />}<References references={turn.references} /></>}
     {turn.kind === 'error' && <p role="status">这一步未完成。已保存的会话仍可回看。</p>}

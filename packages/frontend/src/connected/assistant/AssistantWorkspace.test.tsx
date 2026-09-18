@@ -147,6 +147,32 @@ describe('A03 server-backed assistant conversations', () => {
     expect(screen.getByLabelText('交给教学助手的工作')).toHaveValue('');
     expect(screen.queryByText('已完成')).not.toBeInTheDocument();
   });
+  it('shows a local submission echo before the durable turn arrives, then retires it after persistence', async () => {
+    const transport = makeTransport(); const pending = deferred<{ accepted: true; task: { id: string; status: 'queued'; summary: string } }>();
+    const persisted = { ...userTurn('durable-user', '先显示再落盘'), createdAt: new Date().toISOString() };
+    api.turns.mockResolvedValueOnce({ items: [], previousCursor: null }).mockResolvedValue({ items: [persisted], previousCursor: null });
+    transport.sendMessage.mockReturnValue(pending.promise);
+    render(<AssistantWorkspace teacherId="teacher-a" transport={transport} />);
+    const input = await screen.findByLabelText('交给教学助手的工作');
+    fireEvent.change(input, { target: { value: '先显示再落盘' } }); fireEvent.click(screen.getByRole('button', { name: '发送' }));
+    expect(await screen.findByText('正在发送…')).toBeInTheDocument();
+    await act(async () => pending.resolve({ accepted: true, task: { id: 'task-echo', status: 'queued', summary: '已排队' } }));
+    await waitFor(() => expect(screen.getByText('先显示再落盘')).toBeInTheDocument());
+    expect(screen.queryByText('已接收，等待会话记录')).not.toBeInTheDocument();
+  });
+  it('uses Codex-style Enter submission while Shift+Enter keeps the draft for a newline', async () => {
+    const transport = makeTransport(); transport.sendMessage.mockResolvedValue({ accepted: true, task: { id: 'task-enter', status: 'queued', summary: '已排队' } });
+    render(<AssistantWorkspace teacherId="teacher-a" transport={transport} />);
+    const input = await screen.findByLabelText('交给教学助手的工作');
+    fireEvent.change(input, { target: { value: '按回车提交' } });
+    fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
+    await waitFor(() => expect(transport.sendMessage).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(input).toHaveValue(''));
+    fireEvent.change(input, { target: { value: '保留换行' } });
+    fireEvent.keyDown(input, { key: 'Enter', code: 'Enter', shiftKey: true });
+    expect(transport.sendMessage).toHaveBeenCalledTimes(1);
+    expect(input).toHaveValue('保留换行');
+  });
   it('does not mix in-flight send results into another conversation', async () => {
     const transport = makeTransport(); const pending = deferred<{ accepted: true; task: { id: string; status: 'succeeded'; summary: string } }>();
     transport.sendMessage.mockReturnValue(pending.promise);

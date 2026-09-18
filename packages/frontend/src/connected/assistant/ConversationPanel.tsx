@@ -5,6 +5,7 @@ import { TurnContent } from './TurnContent';
 import { taskLabels, type AssistantTransport } from './transport';
 import type { AssistantTask, AssistantTaskEvent } from './transport';
 import type { MessageState } from './useAssistantMessages';
+import type { AgentTurnDto, UserTurnDto } from '../../api/conversations';
 import { formatDateTime } from '../../shared/date-format';
 
 interface Props {
@@ -37,20 +38,67 @@ function compactEvents(events: AssistantTaskEvent[]): Array<AssistantTaskEvent &
   }, []);
 }
 
+function mergePendingTurn(turns: AgentTurnDto[], pendingTurn: UserTurnDto | undefined): AgentTurnDto[] {
+  if (!pendingTurn) return turns;
+  const pendingAt = Date.parse(pendingTurn.createdAt);
+  const hasDurableCopy = turns.some(turn => turn.kind === 'user'
+    && turn.content === pendingTurn.content
+    && (!Number.isFinite(pendingAt) || !Number.isFinite(Date.parse(turn.createdAt)) || Date.parse(turn.createdAt) >= pendingAt - 60_000));
+  if (hasDurableCopy) return turns;
+  return [...turns, pendingTurn].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+}
+
+const LIVE_TASK_STATUSES = new Set(['queued', 'running', 'waiting_input', 'waiting_confirmation']);
+
 export function ConversationPanel({ teacherId, conversationId, transport, messageState, send, onArchive }: Props) {
   const session = useConversation(teacherId, conversationId, transport, messageState?.acceptedRequestId);
   const [draft, setDraft] = useState(() => readDraft(teacherId, conversationId));
   const conversationBodyRef = useRef<HTMLDivElement>(null);
   const keepAtBottom = useRef(true);
+  const restoreScrollRef = useRef<{ height: number; top: number; turnCount: number } | null>(null);
+  const renderedContentRef = useRef('');
+  const [showJumpToBottom, setShowJumpToBottom] = useState(false);
   useEffect(() => { setDraft(readDraft(teacherId, conversationId)); }, [teacherId, conversationId, messageState?.acceptedRequestId, messageState?.sending]);
+  const visibleTurns = mergePendingTurn(session.turns, messageState?.pendingTurn);
+  const visibleEvents = compactEvents(session.events);
+  const latestAssistantEvent = [...session.events].reverse().find(event => event.eventKind === 'assistant_message' && event.content.trim());
+  const liveTail = latestAssistantEvent && !visibleTurns.some(turn => turn.kind === 'assistant' && turn.content.trim() === latestAssistantEvent.content.trim())
+    ? latestAssistantEvent : null;
+  const liveTask = session.tasks.some(task => LIVE_TASK_STATUSES.has(task.status));
+  const contentSignature = `${visibleTurns.map(turn => `${turn.id}:${'content' in turn ? turn.content.length : turn.kind}`).join('|')}|${session.events.length}|${session.tasks.map(task => `${task.id}:${task.status}`).join('|')}|${liveTail?.eventKey ?? ''}:${liveTail?.content.length ?? 0}`;
+  const loadOlder = async () => {
+    const container = conversationBodyRef.current;
+    if (container) restoreScrollRef.current = { height: container.scrollHeight, top: container.scrollTop, turnCount: visibleTurns.length };
+    await session.loadOlder();
+  };
   useLayoutEffect(() => {
     const container = conversationBodyRef.current;
-    if (!container || !keepAtBottom.current) return;
+    if (!container) return;
+    const previousSignature = renderedContentRef.current;
+    renderedContentRef.current = contentSignature;
+    const older = restoreScrollRef.current;
+    if (older && visibleTurns.length > older.turnCount) {
+      container.scrollTop = container.scrollHeight - older.height + older.top;
+      restoreScrollRef.current = null;
+      return;
+    }
+    if (!keepAtBottom.current) {
+      if (previousSignature && previousSignature !== contentSignature) setShowJumpToBottom(true);
+      return;
+    }
     container.scrollTop = container.scrollHeight;
-  }, [session.turns, session.events, session.tasks, session.busy]);
+    setShowJumpToBottom(false);
+  }, [contentSignature, visibleTurns.length, session.busy]);
+  useLayoutEffect(() => {
+    const older = restoreScrollRef.current;
+    if (!older || visibleTurns.length <= older.turnCount) return;
+    const container = conversationBodyRef.current;
+    if (!container) return;
+    container.scrollTop = container.scrollHeight - older.height + older.top;
+    restoreScrollRef.current = null;
+  }, [visibleTurns.length]);
   const tasks = session.tasks.length ? session.tasks : messageState?.task ? [messageState.task] : [];
   const visibleTasks = compactTasks(tasks);
-  const visibleEvents = compactEvents(session.events);
   const syncStatus = session.syncing
     ? '正在同步…'
     : session.syncError
@@ -76,7 +124,9 @@ export function ConversationPanel({ teacherId, conversationId, transport, messag
     </header>
     <div className="assistant-conversation-body" ref={conversationBodyRef} onScroll={event => {
       const container = event.currentTarget;
-      keepAtBottom.current = container.scrollHeight - container.scrollTop - container.clientHeight <= 72;
+      const atBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 72;
+      keepAtBottom.current = atBottom;
+      setShowJumpToBottom(!atBottom && Boolean(renderedContentRef.current));
     }}>
       {session.busy && <p role="status">正在读取会话…</p>}
       {session.error && <div role="alert"><p>{session.error}</p><button type="button" disabled={session.busy} onClick={() => { void session.load(); }}>重新读取会话</button></div>}
@@ -94,16 +144,36 @@ export function ConversationPanel({ teacherId, conversationId, transport, messag
         </section>
         {visibleEvents.length > 0 && <section className="assistant-task-events" aria-label="任务进展记录">
           <h3>任务进展记录</h3>
-          <ol>{visibleEvents.map(event => <li key={event.eventKey}><time dateTime={event.createdAt}>{formatDateTime(event.createdAt)}</time> <span>{eventLabel(event)}{event.repeatCount && event.repeatCount > 1 ? `（重复 ${event.repeatCount} 次，已合并）` : ''}</span></li>)}</ol>
+          <ol>{visibleEvents.map(event => <li key={event.eventKey}><time dateTime={event.createdAt}>{formatDateTime(event.createdAt)}</time> <span>{event.eventKey === liveTail?.eventKey ? (liveTask ? '助手正在输出…' : '助手结果已转入会话') : eventLabel(event)}{event.repeatCount && event.repeatCount > 1 ? `（重复 ${event.repeatCount} 次，已合并）` : ''}</span></li>)}</ol>
         </section>}
-        {session.previousCursor && <button type="button" disabled={session.loadingHistory || session.busy} onClick={() => { void session.loadOlder(); }}>{session.loadingHistory ? '正在加载较早内容…' : '加载较早内容'}</button>}
-        <div className="assistant-turns" aria-label="会话内容">{session.turns.map(turn => <TurnContent key={turn.id} turn={turn} />)}</div>
-        {!session.busy && session.turns.length === 0 && <p>这条会话还没有消息。可以从整理课堂记录或核对课时开始。</p>}
+        {session.previousCursor && <button type="button" disabled={session.loadingHistory || session.busy} onClick={() => { void loadOlder(); }}>{session.loadingHistory ? '正在加载较早内容…' : '加载较早内容'}</button>}
+        <div className="assistant-turns" aria-label="会话内容">{visibleTurns.map(turn => <TurnContent key={turn.id} turn={turn}
+          pendingLabel={turn.id === messageState?.pendingTurn?.id
+            ? messageState?.sending ? '正在发送…' : messageState?.error?.includes('接收回执') ? '等待接收回执' : '已接收，等待会话记录'
+            : undefined} />)}</div>
+        {liveTail && <article className="assistant-live-tail" aria-live="polite">
+          <header><strong>教学助手</strong><span>{liveTask ? '正在输出…' : '最新结果待写入会话'}</span></header>
+          <p>{liveTail.content}</p>
+        </article>}
+        {!session.busy && visibleTurns.length === 0 && !liveTail && <p>这条会话还没有消息。可以从整理课堂记录或核对课时开始。</p>}
+        {showJumpToBottom && <button type="button" className="assistant-scroll-bottom" onClick={() => {
+          const container = conversationBodyRef.current;
+          if (!container) return;
+          keepAtBottom.current = true;
+          container.scrollTop = container.scrollHeight;
+          setShowJumpToBottom(false);
+        }}>回到底部</button>}
       </>}
     </div>
     {session.conversation?.status === 'active' && <form className="assistant-composer" onSubmit={event => { event.preventDefault(); void send(conversationId, draft); }}>
       <label htmlFor="assistant-message">交给教学助手的工作</label>
-      <textarea id="assistant-message" rows={4} value={draft.text} disabled={messageState?.sending} readOnly={draft.awaitingReceipt} onChange={event => changeDraft(event.target.value)} placeholder="例如：整理今天的上课记录，核对课时，再写给家长的反馈" />
+      <textarea id="assistant-message" rows={4} value={draft.text} disabled={messageState?.sending} readOnly={draft.awaitingReceipt}
+        onKeyDown={event => {
+          if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
+          event.preventDefault();
+          if (draft.text.trim() && !draft.awaitingReceipt && !messageState?.sending && !session.busy && transport) event.currentTarget.form?.requestSubmit();
+        }}
+        onChange={event => changeDraft(event.target.value)} placeholder="例如：整理今天的上课记录，核对课时，再写给家长的反馈" />
       <p className="assistant-hint">未发送的输入仅暂存在当前浏览器会话中，退出账号后清除。</p>
       {draft.awaitingReceipt && !messageState?.sending && <p role="status">这条消息的接收情况尚未确认。请先重试确认接收，再编辑或归档；重试不会重复提交同一项工作。</p>}
       {messageState?.error && <p role="alert">{messageState.error}</p>}

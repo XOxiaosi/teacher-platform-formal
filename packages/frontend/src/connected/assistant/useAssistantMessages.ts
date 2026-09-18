@@ -1,9 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { ApiError } from '../../api/client';
 import { readDraft, writeDraft, type AssistantDraft } from './drafts';
+import type { UserTurnDto } from '../../api/conversations';
 import type { AssistantTask, AssistantTransport } from './transport';
 
-export interface MessageState { sending?: boolean; error?: string; acceptedRequestId?: string; task?: AssistantTask }
+export interface MessageState {
+  sending?: boolean;
+  error?: string;
+  acceptedRequestId?: string;
+  task?: AssistantTask;
+  /** DSH-style local submission echo, retired once the durable turn is visible. */
+  pendingTurn?: UserTurnDto;
+}
 export function useAssistantMessages(teacherId: string, transport?: AssistantTransport) {
   const [messages, setMessages] = useState<Record<string, MessageState>>({});
   const pending = useRef(new Set<string>());
@@ -16,8 +24,16 @@ export function useAssistantMessages(teacherId: string, transport?: AssistantTra
     const stored = readDraft(teacherId, conversationId);
     const submission = stored.awaitingReceipt ? stored : { ...draft, awaitingReceipt: true };
     writeDraft(teacherId, conversationId, submission);
+    const pendingTurn: UserTurnDto = {
+      id: `pending:${submission.requestId}`,
+      conversationId,
+      kind: 'user',
+      content: submission.text,
+      inputSource: 'text',
+      createdAt: new Date().toISOString(),
+    };
     pending.current.add(conversationId);
-    setMessages(previous => ({ ...previous, [conversationId]: { ...previous[conversationId], sending: true, error: '' } }));
+    setMessages(previous => ({ ...previous, [conversationId]: { ...previous[conversationId], sending: true, error: '', pendingTurn } }));
     try {
       const receipt = await transport.sendMessage({ teacherId, conversationId, message: submission.text, clientRequestId: submission.requestId });
       if (!receipt.accepted) throw new Error('Missing durable receipt');
@@ -25,7 +41,10 @@ export function useAssistantMessages(teacherId: string, transport?: AssistantTra
       if (readDraft(teacherId, conversationId).requestId === submission.requestId) {
         writeDraft(teacherId, conversationId, { text: '', requestId: crypto.randomUUID() });
       }
-      setMessages(previous => ({ ...previous, [conversationId]: { sending: false, task: receipt.task, acceptedRequestId: submission.requestId } }));
+      setMessages(previous => ({ ...previous, [conversationId]: {
+        ...previous[conversationId], sending: false, task: receipt.task, acceptedRequestId: submission.requestId,
+        pendingTurn,
+      } }));
     } catch (failure) {
       // Only a first-attempt, explicit validation rejection proves this message
       // was not accepted. A retry after an uncertain response stays fenced.
@@ -35,7 +54,7 @@ export function useAssistantMessages(teacherId: string, transport?: AssistantTra
         writeDraft(teacherId, conversationId, { text: submission.text, requestId: submission.requestId });
       }
       if (alive.current) setMessages(previous => ({ ...previous, [conversationId]: {
-        ...previous[conversationId], sending: false, error: rejected
+        ...previous[conversationId], sending: false, pendingTurn: rejected ? undefined : pendingTurn, error: rejected
           ? '这条消息未被接收，输入已保留。请核对内容后重试。'
           : '尚未取得接收回执，输入已保留。请重试确认接收情况。',
       } }));
