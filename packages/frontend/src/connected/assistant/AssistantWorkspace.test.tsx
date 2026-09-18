@@ -215,4 +215,55 @@ describe('A03 server-backed assistant conversations', () => {
     await screen.findByText('任务21已恢复');
     expect(transport.getTaskEvents).toHaveBeenCalledWith({ teacherId: 'teacher-a', conversationId: 'one', taskId: 'task-21', afterSeq: undefined });
   });
+  it('keeps the conversation live with a 3 second turns poll and stops after unmount', async () => {
+    vi.useFakeTimers();
+    try {
+      const first = userTurn('first', '初始消息');
+      const later = userTurn('later', '实时新增消息');
+      api.turns.mockResolvedValueOnce({ items: [first], previousCursor: null });
+      const view = render(<AssistantWorkspace teacherId="teacher-a" />);
+      await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+      expect(screen.getByText('初始消息')).toBeInTheDocument();
+      api.turns.mockResolvedValue({ items: [first, later], previousCursor: null });
+      const detailCallsBeforePoll = api.detail.mock.calls.length;
+      await act(async () => {
+        vi.advanceTimersByTime(3000);
+        await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+      });
+      expect(screen.getByText('实时新增消息')).toBeInTheDocument();
+      expect(api.detail).toHaveBeenCalledTimes(detailCallsBeforePoll);
+      const callsAfterPoll = api.detail.mock.calls.length;
+      // The interval is cleaned up with the conversation panel and cannot write
+      // into a later account/session after unmount.
+      view.unmount();
+      await act(async () => { vi.advanceTimersByTime(6000); await Promise.resolve(); });
+      expect(api.detail).toHaveBeenCalledTimes(callsAfterPoll);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it('does not poll completed task events or reread conversation details every cycle', async () => {
+    vi.useFakeTimers();
+    try {
+      const transport = makeTransport();
+      transport.getTasks.mockResolvedValue([{ id: 'done-task', status: 'succeeded', summary: '已完成。', canResume: false }]);
+      transport.getTaskEvents.mockResolvedValue({ items: [], nextSeq: null });
+      render(<AssistantWorkspace teacherId="teacher-a" transport={transport} />);
+      await act(async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
+      const detailCallsAfterInitialLoad = api.detail.mock.calls.length;
+      const taskCallsAfterInitialLoad = transport.getTasks.mock.calls.length;
+      const eventCallsAfterInitialLoad = transport.getTaskEvents.mock.calls.length;
+      const turnCallsAfterInitialLoad = api.turns.mock.calls.length;
+      await act(async () => {
+        vi.advanceTimersByTime(9000);
+        await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+      });
+      expect(api.detail).toHaveBeenCalledTimes(detailCallsAfterInitialLoad);
+      expect(transport.getTasks).toHaveBeenCalledTimes(taskCallsAfterInitialLoad);
+      expect(transport.getTaskEvents).toHaveBeenCalledTimes(eventCallsAfterInitialLoad);
+      expect(api.turns.mock.calls.length).toBeGreaterThan(turnCallsAfterInitialLoad);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

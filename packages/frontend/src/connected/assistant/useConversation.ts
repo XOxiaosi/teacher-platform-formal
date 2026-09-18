@@ -2,12 +2,27 @@ import { useEffect, useRef, useState } from 'react';
 import { archiveConversation, getConversation, listConversationTurns, type AgentTurnDto, type ConversationDetailDto } from '../../api/conversations';
 import type { AssistantTask, AssistantTaskEvent, AssistantTransport } from './transport';
 
+export const CONVERSATION_POLL_INTERVAL_MS = 3000;
+
+const LIVE_TASK_STATUSES = new Set<AssistantTask['status']>([
+  'queued', 'running', 'waiting_input', 'waiting_confirmation',
+]);
+
+function isLiveTask(task: AssistantTask): boolean {
+  return LIVE_TASK_STATUSES.has(task.status);
+}
+
+function mergeTurns(previous: AgentTurnDto[], incoming: AgentTurnDto[]): AgentTurnDto[] {
+  const byId = new Map(previous.map(turn => [turn.id, turn]));
+  incoming.forEach(turn => byId.set(turn.id, turn));
+  return [...byId.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+}
+
 export function useConversation(teacherId: string, conversationId: string, transport: AssistantTransport | undefined, receipt?: string) {
   const [conversation, setConversation] = useState<ConversationDetailDto | null>(null);
   const [turns, setTurns] = useState<AgentTurnDto[]>([]);
   const [tasks, setTasks] = useState<AssistantTask[]>([]);
   const [events, setEvents] = useState<AssistantTaskEvent[]>([]);
-  const [eventCursor, setEventCursor] = useState<Record<string, number>>({});
   const [previousCursor, setPreviousCursor] = useState<string | null>(null);
   const [busy, setBusy] = useState(true);
   const [loadingHistory, setLoadingHistory] = useState(false);
@@ -15,15 +30,23 @@ export function useConversation(teacherId: string, conversationId: string, trans
   const [error, setError] = useState('');
   const [taskError, setTaskError] = useState('');
   const [resumingTaskId, setResumingTaskId] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState('');
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const alive = useRef(true);
   const version = useRef(0);
   const historyLock = useRef(false);
   const archiveLock = useRef(false);
+  const conversationRefreshLock = useRef(false);
+  const taskRefreshLock = useRef(false);
+  const eventCursorRef = useRef<Record<string, number>>({});
+  const tasksRef = useRef<AssistantTask[]>([]);
+  const taskRefreshPendingRef = useRef(false);
   useEffect(() => { alive.current = true; return () => { alive.current = false; version.current += 1; }; }, []);
   async function reloadTaskEvents(taskItems: AssistantTask[]) {
     if (!transport?.getTaskEvents || taskItems.length === 0) return;
     const eventResults = await Promise.all(taskItems.map(task => transport.getTaskEvents!({
-      teacherId, conversationId, taskId: task.id, afterSeq: eventCursor[task.id],
+      teacherId, conversationId, taskId: task.id, afterSeq: eventCursorRef.current[task.id],
     })));
     if (!alive.current) return;
     setEvents(previous => {
@@ -31,39 +54,83 @@ export function useConversation(teacherId: string, conversationId: string, trans
       return [...previous, ...eventResults.flatMap(result => result.items).filter(event => !seen.has(event.eventKey))]
         .sort((a, b) => a.seq - b.seq);
     });
-    setEventCursor(previous => {
-      const next = { ...previous };
-      taskItems.forEach((task, index) => {
-        const eventResult = eventResults[index];
-        const maxSeq = eventResult.items.reduce((max, event) => Math.max(max, event.seq), 0);
-        const cursor = eventResult.nextSeq ?? (maxSeq > 0 ? maxSeq : undefined);
-        if (cursor !== undefined) next[task.id] = cursor;
-      });
-      return next;
+    const nextCursor = { ...eventCursorRef.current };
+    taskItems.forEach((task, index) => {
+      const eventResult = eventResults[index];
+      const maxSeq = eventResult.items.reduce((max, event) => Math.max(max, event.seq), 0);
+      const cursor = eventResult.nextSeq ?? (maxSeq > 0 ? maxSeq : undefined);
+      if (cursor !== undefined) nextCursor[task.id] = cursor;
     });
+    eventCursorRef.current = nextCursor;
   }
-  async function reloadTasks() {
-    if (!transport?.getTasks) return;
+  async function reloadTasks(options: { activeOnly?: boolean } = {}): Promise<boolean> {
+    if (!transport?.getTasks || taskRefreshLock.current) return false;
+    taskRefreshLock.current = true;
     setTaskError('');
     try {
       const result = await transport.getTasks({ teacherId, conversationId });
       if (alive.current) {
+        tasksRef.current = result;
         setTasks(result);
-        await reloadTaskEvents(result);
+        await reloadTaskEvents(options.activeOnly ? result.filter(isLiveTask) : result);
       }
-    } catch { if (alive.current) setTaskError('任务进度暂时无法读取，请重试。'); }
+      return true;
+    } catch { if (alive.current) setTaskError('任务进度暂时无法读取，请重试。'); return false; }
+    finally { taskRefreshLock.current = false; }
   }
   async function load() {
+    if (conversationRefreshLock.current) return;
     const request = ++version.current;
+    conversationRefreshLock.current = true;
     setBusy(true); setError('');
     try {
       const [detail, history] = await Promise.all([getConversation(teacherId, conversationId), listConversationTurns(teacherId, conversationId)]);
       if (!alive.current || version.current !== request) return;
       setConversation(detail.conversation); setTurns(history.items); setPreviousCursor(history.previousCursor);
+      setSyncError(''); setLastSyncedAt(new Date().toISOString());
     } catch { if (alive.current && version.current === request) setError('会话暂时无法读取，请重试。'); }
-    finally { if (alive.current && version.current === request) setBusy(false); }
+    finally {
+      conversationRefreshLock.current = false;
+      if (alive.current && version.current === request) setBusy(false);
+    }
   }
-  useEffect(() => { void load(); void reloadTasks(); }, [receipt]);
+  async function refresh() {
+    if (conversationRefreshLock.current || !alive.current) return;
+    const request = version.current;
+    conversationRefreshLock.current = true;
+    if (alive.current) { setSyncing(true); setSyncError(''); }
+    try {
+      const history = await listConversationTurns(teacherId, conversationId);
+      if (!alive.current || version.current !== request) return;
+      setTurns(previous => mergeTurns(previous, history.items));
+      const forceTaskRefresh = taskRefreshPendingRef.current;
+      if (forceTaskRefresh || tasksRef.current.some(isLiveTask)) {
+        const refreshed = await reloadTasks({ activeOnly: !forceTaskRefresh });
+        if (refreshed && forceTaskRefresh) taskRefreshPendingRef.current = false;
+      }
+      if (alive.current && version.current === request) setLastSyncedAt(new Date().toISOString());
+    } catch {
+      if (alive.current && version.current === request) setSyncError('实时更新暂时中断，将自动重试。');
+    } finally {
+      conversationRefreshLock.current = false;
+      if (alive.current && version.current === request) setSyncing(false);
+    }
+  }
+  useEffect(() => {
+    const timer = window.setInterval(() => { void refresh(); }, CONVERSATION_POLL_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+    // ConversationPanel is keyed by conversation id; receipt restarts the cycle
+    // so a newly accepted message is read immediately and then kept in sync.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teacherId, conversationId, receipt]);
+  useEffect(() => {
+    const hasNewReceipt = receipt !== undefined;
+    if (hasNewReceipt) taskRefreshPendingRef.current = true;
+    void load();
+    void reloadTasks().then(refreshed => {
+      if (hasNewReceipt && refreshed) taskRefreshPendingRef.current = false;
+    });
+  }, [receipt]);
   async function loadOlder() {
     if (!previousCursor || historyLock.current || busy) return;
     historyLock.current = true; setLoadingHistory(true); setError('');
@@ -92,11 +159,13 @@ export function useConversation(teacherId: string, conversationId: string, trans
     try {
       const resumed = await transport.resumeTask({ teacherId, conversationId, taskId: task.id });
       if (!alive.current) return false;
+      tasksRef.current = [resumed, ...tasksRef.current.filter(item => item.id !== resumed.id)];
       setTasks(previous => [resumed, ...previous.filter(item => item.id !== resumed.id)]);
       await reloadTaskEvents([resumed]);
       return true;
     } catch { if (alive.current) setTaskError('任务尚未恢复，请稍后重试。'); return false; }
     finally { if (alive.current) setResumingTaskId(null); }
   }
-  return { conversation, turns, tasks, events, previousCursor, busy, loadingHistory, archiving, error, taskError, resumingTaskId, load, reloadTasks, loadOlder, archive, resumeTask };
+  return { conversation, turns, tasks, events, previousCursor, busy, loadingHistory, archiving, error, taskError, resumingTaskId,
+    syncing, syncError, lastSyncedAt, load, refresh, reloadTasks, loadOlder, archive, resumeTask };
 }
