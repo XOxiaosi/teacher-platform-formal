@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { StrictMode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AssistantWorkspace } from './AssistantWorkspace';
 import { clearAssistantDrafts } from './drafts';
@@ -22,6 +23,13 @@ beforeEach(() => {
 });
 
 describe('A03 server-backed assistant conversations', () => {
+  it('completes the latest load when StrictMode runs the effect twice', async () => {
+    render(<StrictMode><AssistantWorkspace teacherId="teacher-a" /></StrictMode>);
+    await screen.findByRole('heading', { name: '会话one' });
+    expect(screen.queryByText('正在读取会话…')).not.toBeInTheDocument();
+    expect(api.detail.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
   it('uses the shared Beijing date format for conversation and turn timestamps', async () => {
     api.list.mockResolvedValue({ items: [{ ...detail(), lastTurnAt: '2026-09-15T12:00:00Z' }], nextCursor: null });
     api.turns.mockResolvedValue({ items: [userTurn('recent', '最近材料')], previousCursor: null });

@@ -79,9 +79,7 @@ export function useConversation(teacherId: string, conversationId: string, trans
     finally { taskRefreshLock.current = false; }
   }
   async function load() {
-    if (conversationRefreshLock.current) return;
     const request = ++version.current;
-    conversationRefreshLock.current = true;
     setBusy(true); setError('');
     try {
       const [detail, history] = await Promise.all([getConversation(teacherId, conversationId), listConversationTurns(teacherId, conversationId)]);
@@ -90,7 +88,6 @@ export function useConversation(teacherId: string, conversationId: string, trans
       setSyncError(''); setLastSyncedAt(new Date().toISOString());
     } catch { if (alive.current && version.current === request) setError('会话暂时无法读取，请重试。'); }
     finally {
-      conversationRefreshLock.current = false;
       if (alive.current && version.current === request) setBusy(false);
     }
   }
