@@ -9,7 +9,7 @@ const QUERY_NAMES = new Set([
   'students.get', 'students.list', 'students.balance', 'scheduling.list', 'lessons.list',
   'payments.list', 'feedback.list', 'memos.list',
 ]);
-const WRITE_NAMES = new Set(['students.create']);
+const WRITE_NAMES = new Set(['students.create', 'scheduling.prepare', 'memos.prepare']);
 
 export interface TeachingQueryTools {
   definitions: readonly ToolDefinition[];
@@ -19,7 +19,7 @@ export interface TeachingQueryTools {
 export function createTeachingQueryTools(registry: ToolRegistry, teacherId: string): TeachingQueryTools {
   if (!teacherId.trim()) throw new Error('Teaching tools require an authenticated teacher');
   const allowed = (tool: ToolDefinition) => (QUERY_NAMES.has(tool.name) && tool.sideEffect === 'read'
-    || WRITE_NAMES.has(tool.name) && tool.name === 'students.create' && tool.sideEffect === 'create')
+    || WRITE_NAMES.has(tool.name) && tool.sideEffect === 'create')
     && tool.confirmation !== 'required';
   const definitions = registry.list().filter(allowed).map((tool) => structuredClone(tool));
   const exposed = new Set(definitions.map((tool) => tool.name));

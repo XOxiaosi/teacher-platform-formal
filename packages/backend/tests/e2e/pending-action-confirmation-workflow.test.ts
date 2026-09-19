@@ -215,6 +215,8 @@ describe('PendingAction confirmation workflow', () => {
         'feedback.updateStatus': executor,
         'payments.create': executor,
         'students.records.capture': executor,
+        'scheduling.create': executor,
+        'memos.create': executor,
       });
     });
 
@@ -255,6 +257,8 @@ describe('PendingAction confirmation workflow', () => {
         'feedback.updateStatus': executor,
         'payments.create': executor,
         'students.records.capture': executor,
+        'scheduling.create': executor,
+        'memos.create': executor,
       });
     });
 

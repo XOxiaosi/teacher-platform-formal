@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import type { CommonError, Result } from '@teacher-platform/contracts';
 import { err, internalError } from '@teacher-platform/contracts';
 import { createPendingActionExecutionStore } from '../../features/pending-action/index.js';
@@ -20,21 +21,25 @@ export function createConfirmationTransactionPort(
 
   return {
     async run<T>(work: Parameters<ConfirmationTransactionPort['run']>[0]) {
-      try {
-        return await options.rawPrisma.$transaction(async (tx) => {
-          const result = await work({
-            pendingActions: createPendingActionExecutionStore(tx),
-            registry: registryFactory(tx),
-          });
-          if (!result.ok) throw new ConfirmationRollback(result);
-          return result as Result<T, CommonError>;
-        });
-      } catch (caught) {
-        if (caught instanceof ConfirmationRollback) {
-          return caught.result as Result<T, CommonError>;
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        try {
+          return await options.rawPrisma.$transaction(async (tx) => {
+            const result = await work({
+              pendingActions: createPendingActionExecutionStore(tx),
+              registry: registryFactory(tx),
+            });
+            if (!result.ok) throw new ConfirmationRollback(result);
+            return result as Result<T, CommonError>;
+          }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+        } catch (caught) {
+          if (caught instanceof ConfirmationRollback) {
+            return caught.result as Result<T, CommonError>;
+          }
+          if (caught instanceof Prisma.PrismaClientKnownRequestError && caught.code === 'P2034' && attempt < 3) continue;
+          return err(internalError('待确认操作执行失败'));
         }
-        return err(internalError('待确认操作执行失败'));
       }
+      return err(internalError('待确认操作执行失败'));
     },
   };
 }

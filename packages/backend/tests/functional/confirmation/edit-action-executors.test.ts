@@ -47,6 +47,8 @@ describe('A5-I9c PendingAction 编辑 executor', () => {
       'feedback.updateStatus',
       'payments.create',
       'students.records.capture',
+      'scheduling.create',
+      'memos.create',
     ]);
   });
 

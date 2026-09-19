@@ -28,6 +28,8 @@ function completeMap(): ConfirmableActionExecutorMap {
     'feedback.updateStatus': executor('feedback-status'),
     'payments.create': executor('payment-create'),
     'students.records.capture': executor('records-capture'),
+    'scheduling.create': executor('schedule-create'),
+    'memos.create': executor('memo-create'),
   };
 }
 

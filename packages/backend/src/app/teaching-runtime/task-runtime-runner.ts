@@ -1,3 +1,5 @@
+import { registerTeachingProposals } from './teaching-proposals.js';
+import type { ActionTokenSigner } from '../../features/pending-action/index.js';
 import { createHash } from 'node:crypto';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { err, internalError, ok, type CommonError, type Result } from '@teacher-platform/contracts';
@@ -24,6 +26,7 @@ export interface TeachingTaskRuntimeRunnerOptions {
   tasks: TeachingTaskService;
   driver: TeachingRuntimeDriver;
   cipher?: FieldCipher;
+  actionTokenSigner?: ActionTokenSigner;
   /** Lease renewal cadence for one run; the timer is cleared before run returns. */
   heartbeatMs?: number;
   scheduler?: RuntimeLeaseScheduler;
@@ -47,6 +50,35 @@ type ClaimedExecution = {
 };
 
 const DEFAULT_HEARTBEAT_MS = 15_000;
+
+type ConversationHistoryTurn = {
+  role: string;
+  seq: number | null;
+  content: string;
+};
+
+/**
+ * A task is an execution unit, while a conversation is the unit of teacher
+ * intent. Each new message may create a task, so taskId cannot fence prompt
+ * history. The current user turn is the immutable high-water mark: it admits
+ * earlier visible turns in this conversation and rejects concurrently-created
+ * later turns before they reach a runtime driver.
+ */
+function conversationHistory(
+  turns: readonly ConversationHistoryTurn[],
+  currentUserTurn: ConversationHistoryTurn,
+  cipher: FieldCipher,
+): Array<{ role: 'user' | 'assistant'; content: string }> {
+  if (currentUserTurn.role !== 'user' || currentUserTurn.seq === null) return [];
+  return turns
+    .filter((turn) => turn.seq !== null
+      && turn.seq <= currentUserTurn.seq!
+      && (turn.role === 'user' || turn.role === 'assistant'))
+    .map((turn) => ({
+      role: turn.role as 'user' | 'assistant',
+      content: decryptFieldValue(cipher, turn.content),
+    }));
+}
 
 function createLeaseMonitor(
   tasks: TeachingTaskService,
@@ -358,6 +390,8 @@ export function createTeachingTaskRuntimeRunner(options: TeachingTaskRuntimeRunn
         // future abort event that has already happened.
         if (monitor.lost) return failed(runtimeFailure('教学任务租约已丢失，拒绝启动运行器', false));
         const registry = createTeachingRegistry(getClient);
+        if (options.actionTokenSigner) registerTeachingProposals(registry, { getClient, teacherId: input.teacherId,
+          conversationId: snapshot.conversationId, signer: options.actionTokenSigner, cipher: options.cipher });
         const output = await options.driver.run({
           teacherId: input.teacherId,
           taskId: snapshot.id,
@@ -366,13 +400,7 @@ export function createTeachingTaskRuntimeRunner(options: TeachingTaskRuntimeRunn
           sessionRef: snapshot.dshSessionRef,
           contextEpoch: snapshot.contextEpoch,
           checkpoint,
-          history: snapshot.conversation.turns
-            .filter((turn) => turn.taskId === snapshot.id
-              && (turn.role === 'user' || turn.role === 'assistant'))
-            .map((turn) => ({
-              role: turn.role as 'user' | 'assistant',
-              content: decryptFieldValue(options.cipher!, turn.content),
-            })),
+          history: conversationHistory(snapshot.conversation.turns, userTurn, options.cipher),
           tools: stepBoundTools(
             createTeachingQueryTools(registry, input.teacherId),
             claimed,

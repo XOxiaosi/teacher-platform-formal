@@ -9,6 +9,7 @@ import { createFieldCipher, loadEncryptionKey } from '../../../src/shared/field-
 import { createIsolatedPostgres, type IsolatedPostgres } from '../../helpers/isolated-postgres.js';
 
 const TEACHER = 'a02-runner-teacher';
+const OTHER_TEACHER = 'a02-runner-other-teacher';
 const cipher = createFieldCipher(loadEncryptionKey().key);
 let database: IsolatedPostgres | undefined;
 let prisma: PrismaClient;
@@ -16,18 +17,19 @@ let prisma: PrismaClient;
 beforeAll(async () => { database = await createIsolatedPostgres(); prisma = database.prisma; });
 afterAll(async () => { await database?.cleanup(); });
 beforeEach(async () => {
-  await prisma.conversationTurn.deleteMany({ where: { teacherId: TEACHER } });
-  await prisma.stepReceipt.deleteMany({ where: { teacherId: TEACHER } });
-  await prisma.agentExecution.deleteMany({ where: { teacherId: TEACHER } });
-  await prisma.taskRuntime.deleteMany({ where: { teacherId: TEACHER } });
-  await prisma.conversation.deleteMany({ where: { teacherId: TEACHER } });
+  const teacherId = { in: [TEACHER, OTHER_TEACHER] };
+  await prisma.conversationTurn.deleteMany({ where: { teacherId } });
+  await prisma.stepReceipt.deleteMany({ where: { teacherId } });
+  await prisma.agentExecution.deleteMany({ where: { teacherId } });
+  await prisma.taskRuntime.deleteMany({ where: { teacherId } });
+  await prisma.conversation.deleteMany({ where: { teacherId } });
 });
 
-async function received() {
+async function received(message = '请继续教学任务') {
   const tasks = createTeachingTaskService({ prisma, cipher, runtimeAvailability: 'test_only' });
   const conversation = await tasks.createConversation({ teacherId: TEACHER });
   if (!conversation.ok) throw new Error(conversation.error.message);
-  const receipt = await tasks.receiveMessage({ teacherId: TEACHER, conversationId: conversation.value.id, clientRequestId: `a02-runner-${Date.now()}`, message: '请继续教学任务' });
+  const receipt = await tasks.receiveMessage({ teacherId: TEACHER, conversationId: conversation.value.id, clientRequestId: `a02-runner-${Date.now()}`, message });
   if (!receipt.ok) throw new Error(receipt.error.message);
   return { tasks, taskId: receipt.value.task.id, executionId: receipt.value.receipt.executionId };
 }
@@ -122,10 +124,31 @@ describe('A02 TeachingTaskRuntimeRunner PostgreSQL lifecycle', () => {
       .toMatchObject({ dshSessionRef: null, dshCheckpoint: null, status: 'failed' });
   });
 
-  it('does not pass another task history from the same conversation to a driver', async () => {
-    const first = await received();
+  it('passes visible earlier conversation turns across tasks through a follow-up', async () => {
+    const first = await received('请帮我安排三节课，备忘：带教材。');
+    const pauseDriver: TeachingRuntimeDriver = {
+      availability: 'test', runtimeVersion: 'dsh-v1',
+      run: async (input) => ({
+        ok: true,
+        value: {
+          reply: '已记录三节课和备忘，请补充年级。',
+          sessionRef: input.sessionRef ?? 'first-session',
+          status: 'waiting_input',
+          checkpoint: { schemaVersion: 1, runtimeVersion: 'dsh-v1', contextEpoch: input.contextEpoch, lastEventKey: 'first-pause' },
+          cost: { modelCalls: 0, inputTokens: 0, outputTokens: 0, toolCalls: 0, synthetic: true },
+        },
+      }),
+    };
+    const firstRunner = createTeachingTaskRuntimeRunner({ prisma, cipher, tasks: first.tasks, driver: pauseDriver });
+    await expect(firstRunner.run({ teacherId: TEACHER, taskId: first.taskId }))
+      .resolves.toMatchObject({ ok: true, value: { status: 'waiting_input' } });
     const firstTask = await prisma.taskRuntime.findUniqueOrThrow({ where: { id: first.taskId } });
-    const second = await first.tasks.receiveMessage({ teacherId: TEACHER, conversationId: firstTask.conversationId, clientRequestId: 'a02-history-second', message: '第二个任务的资料' });
+    const second = await first.tasks.receiveMessage({
+      teacherId: TEACHER,
+      conversationId: firstTask.conversationId,
+      clientRequestId: 'a02-history-second',
+      message: '三年级。',
+    });
     expect(second.ok).toBe(true);
     if (!second.ok) return;
     const seen = vi.fn();
@@ -135,7 +158,62 @@ describe('A02 TeachingTaskRuntimeRunner PostgreSQL lifecycle', () => {
     };
     const runner = createTeachingTaskRuntimeRunner({ prisma, cipher, tasks: first.tasks, driver });
     await expect(runner.run({ teacherId: TEACHER, taskId: second.value.task.id })).resolves.toMatchObject({ ok: true, value: { status: 'succeeded' } });
-    expect(seen).toHaveBeenCalledWith([{ role: 'user', content: '第二个任务的资料' }]);
+    expect(seen).toHaveBeenCalledWith([
+      { role: 'user', content: '请帮我安排三节课，备忘：带教材。' },
+      { role: 'assistant', content: '已记录三节课和备忘，请补充年级。' },
+      { role: 'user', content: '三年级。' },
+    ]);
+  });
+
+  it('does not pass a different teacher, conversation, or later message to a driver', async () => {
+    const target = await received();
+    const targetTask = await prisma.taskRuntime.findUniqueOrThrow({ where: { id: target.taskId } });
+    const future = await target.tasks.receiveMessage({
+      teacherId: TEACHER,
+      conversationId: targetTask.conversationId,
+      clientRequestId: 'a02-history-future-message',
+      message: '运行开始后的消息不得提前进入上下文',
+    });
+    expect(future.ok).toBe(true);
+    const otherConversation = await target.tasks.createConversation({ teacherId: TEACHER });
+    expect(otherConversation.ok).toBe(true);
+    if (!otherConversation.ok) return;
+    const other = await target.tasks.receiveMessage({
+      teacherId: TEACHER,
+      conversationId: otherConversation.value.id,
+      clientRequestId: 'a02-history-other-conversation',
+      message: '另一会话不得进入上下文',
+    });
+    expect(other.ok).toBe(true);
+    const otherTeacherConversation = await target.tasks.createConversation({ teacherId: OTHER_TEACHER });
+    expect(otherTeacherConversation.ok).toBe(true);
+    if (!otherTeacherConversation.ok) return;
+    const otherTeacherReceipt = await target.tasks.receiveMessage({
+      teacherId: OTHER_TEACHER,
+      conversationId: otherTeacherConversation.value.id,
+      clientRequestId: 'a02-history-other-teacher',
+      message: '其他教师不得进入上下文',
+    });
+    expect(otherTeacherReceipt.ok).toBe(true);
+    const seen = vi.fn();
+    const driver: TeachingRuntimeDriver = {
+      availability: 'test', runtimeVersion: 'dsh-v1',
+      run: async (input) => {
+        seen(input.history);
+        return {
+          ok: true,
+          value: {
+            reply: '完成', sessionRef: 'target-session', status: 'succeeded',
+            checkpoint: { schemaVersion: 1, runtimeVersion: 'dsh-v1', contextEpoch: input.contextEpoch, lastEventKey: 'target' },
+            cost: { modelCalls: 0, inputTokens: 0, outputTokens: 0, toolCalls: 0, synthetic: true },
+          },
+        };
+      },
+    };
+    const runner = createTeachingTaskRuntimeRunner({ prisma, cipher, tasks: target.tasks, driver });
+    await expect(runner.run({ teacherId: TEACHER, taskId: target.taskId }))
+      .resolves.toMatchObject({ ok: true, value: { status: 'succeeded' } });
+    expect(seen).toHaveBeenCalledWith([{ role: 'user', content: '请继续教学任务' }]);
   });
 
   it('refuses to persist a result when the driver lets its lease expire', async () => {

@@ -157,6 +157,12 @@ export function createQueryStepMethods(context: ReturnType<typeof createTaskCont
             updatedAtTs: clock.value,
           },
         });
+        const result = input.result as Record<string, unknown> | null;
+        const proposal = result && typeof result.pendingActionId === 'string' && typeof result.toolCallId === 'string'
+          ? await tx.pendingAction.findFirst({ where: { id: result.pendingActionId, toolCallId: result.toolCallId,
+            teacherId: input.teacherId, conversationId: task.conversationId } }) : null;
+        const savedStudent = input.stepKey.includes(':students.create:') && result && typeof result.id === 'string'
+          ? await tx.student.findFirst({ where: { id: result.id, teacherId: input.teacherId }, select: { id: true, name: true } }) : null;
         await event(
           tx,
           task.conversationId,
@@ -166,8 +172,9 @@ export function createQueryStepMethods(context: ReturnType<typeof createTaskCont
           "step_result",
           `step:${row.id}:succeeded`,
           "tool",
-          "查询步骤已完成",
-          { stepId: row.id },
+          proposal ? '已准备操作，请核对后确认' : savedStudent ? `学生 ${savedStudent.name} 已保存` : '查询步骤已完成',
+          { stepId: row.id, ...(proposal ? { toolCallId: proposal.toolCallId } : {}),
+            ...(savedStudent ? { toolName: 'students.create', savedStudent } : {}) },
           clock.value,
         );
         return updated;

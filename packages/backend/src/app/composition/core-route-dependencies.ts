@@ -141,6 +141,7 @@ export function createCoreRouteDependencies(
           getClient: clientProvider.getClient,
           tasks: teachingTasks,
           cipher: fieldCipher,
+          actionTokenSigner: options?.confirmation?.actionTokenSigner,
         },
       })
       : undefined);

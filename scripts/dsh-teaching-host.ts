@@ -27,7 +27,7 @@ type ModuleLoader = (relativePath: string) => Promise<Record<string, any>>;
 
 const QUERY_NAMES = new Set(['students.get', 'students.list', 'students.balance', 'scheduling.list',
   'lessons.list', 'payments.list', 'feedback.list', 'memos.list']);
-const WRITE_NAMES = new Set(['students.create']);
+const WRITE_NAMES = new Set(['students.create', 'scheduling.prepare', 'memos.prepare']);
 const ALLOWED_TOOL_NAMES = new Set([...QUERY_NAMES, ...WRITE_NAMES]);
 const FORBIDDEN_ARGUMENTS = ['teacherId', 'prisma', 'credentials', 'apiKey'];
 const MAX_FRAME_BYTES = 1024 * 1024;
@@ -140,7 +140,7 @@ function compatibleHistory(expected: HostRequest['history'], events: any[]) {
 export async function runDshHost(root: string, request: HostRequest, bridge: ReturnType<typeof createHostToolBridge>, load: ModuleLoader = loadFrom(root)): Promise<HostResult> {
   const { Context } = await load('vendor/cordis/src/index.ts');
   const llm = await load('packages/llm/llm/src/index.ts');
-  const { default: SessionStore } = await load('packages/core/session/src/index.ts');
+  const { default: SessionStore, Session } = await load('packages/core/session/src/index.ts');
   const { default: JsonlSessionPersistence } = await load('packages/session/session-persistence-jsonl/src/index.ts');
   const { default: SessionProjectionRegistry } = await load('packages/session/session-projection/src/index.ts');
   const { default: SystemPrompt } = await load('packages/core/system-prompt/src/index.ts');
@@ -159,7 +159,12 @@ export async function runDshHost(root: string, request: HostRequest, bridge: Ret
         '你是教师平台的教学助手。',
         '只处理教学记录、学生、课程、课时和家长反馈相关工作。',
         '没有足够事实时先说明缺少哪些信息，不要编造学生或课程数据。',
-        '教师明确提供姓名和年级时，可以创建当前教师的学生；其他正式写入不在本次运行范围内。',
+        '先接续同一会话已知目标，补充信息不取消原请求；不让教师重报已有事实。',
+        '教师明确要求新增并提供姓名和年级时，可创建学生；创建前查询已有名单，不重复新建。',
+        '排课和备忘通过 prepare 工具准备逐项确认卡；卡片不是已保存，教师点击确认后才落库。不得自行确认。',
+        '明确周几对应的北京时间日期、仅一次或重复、地点及名单；小班名单稍后补充时保持待补，先推进独立事项。排期不需要教学内容。',
+        '逐项说明已保存、待补、待确认及当前不支持；工具没有支持时不要谎称完成或让教师换运行环境。',
+        '结果使用教师能理解的姓名和状态，避免暴露内部 ID、active 等技术字段。',
       ].join('\n'),
     });
     await ctx.plugin(ToolRuntime);
@@ -179,15 +184,46 @@ export async function runDshHost(root: string, request: HostRequest, bridge: Ret
     await ctx.plugin(AgentLoop, { agents: [] });
     await ctx.plugin(deepSeek, { apiKeyEnv: 'DEEPSEEK_API_KEY' });
 
-    const { createUserMessage } = llm;
+    const { createUserMessage, createAssistantMessage } = llm;
     const stored = await ctx.sessionPersistence.stat(request.sessionId);
     const unknown = (seq = 0): HostResult => ({ sessionId: request.sessionId, lastEventSeq: seq, outcome: 'outcome_unknown',
       reply: null, replayed: false, modelCalls: null, inputTokens: null, outputTokens: null, toolCalls: 0 });
     if ((request.resume && !stored) || (!request.resume && stored)) return unknown();
     const agentOptions = { provider: 'deepseek-official', model: request.model };
+    // Each platform task owns a fresh DSH session. Seed the authenticated
+    // conversation prefix as messages, never as higher-priority instructions.
+    // Resume must match its persisted prefix and must never reseed it.
+    let seed: any[] | undefined;
+    if (!stored) {
+      const historySession = Session.create(request.sessionId);
+      const lastTurn = request.history.at(-1);
+      const prefix = lastTurn?.role === 'user' && lastTurn.content === request.message ? request.history.slice(0, -1) : request.history;
+      let turn = 0;
+      let hasUser = false;
+      let hasReply = false;
+      for (const item of prefix) {
+        if (!item.content.trim()) return unknown();
+        if (item.role === 'user') {
+          if (hasUser) historySession.append('turn/end', { turn, reason: { kind: hasReply ? 'completed' : 'interrupted' } });
+          turn += 1; hasUser = true; hasReply = false;
+          historySession.append('turn/start', { turn });
+          historySession.append('user/message', createUserMessage({
+            content: [{ type: 'text', text: item.content }], source: { kind: 'user' }, teachingExecutionId: `platform-history:${turn}`,
+          }), { surfaceOp: 'append' });
+        } else {
+          if (!hasUser || hasReply) return unknown();
+          hasReply = true;
+          historySession.append('assistant/message', { turn, step: 0, stream: [], message: createAssistantMessage({
+            content: [{ type: 'text', text: item.content }], source: { provider: 'platform-history', model: 'persisted-reply' },
+          }) }, { surfaceOp: 'append' });
+        }
+      }
+      if (hasUser) historySession.append('turn/end', { turn, reason: { kind: hasReply ? 'completed' : 'interrupted' } });
+      if (prefix.length) seed = historySession.snapshotEvents(0);
+    }
     const handle = stored
       ? await ctx.agents.resume({ resumeSessionId: request.sessionId, agentOptions })
-      : await ctx.agents.create({ sessionId: request.sessionId, meta: { cwd: request.sessionRoot }, agentOptions });
+      : await ctx.agents.create({ sessionId: request.sessionId, seed, meta: { cwd: request.sessionRoot }, agentOptions });
     try {
       const initial = handle.agent.session.snapshotEvents(0);
       const prior = initial.findLast((event: any) => event.type === 'user/message' && event.data?.teachingExecutionId === request.executionId);

@@ -1,3 +1,4 @@
+import { createTeachingCreateExecutors } from './teaching-create-actions.js';
 import type { Prisma } from '@prisma/client';
 import { createConfirmableActionRegistry } from './confirmable-action-registry.js';
 import { createDatabaseActionExecutors } from './database-action-executors.js';
@@ -40,6 +41,7 @@ export function createDatabaseConfirmableActionRegistry(
     cipher: options?.cipher,
   });
   return createConfirmableActionRegistry({
+    ...createTeachingCreateExecutors(tx, options?.cipher),
     'scheduling.complete': executors.scheduleComplete,
     'scheduling.cancel': executors.scheduleCancel,
     'lessons.updateStatus': executors.lessonUpdateStatus,

@@ -115,7 +115,7 @@ async function recordUsage(
 const FORBIDDEN_TOOL_ARGUMENTS = new Set(['teacherId', 'prisma', 'credentials', 'apiKey']);
 /** The teacher role may create a teacher-owned student from explicit chat
  * details. Other writes remain outside the real DSH bridge. */
-export const REAL_DSH_WRITE_TOOL_NAMES = new Set(['students.create']);
+export const REAL_DSH_WRITE_TOOL_NAMES = new Set(['students.create', 'scheduling.prepare', 'memos.prepare']);
 function wireToolName(name: string): string { return name.replaceAll('.', '_'); }
 
 function safeToolDefinitions(input: TeachingRuntimeInput): ToolDefinition[] {

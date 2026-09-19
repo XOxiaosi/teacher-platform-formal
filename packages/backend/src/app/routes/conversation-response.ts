@@ -79,7 +79,7 @@ interface ToolTurnDto extends BaseTurnDto {
   status: 'success' | 'failed';
   inputSummary: Record<string, string | number | boolean | null>;
   resultSummary: string | null;
-  references: never[];
+  references: Array<{ type: 'Student'; id: string; label: string; route: string }>;
   error: CommonError | null;
 }
 
@@ -165,7 +165,10 @@ function toToolTurnDto(
 ): ToolTurnDto {
   const toolCallId = toolCallIdOf(turn.toolResults);
   const call = callsById.get(toolCallId);
-  const toolName = call?.name ?? 'unknown';
+  const data = isRecord(turn.toolResults) ? turn.toolResults : {};
+  const savedStudent = data.toolName === 'students.create' && isRecord(data.savedStudent)
+    && typeof data.savedStudent.id === 'string' && typeof data.savedStudent.name === 'string' ? data.savedStudent : null;
+  const toolName = call?.name ?? (savedStudent ? 'students.create' : 'unknown');
   const presentation = getToolPresentation(toolName);
   const storedError = isRecord(turn.toolResults) && isRecord(turn.toolResults.error)
     ? turn.toolResults.error
@@ -187,7 +190,8 @@ function toToolTurnDto(
     status: failed ? 'failed' : 'success',
     inputSummary: summarizeArgs(call?.args ?? {}),
     resultSummary: failed ? null : truncate(turn.content, PREVIEW_MAX_LENGTH),
-    references: [],
+    references: !failed && savedStudent ? [{ type: 'Student', id: savedStudent.id as string,
+      label: `查看学生 ${savedStudent.name}`, route: `students/${encodeURIComponent(savedStudent.id as string)}` }] : [],
     error: failed
       ? {
         code: typeof storedError?.code === 'string'
@@ -260,7 +264,7 @@ export function toAgentTurnDtos(
     if (turn.role === 'error') return toErrorTurnDto(turn);
     const pending = pendingByToolCallId.get(toolCallIdOf(turn.toolResults));
     return pending
-      ? { ...toConfirmationTurnDto(pending), taskId: turn.taskId ?? null, executionId: turn.executionId ?? null, seq: turn.seq ?? null, eventKind: turn.eventKind ?? null }
+      ? { ...toConfirmationTurnDto(pending), ...(turn.eventKind === 'step_result' ? { id: turn.id, createdAt: turn.createdAt.toISOString() } : {}), taskId: turn.taskId ?? null, executionId: turn.executionId ?? null, seq: turn.seq ?? null, eventKind: turn.eventKind ?? null }
       : toToolTurnDto(turn, callsById);
   });
 }

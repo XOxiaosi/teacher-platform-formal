@@ -1,5 +1,5 @@
-import type { PrismaClient } from '@prisma/client';
-import { err, validationError } from '@teacher-platform/contracts';
+import { Prisma, type PrismaClient } from '@prisma/client';
+import { err, validationError, internalError } from '@teacher-platform/contracts';
 import { createToolRegistry } from '../../shared/tool-registry/tool-registry.js';
 import { registerP0ReadTools } from '../tools/register-p0-read-tools.js';
 import { createBalanceCalcUseCase } from '../use-cases/balance-calc/balance-calc-use-case.js';
@@ -18,7 +18,6 @@ function isFeedbackStatus(value: unknown): value is FeedbackStatus {
 export function createTeachingRegistry(getClient: () => Promise<PrismaClient>) {
   const registry = createToolRegistry();
   registerP0ReadTools(registry, { getClient });
-  const students = createStudentService({ getClient });
   registry.register({
     name: 'students.create', description: '创建当前老师的学生；姓名和年级需由教师在对话中明确提供', sideEffect: 'create',
     parameters: {
@@ -33,13 +32,23 @@ export function createTeachingRegistry(getClient: () => Promise<PrismaClient>) {
     const a = args && typeof args === 'object' && !Array.isArray(args) ? args as Record<string, unknown> : {};
     if (typeof a.name !== 'string' || !a.name.trim()) return err(validationError('需要明确学生姓名', 'name'));
     if (typeof a.grade !== 'string' || !a.grade.trim()) return err(validationError('需要明确学生年级', 'grade'));
-    return students.createStudent({
-      teacherId: context.teacherId,
-      name: a.name,
-      grade: a.grade,
-      source: typeof a.source === 'string' ? a.source : undefined,
-      stageGoal: typeof a.stageGoal === 'string' ? a.stageGoal : undefined,
-    });
+    // A repeated conversation instruction must not create a second same-name,
+    // same-grade student. Do not silently merge identities: ask the teacher to
+    // inspect the existing record; distinct namesakes can use the student page.
+    const db = await getClient();
+    try {
+      return await db.$transaction(async tx => {
+        const existing = await tx.student.findFirst({ where: { teacherId: context.teacherId,
+          name: (a.name as string).trim(), grade: (a.grade as string).trim() } });
+        if (existing) return err(validationError('已有同名同年级学生，请先查看学生页核对；若是另一位学生，请在学生页明确新增', 'name'));
+        return createStudentService({ getClient: async () => tx }).createStudent({
+          teacherId: context.teacherId, name: (a.name as string).trim(), grade: (a.grade as string).trim(),
+          source: typeof a.source === 'string' ? a.source : undefined,
+          stageGoal: typeof a.stageGoal === 'string' ? a.stageGoal : undefined,
+        });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch { return err(internalError('学生保存未确认，请先查询现有学生后重试')); }
+
   });
   const balance = createBalanceCalcUseCase({ getClient });
   registry.register({

@@ -16,6 +16,8 @@ export const CONFIRMABLE_ACTION_NAMES = [
   'feedback.updateStatus',
   'payments.create',
   'students.records.capture',
+  'scheduling.create',
+  'memos.create',
 ] as const;
 
 export type ConfirmableActionName = (typeof CONFIRMABLE_ACTION_NAMES)[number];
