@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { mkdtempSync, cpSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { loadGovernance, validateGovernance } from './check-project-governance.mjs';
 
 const baseline = loadGovernance();
@@ -22,7 +25,8 @@ test('reject duplicate document entry points', () => {
   rejects(bundle, /重复入口/);
 });
 test('reject product and execution version drift', () => {
-  rejects(changed('PRODUCT.md', '| 需求版本 | V009 |', '| 需求版本 | V010 |'), /版本不一致/);
+  const versionRow = baseline.files['PRODUCT.md'].split('\n').find(line => line.startsWith('| 需求版本 |'));
+  rejects(changed('PRODUCT.md', versionRow, '| 需求版本 | V999 |'), /版本不一致/);
 });
 test('reject missing requirements still referenced by tasks', () => {
   rejects(changed('PRODUCT.md', '## F13｜', '## F99｜'), /F13/);
@@ -135,4 +139,45 @@ test('historical continuation fields cannot replace the current projection', () 
   const bundle = changed('PROJECT_LOG.md', row, '');
   bundle.files['PROJECT_LOG.md'] += `\n## 旧续接快照\n${row}\n`;
   rejects(bundle, /缺少连续执行状态: 当前可执行任务/);
+});
+
+test('compressed history remains byte-verifiable and cannot be silently replaced', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'tpf-governance-'));
+  try {
+    for (const name of ['AGENTS.md', 'PRODUCT.md', 'PROJECT_LOG.md', 'README.md', 'package.json']) cpSync(name, join(directory, name));
+    cpSync('evidence/project-history', join(directory, 'evidence/project-history'), { recursive: true });
+    assert.deepEqual(loadGovernance(directory).files, baseline.files);
+    const path = join(directory, 'evidence/project-history/history-20260919.json.gz');
+    const bytes = readFileSync(path); bytes[bytes.length - 1] ^= 1; writeFileSync(path, bytes);
+    assert.throws(() => loadGovernance(directory), /历史压缩档案指纹不一致/);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('latest work must be reflected in the current projection date', () => {
+  const row = baseline.files['PROJECT_LOG.md'].split('\n').find(line => line.startsWith('| 更新时间 |'));
+  rejects(changed('PROJECT_LOG.md', row, '| 更新时间 | 2026-09-01 |'), /投影日期落后/);
+});
+
+test('product revision dates cannot outrun the document date', () => {
+  const row = baseline.files['PRODUCT.md'].split('\n').find(line => line.startsWith('| 更新日期 |'));
+  rejects(changed('PRODUCT.md', row, '| 更新日期 | 2026-09-01 |'), /产品日期落后/);
+});
+
+test('independent work cannot be buried in an ever-growing paragraph', () => {
+  const bundle = structuredClone(baseline);
+  bundle.files['PROJECT_LOG.md'] += `\n${'合并任务'.repeat(500)}\n`;
+  rejects(bundle, /超长段落/);
+});
+
+test('readme is navigation rather than a second dynamic status ledger', () => {
+  const bundle = structuredClone(baseline); bundle.files['README.md'] += '\n## 当前阶段\nAI 未接入\n';
+  rejects(bundle, /README 不得/);
+});
+
+test('opinion tracking, business outcomes and cleanup safeguards remain required', () => {
+  for (const rule of ['每条可执行修改意见使用稳定编号', '一个独立任务一条记录',
+    '不能把运行状态统一标成业务已完成', '工程通过和用户认可分开记录',
+    '提交标题必须包含 `[xiaosi]`', '逐文件验证恢复内容']) {
+    rejects(changed('AGENTS.md', rule, '可省略'), /缺少必要约束/);
+  }
 });

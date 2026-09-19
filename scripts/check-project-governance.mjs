@@ -2,9 +2,11 @@ import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gunzipSync } from 'node:zlib';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const canonical = ['AGENTS.md', 'PRODUCT.md', 'PROJECT_LOG.md'];
+const archiveSha = '349c11c49f7b05a40b80a92fa6546972ac49bec8de80f7deb4cc2ea74b083910';
 // Pinned at GOV-001 intake; editing the manifest alone cannot rewrite history.
 const archiveBaseline = {
   'evidence/project-history/baseline-through-20260914.md': '2507eeabb408abf25208c816da601998543f8c439c86d192d6d271a5a6a6fdd2',
@@ -21,7 +23,10 @@ const codes = (text) => text.match(/\b(?:F\d{2}|D\d{2}|B\d{2})\b/g) ?? [];
 export function loadGovernance(directory = root) {
   const files = Object.fromEntries(canonical.map((name) => [name, readFileSync(resolve(directory, name), 'utf8')]));
   const manifest = JSON.parse(readFileSync(resolve(directory, 'evidence/project-history/manifest.json'), 'utf8'));
-  for (const entry of manifest.files) files[entry.path] = readFileSync(resolve(directory, entry.path), 'utf8');
+  const archive = readFileSync(resolve(directory, 'evidence/project-history/history-20260919.json.gz'));
+  if (digest(archive) !== archiveSha) throw new Error('历史压缩档案指纹不一致');
+  Object.assign(files, JSON.parse(gunzipSync(archive).toString('utf8')));
+  files['README.md'] = readFileSync(resolve(directory, 'README.md'), 'utf8');
   return {
     files, manifest, names: readdirSync(directory),
     package: JSON.parse(readFileSync(resolve(directory, 'package.json'), 'utf8')),
@@ -74,13 +79,13 @@ export function validateGovernance(bundle, options = {}) {
   for (const id of codes(plan)) if (!known.has(id)) errors.push(`执行计划引用未知需求或决定: ${id}`);
   const phases = new Set((plan.match(/阶段编号：([^。]+)/)?.[1] ?? '').match(/P\d+/g) ?? []);
   if ([...phases].join(',') !== 'P0,P1,P2,P3,P4,P5,P6') errors.push('阶段定义缺失或无效');
-  const tasks = rows(plan).filter(([id]) => /^(?:GOV-\d+|A\d{2}|P\d+)$/.test(id));
+  const tasks = rows(plan).filter(([id]) => /^(?:GOV-\d+|CHAT-\d+|UI-\d+|A\d{2}|P\d+)$/.test(id));
   const ids = tasks.map(([id]) => id);
   for (const id of new Set(ids)) if (ids.filter((value) => value === id).length !== 1) errors.push(`任务重复: ${id}`);
   for (const [id, refs, , dependencies, status] of tasks) {
     if (!codes(refs).length && !refs.includes('治理')) errors.push(`${id} 缺少需求关联`);
     if (!['未开始', '进行中', '等待确认', '被阻塞', '已完成', '已取消'].includes(status)) errors.push(`${id} 状态无效`);
-    for (const dep of dependencies.match(/\b(?:A\d{2}|P\d+)\b/g) ?? []) {
+    for (const dep of dependencies.match(/\b(?:GOV-\d+|CHAT-\d+|UI-\d+|A\d{2}|P\d+)\b/g) ?? []) {
       if ((!ids.includes(dep) && !phases.has(dep)) || dep === id) errors.push(`${id} 依赖不存在或自引用: ${dep}`);
     }
   }
@@ -93,7 +98,7 @@ export function validateGovernance(bundle, options = {}) {
   if (!projection['历史进度']?.includes('V008') || /\d+%/.test(projection['V009 进度'] ?? '')) {
     errors.push('旧进度不得作为 V009 完成率');
   }
-  const currentTask = projection['当前任务']?.match(/GOV-\d+|A\d{2}|P\d/)?.[0];
+  const currentTask = projection['当前任务']?.match(/GOV-\d+|CHAT-\d+|UI-\d+|A\d{2}|P\d/)?.[0];
   const task = tasks.find(([id]) => id === currentTask);
   if (!task || !projection['当前任务状态']?.startsWith(task[4])) errors.push('当前任务状态与计划不一致');
   if (task?.[4] === '已完成' && projection['交付门禁'] !== '通过') errors.push('未通过交付门禁不能标为已完成');
@@ -124,8 +129,23 @@ export function validateGovernance(bundle, options = {}) {
     ['失败不得完成交付', '任一必须检查失败或未执行，任务不能标为已完成或交付通过'],
     ['改动必须提交', '每次完成一项可独立描述的改动，都必须创建对应的 Git commit 后再交付'],
     ['阻塞提交不算交付', '这不是合格交付，也不是已验证可用的回滚点'],
+    ['逐项意见追踪', '每条可执行修改意见使用稳定编号'],
+    ['独立任务独立记录', '一个独立任务一条记录'],
+    ['真实业务结果', '不能把运行状态统一标成业务已完成'],
+    ['样板与验收分开', '工程通过和用户认可分开记录'],
+    ['提交来源标记', '提交标题必须包含 `[xiaosi]`'],
+    ['清理可恢复', '逐文件验证恢复内容'],
   ];
   for (const [label, rule] of requiredRules) if (!agents.includes(rule)) errors.push(`缺少必要约束: ${label}`);
+  const datedRecords = [...log.matchAll(/^### [^\n]+｜(\d{4}-\d{2}-\d{2})｜/gm)].map(match => match[1]);
+  const projectionDate = projection['更新时间']?.match(/\d{4}-\d{2}-\d{2}/)?.[0];
+  if (datedRecords.some(date => !projectionDate || date > projectionDate)) errors.push('日志当前投影日期落后于最新记录');
+  const productDate = rows(product).find(([key]) => key === '更新日期')?.[1]?.match(/\d{4}-\d{2}-\d{2}/)?.[0];
+  const revisionDates = [...section(product, '版本记录').matchAll(/\d{4}-\d{2}-\d{2}/g)].map(match => match[0]);
+  if (!productDate || revisionDates.some(date => date > productDate)) errors.push('产品日期落后于版本记录');
+  if (log.split('\n').some(line => line.length > 1600)) errors.push('日志存在多任务挤入超长段落');
+  const readme = files['README.md'] ?? '';
+  if (/^## 当前阶段|AI 未接入|真实模型调用.*均未启用/m.test(readme)) errors.push('README 不得重复维护动态状态');
   if (/V00[5-8].*(?:用户要求|必须|仅允许)/.test(agents)) errors.push('工作规则混入旧版产品要求');
   for (const name of ['check:governance', 'test:governance']) {
     if (!bundle.package.scripts[name]) errors.push(`缺少脚本 ${name}`);

@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "archive": "evidence/project-history/history-20260919.json.gz",
+  "sha256": "349c11c49f7b05a40b80a92fa6546972ac49bec8de80f7deb4cc2ea74b083910",
+  "entries": [
+    {
+      "path": "ARCHITECTURE-PLAN.md",
+      "bytes": 8573,
+      "sha256": "a6760e4f4456942fd94d2e55deb9f5b892a1d56659625e1d9930da0bed10adf0"
+    },
+    {
+      "path": "CLOUD-READINESS-PLAN.md",
+      "bytes": 12235,
+      "sha256": "ed29a2587f74a64b1c318908daef36a92f0ccb935994c87344c3d9ffd5862610"
+    },
+    {
+      "path": "NEXT-TASKS.md",
+      "bytes": 16170,
+      "sha256": "232fbd9a2f58b5ad950841a1dcca0df6c2866f9be52e0b2fbe0953de54b76e65"
+    },
+    {
+      "path": "PRODUCT-CAPABILITIES-V1.md",
+      "bytes": 17130,
+      "sha256": "d6948e3c7349909174dd3cba8811303608ba3fa21e4296b91b54bdae4f398ce5"
+    },
+    {
+      "path": "REFACTOR-ROADMAP.md",
+      "bytes": 8456,
+      "sha256": "c8c351c003ca06d64726dfef3b9ab56fa2353d937c679467ef72b76795faae4f"
+    },
+    {
+      "path": "VALIDATION-GATES.md",
+      "bytes": 5530,
+      "sha256": "4f4139a2f47095fd32ccff96116e4be6b0faf01c037a07cac6aa07345aa62ac1"
+    },
+    {
+      "path": "PRODUCT-CONTRACT.md",
+      "bytes": 13698,
+      "sha256": "89e4fc1f1ce8585cee22d0e38f00200c705a4f58a77d5d94230f8ba69a597455"
+    },
+    {
+      "path": "evidence/project-history/baseline-through-20260914.md",
+      "bytes": 44492,
+      "sha256": "19b7e71366159dbff52e56a1561c7c3bb6da12919d10afec844c594c0532a41c"
+    },
+    {
+      "path": "evidence/project-history/journal-through-20260914.md",
+      "bytes": 67887,
+      "sha256": "b8c15cb6232e4fb8be33851845a0fca9558634df82ef274dd0d0eddbb4771636"
+    },
+    {
+      "path": "evidence/project-history/agent-rules-through-20260914.md",
+      "bytes": 3459,
+      "sha256": "ee381682ed09d265eac4732062ed58f841a73544131b9edf02759088bacde1cc"
+    },
+    {
+      "path": "PROJECT_LOG-through-20260918.md",
+      "bytes": 99968,
+      "sha256": "ac018abaf5f2659ecae8dfc6bd466afebddcca1215714cd3ff0c71528f82a854"
+    }
+  ],
+  "backup": "/Users/xiaosi/Developer/artifacts/teacher-platform-formal/GOV-005-20260919/documents-before-cleanup.tar.gz",
+  "removedWorkingTreeFiles": [
+    "ARCHITECTURE-PLAN.md",
+    "CLOUD-READINESS-PLAN.md",
+    "NEXT-TASKS.md",
+    "PRODUCT-CAPABILITIES-V1.md",
+    "REFACTOR-ROADMAP.md",
+    "VALIDATION-GATES.md",
+    "PRODUCT-CONTRACT.md",
+    "evidence/project-history/baseline-through-20260914.md",
+    "evidence/project-history/journal-through-20260914.md",
+    "evidence/project-history/agent-rules-through-20260914.md"
+  ],
+  "originalBytes": 297598,
+  "compressedBytes": 106299
+}

@@ -1,37 +1,37 @@
-# 教师 AI 工作平台｜Active 正式迁移工作空间
+# 教师 AI 工作平台
 
-这是教师平台在 Active Developer Workspace 中的唯一长期开发目录。旧 `teacher-platform` 和旧 `teacher-platform-formal` 都只作为只读来源；本项目不是从零开发，也不把旧完成状态冒充正式版完成状态。
+教师端、管理端与后端的本地开发仓库。当前范围、状态和授权只从以下入口读取：
 
-## 当前阶段
+- [AGENTS.md](AGENTS.md)：交互、Agent 调度、测试、提交和交付规范。
+- [PRODUCT.md](PRODUCT.md)：产品目标、交互验收与待决定项。
+- [PROJECT_LOG.md](PROJECT_LOG.md)：当前任务、授权边界、验证证据和续接点。
 
-当前执行 MIG-002：把旧固定快照整体纳入处置清单，先恢复统一 workspace 的安装、构建、测试和本地安全启动，再集中 Debug。迁入的旧应用属于 `legacy-only` 基线，不代表产品范围、视觉、外部服务或正式发布已经通过。
+## 目录
 
-当前执行状态只以 [项目日志](./PROJECT_LOG.md) 为准。迁移原始契约、文件分类和验证证据见 `evidence/migration/MIG-002-*`；微信、媒体、管理员权限、AI 写入和真实外部服务仍须等待各自产品与外部 Gate。
+- `packages/frontend`：教师网页；`packages/admin`：管理网页；`packages/backend`：业务服务。
+- `packages/contracts`、`api-contracts`、`domain`：数据与接口契约；`packages/ops`：运维工具。
+- `scripts`：本地启动、隔离测试和治理；`evidence`：仍有效的设计、验证和压缩历史。
+- [历史归档与恢复清单](evidence/project-history/archive-receipt.json)：旧规划已退出根目录；历史不定义现行范围。
 
-## 当前文档
+## 本地核验
 
-- [产品说明](./PRODUCT.md)：唯一产品事实源，只保存已确认或明确处于确认中的产品内容。
-- [项目日志](./PROJECT_LOG.md)：唯一执行事实源，记录任务、依赖、进度、迁移来源和 Gate。
-- [正式版产品契约来源稿](./PRODUCT-CONTRACT.md)：用于追溯既有详细契约，不再单独维护当前产品状态。
-- [第一版平台能力说明来源稿](./PRODUCT-CAPABILITIES-V1.md)：`PRODUCT.md` 的非技术来源与展示材料，不单独定义范围。
-- [云端上线前置规划](./CLOUD-READINESS-PLAN.md)：整理服务器、域名、微信、识别服务和编译环境的准备顺序。
-- [关键决策记录](./DECISIONS.md)：保存决策理由与历史；当前状态以 `PRODUCT.md` 和 `PROJECT_LOG.md` 为准。
-- [正式版架构计划](./ARCHITECTURE-PLAN.md)：正式版系统边界、数据分层和旧资产处置原则。
-- [受控迁移路线](./REFACTOR-ROADMAP.md)：从契约冻结到云端候选版的 W0–W10 参考顺序。
-- [下一步任务清单](./NEXT-TASKS.md)：已迁入 `PROJECT_LOG.md` 的规划来源稿。
-- [教师网页视觉与交互契约](./UI-VISUAL-CONTRACT.md)：暖色编辑式视觉方向、日程页面结构和视觉验收规则。
-- [独立验收 Gate](./VALIDATION-GATES.md)：每一波如何证明完成以及全局零容忍项。
-- [旧资产迁移候选索引](./MIGRATION-LEDGER.md)：记录候选来源与处置建议；正式状态只写入 `PROJECT_LOG.md`。
+使用项目锁定 Node 22 / npm 10 环境与 PostgreSQL 17 工具。根测试入口自动创建并清理源码树外合成数据库，不借用本机真实资料。
 
-## 当前工作边界
+```sh
+npm run check
+npm run check:governance
+npm run test:governance
+```
 
-- 正式版面向云端运行，教师通过网页和微信使用。
-- Windows 11 是开发、浏览器使用和验收环境，不是默认生产服务器。
-- 正式产品目标包含微信、真实语音转文字和真实图片文字识别；当前迁移批次不接真实微信。
-- 微信只处理教师主动发起的对话；平台不主动或自动向教师、家长发送微信消息。
-- 云端部署地区已确认为中国大陆，资源申请主体已确认为个人。
-- 第一期按 150 名个人教师规划；未来微信入口只服务已识别教师主动发起的私聊，具体绑定方式留待 T-003 与真实供应商验证。
-- 原始音频和图片处理成功后需要删除；处理失败时保留原件用于追溯和重试。成功后的准确删除触发点仍待确认。
-- 未确认的产品行为不进入实现；不依赖未决行为、且来源和 Gate 已明确的基础能力可先迁移。
-- 整个固定快照一次进入迁移批次，但每个文件仍按“正式、临时遗留、替换、历史、排除”分类；整体迁移不等于整仓复制。
-- 旧教师页面可以临时作为恢复构建的 `legacy-only` 基线，默认不可发布；其正式替换仍遵循 `UI-VISUAL-CONTRACT.md`。
+安全本地后端：`npm run start:local-safe`。教师前端：`npm run dev --workspace @teacher-platform/frontend`。前端已有端口被占用时先核对进程，不重复启动或结束用户服务。
+
+正式网页需登录；`/preview.html` 是独立合成体验，不代表真实业务保存。运行时接入、可用能力和真实验收见项目日志，不在本文件维护另一份状态。
+
+## 查阅压缩历史
+
+```sh
+node scripts/read-project-history.mjs --list
+node scripts/read-project-history.mjs PROJECT_LOG-through-20260918.md
+```
+
+工具只向终端输出原文，恢复到文件时请使用项目外新路径。归档保持原始哈希，压缩不等于删除 Git 历史，也不提供数据库回滚。
