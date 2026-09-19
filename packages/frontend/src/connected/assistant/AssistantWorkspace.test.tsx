@@ -4,13 +4,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AssistantWorkspace } from './AssistantWorkspace';
 import { clearAssistantDrafts } from './drafts';
 import { detail, deferred, makeTransport, userTurn } from './assistant-test-support';
-import type { ConversationResponse } from '../../api/conversations';
+import type { ConfirmationTurnDto, ConversationResponse } from '../../api/conversations';
 
-const api = vi.hoisted(() => ({ create: vi.fn(), list: vi.fn(), detail: vi.fn(), turns: vi.fn(), archive: vi.fn(), sendLegacy: vi.fn(), confirmLegacy: vi.fn() }));
+const api = vi.hoisted(() => ({ create: vi.fn(), list: vi.fn(), detail: vi.fn(), turns: vi.fn(), archive: vi.fn(), sendLegacy: vi.fn(), confirmLegacy: vi.fn(), cancelLegacy: vi.fn() }));
 vi.mock('../../api/conversations', () => ({
   createConversation: api.create, listConversations: api.list, getConversation: api.detail,
   listConversationTurns: api.turns, archiveConversation: api.archive,
-  sendConversationMessage: api.sendLegacy, confirmPendingAction: api.confirmLegacy,
+  sendConversationMessage: api.sendLegacy, confirmPendingAction: api.confirmLegacy, cancelPendingAction: api.cancelLegacy,
 }));
 beforeEach(() => {
   vi.clearAllMocks(); sessionStorage.clear(); clearAssistantDrafts('teacher-a'); clearAssistantDrafts('teacher-b');
@@ -20,7 +20,18 @@ beforeEach(() => {
   api.turns.mockResolvedValue({ items: [], previousCursor: null });
   api.create.mockResolvedValue({ conversation: detail('new') });
   api.archive.mockResolvedValue({ conversation: detail('one', 'archived') });
+  api.confirmLegacy.mockResolvedValue({ pendingAction: { id: 'pending-1', status: 'consumed' } });
+  api.cancelLegacy.mockResolvedValue({ pendingAction: { id: 'pending-1', status: 'cancelled' } });
 });
+
+function proposedAction(actionName: 'scheduling.create' | 'memos.create' = 'scheduling.create'): ConfirmationTurnDto {
+  return {
+    id: 'confirmation-1', conversationId: 'one', kind: 'confirmation', actionId: 'pending-1', actionName,
+    target: { type: 'Schedule', id: 'proposal-1' }, beforeSummary: null, afterSummary: '周三 19:00 为小明安排数学课。',
+    parameterSummary: {}, status: 'pending', expiresAt: '2099-09-19T12:00:00Z', actionToken: 'private-confirmation-token', error: null,
+    createdAt: '2026-09-19T12:00:00Z',
+  };
+}
 
 describe('A03 server-backed assistant conversations', () => {
   it('completes the latest load when StrictMode runs the effect twice', async () => {
@@ -192,7 +203,7 @@ describe('A03 server-backed assistant conversations', () => {
   it('restores task statuses from the server without relying on a browser-held task id', async () => {
     const transport = makeTransport(); transport.getTasks.mockResolvedValue([{ id: 'persistent-task', status: 'partial', summary: '记录已保存，反馈尚未生成。' }]);
     render(<AssistantWorkspace teacherId="teacher-a" transport={transport} />);
-    await screen.findByText('部分完成');
+    await screen.findByText('本轮部分完成');
     expect(screen.getByText('记录已保存，反馈尚未生成。')).toBeInTheDocument();
     expect(transport.getTasks).toHaveBeenCalledWith({ teacherId: 'teacher-a', conversationId: 'one' });
   });
@@ -232,7 +243,7 @@ describe('A03 server-backed assistant conversations', () => {
     render(<AssistantWorkspace teacherId="teacher-a" transport={transport} />);
     await screen.findByText('任务已收到并保存。');
     expect(screen.getAllByText('任务已收到并保存。')).toHaveLength(1);
-    fireEvent.click(screen.getByRole('button', { name: '刷新任务和结果' }));
+    fireEvent.click(screen.getByRole('button', { name: '刷新处理过程' }));
     await screen.findByText('已恢复并继续处理。');
     expect(screen.getAllByText('任务已收到并保存。')).toHaveLength(1);
     expect(transport.getTaskEvents).toHaveBeenLastCalledWith({ teacherId: 'teacher-a', conversationId: 'one', taskId: 'task-1', afterSeq: 1 });
@@ -299,5 +310,99 @@ describe('A03 server-backed assistant conversations', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('keeps same-status tasks separate and labels a runtime success as a finished reply', async () => {
+    const transport = makeTransport();
+    transport.getTasks.mockResolvedValue([
+      { id: 'task-first', status: 'succeeded', version: 1, summary: '' },
+      { id: 'task-second', status: 'succeeded', version: 1, summary: '' },
+    ]);
+    render(<AssistantWorkspace teacherId="teacher-a" transport={transport} />);
+    expect(await screen.findAllByText('本轮回复已结束')).toHaveLength(2);
+    expect(screen.getByText('历史处理过程')).toBeInTheDocument();
+    expect(screen.queryByText('任务 task-fir')).not.toBeInTheDocument();
+    expect(screen.queryByText('未提供任务摘要，请查看会话内容。')).not.toBeInTheDocument();
+  });
+
+  it('places a task process beneath its linked conversation turn and collapses only unlinked history', async () => {
+    api.turns.mockResolvedValue({ items: [{ ...userTurn('linked-turn', '这条消息对应处理过程'), taskId: 'linked-task' }], previousCursor: null });
+    const transport = makeTransport();
+    transport.getTasks.mockResolvedValue([{ id: 'linked-task', status: 'partial', version: 1, summary: '已保存一部分资料。' }]);
+    render(<AssistantWorkspace teacherId="teacher-a" transport={transport} />);
+    const wrapper = (await screen.findByText('这条消息对应处理过程')).closest('.assistant-turn-with-process');
+    expect(wrapper?.textContent).toContain('本轮部分完成');
+    expect(wrapper?.textContent).toContain('处理过程');
+    expect(screen.queryByText('历史处理过程')).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('linked-task');
+  });
+
+  it('refreshes workspace once after a terminal task transition, never from its receipt alone', async () => {
+    const transport = makeTransport();
+    const refreshWorkspace = vi.fn().mockResolvedValue(undefined);
+    transport.getTasks.mockResolvedValueOnce([{ id: 'task-refresh', status: 'queued', version: 1, summary: '' }])
+      .mockResolvedValue([{ id: 'task-refresh', status: 'failed', version: 2, summary: '本轮未完成' }]);
+    render(<AssistantWorkspace teacherId="teacher-a" transport={transport} onWorkspaceRefresh={refreshWorkspace} />);
+    await screen.findByText('等待处理');
+    expect(refreshWorkspace).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '刷新处理过程' }));
+    await waitFor(() => expect(refreshWorkspace).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: '刷新处理过程' }));
+    await waitFor(() => expect(transport.getTasks.mock.calls.length).toBeGreaterThanOrEqual(3));
+    expect(refreshWorkspace).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshes once for a durable assistant event and drops a late refresh failure after account change', async () => {
+    const transport = makeTransport();
+    const late = deferred<void>();
+    const refreshWorkspace = vi.fn().mockReturnValue(late.promise);
+    transport.getTasks.mockResolvedValueOnce([{ id: 'task-event', status: 'running', version: 1, summary: '' }]).mockResolvedValue([]);
+    transport.getTaskEvents.mockResolvedValue({ items: [{ seq: 1, eventKey: 'event-result', eventKind: 'assistant_message', executionId: 'run-1', role: 'assistant', content: '已写入会话', createdAt: '2026-09-19T12:00:00Z' }], nextSeq: null });
+    const view = render(<AssistantWorkspace teacherId="teacher-a" transport={transport} onWorkspaceRefresh={refreshWorkspace} />);
+    await waitFor(() => expect(refreshWorkspace).toHaveBeenCalledTimes(1));
+    view.rerender(<AssistantWorkspace teacherId="teacher-b" transport={transport} onWorkspaceRefresh={refreshWorkspace} />);
+    await act(async () => late.reject(new Error('workspace down')));
+    expect(screen.queryByText('助手本轮已返回，资料刷新失败；请先刷新核对，不要重复登记。')).not.toBeInTheDocument();
+  });
+
+  it('shows a precise refresh failure after a durable terminal outcome', async () => {
+    const transport = makeTransport();
+    transport.getTasks.mockResolvedValue([{ id: 'task-terminal', status: 'partial', version: 4, summary: '' }]);
+    render(<AssistantWorkspace teacherId="teacher-a" transport={transport} onWorkspaceRefresh={async () => { throw new Error('workspace down'); }} />);
+    await screen.findByText('助手本轮已返回，资料刷新失败；请先刷新核对，不要重复登记。');
+  });
+
+  it('confirms an eligible schedule proposal once, then refreshes the saved data', async () => {
+    const refreshWorkspace = vi.fn().mockResolvedValue(undefined);
+    api.turns.mockResolvedValue({ items: [proposedAction()], previousCursor: null });
+    render(<AssistantWorkspace teacherId="teacher-a" onWorkspaceRefresh={refreshWorkspace} />);
+    await screen.findByText(/周三 19:00 为小明安排数学课。/);
+    const confirm = screen.getByRole('button', { name: '确认保存' });
+    fireEvent.click(confirm); fireEvent.click(confirm);
+    await waitFor(() => expect(api.confirmLegacy).toHaveBeenCalledTimes(1));
+    expect(api.confirmLegacy).toHaveBeenCalledWith('teacher-a', 'pending-1', 'private-confirmation-token');
+    await screen.findByRole('heading', { name: '已保存' });
+    expect(screen.getByRole('link', { name: '查看课表' })).toHaveAttribute('href', '#/schedules');
+    await waitFor(() => expect(refreshWorkspace).toHaveBeenCalledTimes(1));
+    expect(document.body.textContent).not.toContain('private-confirmation-token');
+  });
+
+  it('retains an actionable proposal when saving fails', async () => {
+    api.turns.mockResolvedValue({ items: [proposedAction('memos.create')], previousCursor: null });
+    api.confirmLegacy.mockRejectedValue(new Error('backend rejected the action'));
+    render(<AssistantWorkspace teacherId="teacher-a" />);
+    fireEvent.click(await screen.findByRole('button', { name: '确认保存' }));
+    await screen.findByText('保存尚未确认，请重试。');
+    expect(screen.getByRole('button', { name: '确认保存' })).toBeEnabled();
+    expect(screen.getByText(/周三 19:00 为小明安排数学课。/)).toBeInTheDocument();
+  });
+
+  it('cancels a pending memo proposal without claiming it was saved', async () => {
+    api.turns.mockResolvedValue({ items: [proposedAction('memos.create')], previousCursor: null });
+    render(<AssistantWorkspace teacherId="teacher-a" />);
+    fireEvent.click(await screen.findByRole('button', { name: '取消' }));
+    await waitFor(() => expect(api.cancelLegacy).toHaveBeenCalledWith('teacher-a', 'pending-1'));
+    await screen.findByText('该操作已取消。不会写入资料。');
+    expect(screen.queryByRole('link', { name: '查看待办' })).not.toBeInTheDocument();
   });
 });

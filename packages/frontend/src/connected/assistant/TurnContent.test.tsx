@@ -33,4 +33,27 @@ describe('assistant turn presentation', () => {
     }} />);
     expect(screen.getAllByText(content)).toHaveLength(1);
   });
+
+  it('keeps historical or expired confirmations read-only', () => {
+    render(<TurnContent turn={{
+      id: 'confirmation-1', conversationId: 'conversation-1', kind: 'confirmation', actionId: 'old-action', actionName: 'scheduling.create',
+      target: { type: 'Schedule', id: 'schedule-1' }, beforeSummary: null, afterSummary: '旧的排课提案', parameterSummary: {},
+      status: 'pending', expiresAt: '2020-01-01T00:00:00Z', actionToken: 'not-rendered', error: null, createdAt: '2026-09-15T12:00:00Z',
+    }} />);
+    expect(screen.getByText('确认已过期，请重新提出要求并核对当前资料。')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '确认保存' })).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('not-rendered');
+  });
+
+  it('shows a saved student result with a student route and no raw identifier', () => {
+    render(<TurnContent turn={{
+      id: 'tool-1', conversationId: 'conversation-1', kind: 'tool', toolCallId: 'call-1', toolName: 'students.create',
+      displayName: '登记学生', sideEffect: 'create', status: 'success', inputSummary: {}, resultSummary: '学生小明已保存。',
+      references: [{ type: 'Student', id: 'student-private-id', label: '小明', route: '/students/student-private-id' }], error: null,
+      createdAt: '2026-09-15T12:00:00Z',
+    }} />);
+    expect(screen.getByText('学生小明已保存。')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '查看学生' })).toHaveAttribute('href', '#/students/student-private-id');
+    expect(document.body.textContent).not.toContain('student-private-id');
+  });
 });

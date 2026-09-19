@@ -8,14 +8,20 @@ import type { AssistantTransport } from './transport';
 import './assistant.css';
 import { formatDateTime } from '../../shared/date-format';
 
-interface Props { teacherId: string; transport?: AssistantTransport }
+interface Props {
+  teacherId: string;
+  transport?: AssistantTransport;
+  /** Reload formal workspace data after a durable assistant outcome. */
+  onWorkspaceRefresh?: () => Promise<void>;
+}
 function routeConversation(): string | null {
   const match = /^#\/agent\/([^/?#]+)$/.exec(window.location.hash);
   try { return match ? decodeURIComponent(match[1]) : null; } catch { return null; }
 }
-function AccountWorkspace({ teacherId, transport }: Props) {
+function AccountWorkspace({ teacherId, transport, onWorkspaceRefresh }: Props) {
   const [conversationId, setConversationId] = useState(routeConversation);
   const [status, setStatus] = useState<ConversationStatus>('active');
+  const [sessionsOpen, setSessionsOpen] = useState(true);
   const list = useConversationList(teacherId, status, transport);
   const { messages, send } = useAssistantMessages(teacherId, transport);
   useEffect(() => { retainOnlyTeacherDrafts(teacherId); }, [teacherId]);
@@ -27,9 +33,11 @@ function AccountWorkspace({ teacherId, transport }: Props) {
   function select(id: string) { window.location.hash = `/agent/${encodeURIComponent(id)}`; setConversationId(id); }
   return <div className="assistant-workspace">
     <header className="assistant-page-heading"><h1>教学助手</h1><p>整理教学记录、核对课时，接着完成手头的工作。</p></header>
-    <div className="assistant-layout">
+    <div className={`assistant-layout${sessionsOpen ? '' : ' assistant-layout-sessions-collapsed'}`}>
       <aside className="assistant-session-column" aria-label="会话列表">
         <section className="assistant-session-panel">
+        <div className="assistant-session-toolbar"><strong>会话</strong><button type="button" className="assistant-compact-button" aria-expanded={sessionsOpen} onClick={() => setSessionsOpen(open => !open)}>{sessionsOpen ? '收起' : '展开'}</button></div>
+        {sessionsOpen && <>
         <button type="button" className="assistant-new" disabled={list.creating} onClick={() => { void list.create().then(id => { if (id) { setStatus('active'); select(id); } }); }}>{list.creating ? '正在新建…' : '新建会话'}</button>
         <label>查看会话<select value={status} onChange={event => setStatus(event.target.value as ConversationStatus)}><option value="active">进行中的会话</option><option value="archived">已归档的会话</option></select></label>
         {list.busy && <p role="status">正在读取会话列表…</p>}
@@ -37,9 +45,10 @@ function AccountWorkspace({ teacherId, transport }: Props) {
         {!list.busy && !list.error && list.items.length === 0 && <p>{status === 'archived' ? '还没有已归档会话。' : '还没有会话，先新建一条。'}</p>}
         <ul>{list.items.map(item => <li key={item.id}><button type="button" aria-current={conversationId === item.id ? 'page' : undefined} onClick={() => select(item.id)}><strong>{item.displayTitle}</strong>{item.summary && <span>{item.summary}</span>}<small>{item.lastTurnAt ? formatDateTime(item.lastTurnAt) : '尚无消息'}</small></button></li>)}</ul>
         {list.cursor && <button type="button" disabled={list.busy} onClick={() => { void list.load(true); }}>加载更多会话</button>}
+        </>}
         </section>
       </aside>
-      {conversationId ? <ConversationPanel key={conversationId} teacherId={teacherId} conversationId={conversationId} transport={transport} messageState={messages[conversationId]} send={send} onArchive={() => { void list.load(); }} />
+      {conversationId ? <ConversationPanel key={conversationId} teacherId={teacherId} conversationId={conversationId} transport={transport} messageState={messages[conversationId]} send={send} onArchive={() => { void list.load(); }} onWorkspaceRefresh={onWorkspaceRefresh} />
         : <section className="assistant-welcome"><h2>今天想先完成什么？</h2><p>新建一条会话，或选择已有会话接着处理。</p><p>已保存的记录和材料可以从原会话找回。</p></section>}
     </div>
   </div>;

@@ -19,6 +19,7 @@ function mergeTurns(previous: AgentTurnDto[], incoming: AgentTurnDto[]): AgentTu
 }
 
 export function useConversation(teacherId: string, conversationId: string, transport: AssistantTransport | undefined, receipt?: string) {
+  const conversationApi = transport?.conversationApi;
   const [conversation, setConversation] = useState<ConversationDetailDto | null>(null);
   const [turns, setTurns] = useState<AgentTurnDto[]>([]);
   const [tasks, setTasks] = useState<AssistantTask[]>([]);
@@ -50,8 +51,17 @@ export function useConversation(teacherId: string, conversationId: string, trans
     })));
     if (!alive.current) return;
     setEvents(previous => {
-      const seen = new Set(previous.map(event => event.eventKey));
-      return [...previous, ...eventResults.flatMap(result => result.items).filter(event => !seen.has(event.eventKey))]
+      const seen = new Set(previous.map(event => `${event.taskId}:${event.eventKey}`));
+      const incoming = eventResults.flatMap((result, index) => result.items.map(event => ({
+        ...event,
+        taskId: event.taskId || taskItems[index]!.id,
+      }))).filter(event => {
+        const key = `${event.taskId}:${event.eventKey}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      return [...previous, ...incoming]
         .sort((a, b) => a.seq - b.seq);
     });
     const nextCursor = { ...eventCursorRef.current };
@@ -82,7 +92,10 @@ export function useConversation(teacherId: string, conversationId: string, trans
     const request = ++version.current;
     setBusy(true); setError('');
     try {
-      const [detail, history] = await Promise.all([getConversation(teacherId, conversationId), listConversationTurns(teacherId, conversationId)]);
+      const [detail, history] = await Promise.all([
+        (conversationApi?.detail ?? getConversation)(teacherId, conversationId),
+        (conversationApi?.turns ?? listConversationTurns)(teacherId, conversationId),
+      ]);
       if (!alive.current || version.current !== request) return;
       setConversation(detail.conversation); setTurns(history.items); setPreviousCursor(history.previousCursor);
       setSyncError(''); setLastSyncedAt(new Date().toISOString());
@@ -97,7 +110,7 @@ export function useConversation(teacherId: string, conversationId: string, trans
     conversationRefreshLock.current = true;
     if (alive.current) { setSyncing(true); setSyncError(''); }
     try {
-      const history = await listConversationTurns(teacherId, conversationId);
+      const history = await (conversationApi?.turns ?? listConversationTurns)(teacherId, conversationId);
       if (!alive.current || version.current !== request) return;
       setTurns(previous => mergeTurns(previous, history.items));
       const forceTaskRefresh = taskRefreshPendingRef.current;
@@ -133,7 +146,7 @@ export function useConversation(teacherId: string, conversationId: string, trans
     historyLock.current = true; setLoadingHistory(true); setError('');
     const request = version.current;
     try {
-      const history = await listConversationTurns(teacherId, conversationId, { before: previousCursor });
+      const history = await (conversationApi?.turns ?? listConversationTurns)(teacherId, conversationId, { before: previousCursor });
       if (!alive.current || version.current !== request) return;
       setTurns(previous => [...history.items.filter(item => !previous.some(old => old.id === item.id)), ...previous]);
       setPreviousCursor(history.previousCursor);
@@ -144,7 +157,7 @@ export function useConversation(teacherId: string, conversationId: string, trans
     if (archiveLock.current) return false;
     archiveLock.current = true; setArchiving(true); setError('');
     try {
-      const result = await archiveConversation(teacherId, conversationId);
+      const result = await (conversationApi?.archive ?? archiveConversation)(teacherId, conversationId);
       if (!alive.current) return false;
       setConversation(result.conversation); return true;
     } catch { if (alive.current) setError('会话尚未归档，请重试。'); return false; }

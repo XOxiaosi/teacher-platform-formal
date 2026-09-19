@@ -3,6 +3,7 @@ import { createConversation, getConversation, listConversations, type Conversati
 import type { AssistantTransport } from './transport';
 
 export function useConversationList(teacherId: string, status: ConversationStatus, transport?: AssistantTransport) {
+  const conversationApi = transport?.conversationApi;
   const [items, setItems] = useState<ConversationSummaryDto[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -19,7 +20,7 @@ export function useConversationList(teacherId: string, status: ConversationStatu
     const request = version.current;
     setBusy(true); setError('');
     try {
-      const result = await listConversations(teacherId, { status, ...(append && cursor ? { cursor } : {}) });
+      const result = await (conversationApi?.list ?? listConversations)(teacherId, { status, ...(append && cursor ? { cursor } : {}) });
       if (!alive.current || request !== version.current) return;
       setItems(previous => append ? [...previous, ...result.items.filter(item => !previous.some(old => old.id === item.id))] : result.items);
       setCursor(result.nextCursor);
@@ -38,7 +39,7 @@ export function useConversationList(teacherId: string, status: ConversationStatu
     createLock.current = true; setCreating(true); setError('');
     try {
       const response = transport?.createConversation
-        ? await getConversation(teacherId, await transport.createConversation({ teacherId }))
+        ? await (conversationApi?.detail ?? getConversation)(teacherId, await transport.createConversation({ teacherId }))
         : await createConversation(teacherId);
       const conversation = response.conversation;
       if (!alive.current) return null;

@@ -1,4 +1,4 @@
-import type { AgentTurnDto, ObjectReferenceDto } from '../../api/conversations';
+import type { AgentTurnDto, ConfirmationStatus, ConfirmationTurnDto, ObjectReferenceDto } from '../../api/conversations';
 import type { PresentationDocument } from '@teacher-platform/contracts';
 import type { ReactNode } from 'react';
 import { formatDateTime } from '../../shared/date-format';
@@ -61,11 +61,11 @@ function MarkdownContent({ content }: { content: string }) {
   return <div className="assistant-markdown">{blocks}</div>;
 }
 
-function References({ references }: { references: ObjectReferenceDto[] }) {
+function References({ references, studentLinkLabel = false }: { references: ObjectReferenceDto[]; studentLinkLabel?: boolean }) {
   // Only app-local routes are navigable. Labels remain visible for unsupported routes.
   return <ul className="assistant-references">{references.map(reference => <li key={`${reference.type}:${reference.id}`}>
     {/^\/?(?:students|schedules|lessons|payments|memos|feedback)(?:\/[^?#]*)?$/.test(reference.route)
-      ? <a href={`#/${reference.route.replace(/^\//, '')}`}>{reference.label}</a> : <span>{reference.label}</span>}
+      ? <a href={`#/${reference.route.replace(/^\//, '')}`}>{studentLinkLabel && reference.type === 'Student' ? '查看学生' : reference.label}</a> : <span>{reference.label}</span>}
   </li>)}</ul>;
 }
 function Presentation({ document, showSummary = true }: { document: PresentationDocument; showSummary?: boolean }) {
@@ -78,8 +78,46 @@ function Presentation({ document, showSummary = true }: { document: Presentation
     </section>)}
   </div>;
 }
-export function TurnContent({ turn, pendingLabel }: { turn: AgentTurnDto; pendingLabel?: string }) {
-  if (turn.kind === 'tool') return null;
+interface ConfirmationActionProps {
+  status?: ConfirmationStatus;
+  busy?: boolean;
+  error?: string;
+  onConfirm?: () => void;
+  onCancel?: () => void;
+}
+
+const confirmableActions = new Set(['scheduling.create', 'memos.create']);
+
+function confirmationIsExpired(turn: ConfirmationTurnDto): boolean {
+  const expiresAt = Date.parse(turn.expiresAt);
+  return !Number.isFinite(expiresAt) || expiresAt <= Date.now();
+}
+
+function ConfirmationContent({ turn, action }: { turn: ConfirmationTurnDto; action?: ConfirmationActionProps }) {
+  const status = action?.status ?? turn.status;
+  const eligible = confirmableActions.has(turn.actionName) && status === 'pending' && Boolean(turn.actionToken) && !confirmationIsExpired(turn);
+  const saved = status === 'consumed' && confirmableActions.has(turn.actionName);
+  const cancelled = status === 'cancelled' && confirmableActions.has(turn.actionName);
+  const destination = turn.actionName === 'scheduling.create'
+    ? { href: '#/schedules', label: '查看课表', savedLabel: '课程已保存。' }
+    : { href: '#/today', label: '查看待办', savedLabel: '待办已保存。' };
+  return <>
+    <h3>{eligible ? '确认保存' : saved ? '已保存' : '历史操作记录'}</h3>
+    {turn.beforeSummary && <p>原有内容：{turn.beforeSummary}</p>}
+    <p>拟调整为：{turn.afterSummary}</p>
+    {eligible && <div className="assistant-confirmation-actions">
+      <p>核对无误后再保存到资料中。</p>
+      {action?.error && <p role="alert">{action.error}</p>}
+      <button type="button" disabled={action?.busy} onClick={action?.onConfirm}>{action?.busy ? '正在保存…' : '确认保存'}</button>
+      <button type="button" disabled={action?.busy} onClick={action?.onCancel}>取消</button>
+    </div>}
+    {saved && <p>{destination.savedLabel} <a href={destination.href}>{destination.label}</a></p>}
+    {cancelled && <p>该操作已取消。不会写入资料。</p>}
+    {!eligible && !saved && !cancelled && <p>{status === 'consumed' ? '历史记录显示此操作已处理。' : confirmationIsExpired(turn) ? '确认已过期，请重新提出要求并核对当前资料。' : '此历史操作不能在这里继续确认，请重新提出要求并核对当前资料。'}</p>}
+  </>;
+}
+
+export function TurnContent({ turn, pendingLabel, confirmation }: { turn: AgentTurnDto; pendingLabel?: string; confirmation?: ConfirmationActionProps }) {
   const presentation = turn.kind === 'assistant' ? turn.presentation : undefined;
   const presentationSummaryIsTurnContent = turn.kind === 'assistant' && presentation
     ? presentation.summary.trim() === turn.content.trim()
@@ -88,12 +126,12 @@ export function TurnContent({ turn, pendingLabel }: { turn: AgentTurnDto; pendin
     <header><strong>{turn.kind === 'user' ? '我' : '教学助手'}</strong><time dateTime={turn.createdAt}>{formatDateTime(turn.createdAt)}</time>{pendingLabel && <span className="assistant-turn-pending-label" role="status">{pendingLabel}</span>}</header>
     {(turn.kind === 'user' || turn.kind === 'assistant') && (turn.kind === 'assistant' ? <MarkdownContent content={turn.content} /> : <p>{turn.content}</p>)}
     {turn.kind === 'assistant' && <>{presentation && <Presentation document={presentation} showSummary={!presentationSummaryIsTurnContent} />}<References references={turn.references} /></>}
-    {turn.kind === 'error' && <p role="status">这一步未完成。已保存的会话仍可回看。</p>}
-    {turn.kind === 'confirmation' && <>
-      <h3>历史操作记录</h3>
-      {turn.beforeSummary && <p>原有内容：{turn.beforeSummary}</p>}
-      <p>拟调整为：{turn.afterSummary}</p>
-      <p>{turn.status === 'consumed' ? '历史记录显示此操作已处理。' : '此历史操作不能在这里继续确认，请重新提出要求并核对当前资料。'}</p>
+    {turn.kind === 'tool' && <>
+      {turn.resultSummary && <p>{turn.resultSummary}</p>}
+      {turn.status === 'failed' && <p role="status">这一步未完成。已保存的会话仍可回看。</p>}
+      <References references={turn.references} studentLinkLabel />
     </>}
+    {turn.kind === 'error' && <p role="status">这一步未完成。已保存的会话仍可回看。</p>}
+    {turn.kind === 'confirmation' && <ConfirmationContent turn={turn} action={confirmation} />}
   </article>;
 }

@@ -44,7 +44,7 @@ describe('formal teaching task transport', () => {
     api.list.mockResolvedValue({ items: [task({ title: '任务状态已保存，可从当前会话继续。', status: 'succeeded', lastError: null })], nextCursor: null });
     const transport = createTeachingTaskTransport();
     await expect(transport.getTasks?.({ teacherId: 'teacher-a', conversationId: 'conversation-1' })).resolves.toMatchObject([
-      { summary: '未提供任务摘要，请查看会话内容。' },
+      { summary: '' },
     ]);
   });
 

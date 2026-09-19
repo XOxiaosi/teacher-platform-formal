@@ -31,6 +31,8 @@ export interface ObjectReferenceDto {
 interface BaseTurnDto {
   id: string;
   conversationId: string;
+  /** Present for turns emitted by the persisted teaching-task runtime. */
+  taskId?: string | null;
   kind: AgentTurnKind;
   createdAt: string;
 }
@@ -74,7 +76,7 @@ export interface ErrorTurnDto extends BaseTurnDto {
 export type ConfirmationStatus = 'pending' | 'running' | 'consumed' | 'cancelled' | 'expired';
 
 export interface ConfirmationTargetDto {
-  type: 'Student' | 'Schedule' | 'Lesson';
+  type: 'Student' | 'Schedule' | 'Lesson' | 'Memo';
   id: string;
 }
 

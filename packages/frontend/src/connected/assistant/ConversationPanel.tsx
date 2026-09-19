@@ -5,20 +5,13 @@ import { TurnContent } from './TurnContent';
 import { taskLabels, type AssistantTransport } from './transport';
 import type { AssistantTask, AssistantTaskEvent } from './transport';
 import type { MessageState } from './useAssistantMessages';
-import type { AgentTurnDto, UserTurnDto } from '../../api/conversations';
+import { cancelPendingAction, confirmPendingAction, type AgentTurnDto, type ConfirmationStatus, type ConfirmationTurnDto, type UserTurnDto } from '../../api/conversations';
 import { formatDateTime } from '../../shared/date-format';
 
 interface Props {
   teacherId: string; conversationId: string; transport?: AssistantTransport; messageState?: MessageState;
   send: (conversationId: string, draft: AssistantDraft) => Promise<void>; onArchive: () => void;
-}
-function compactTasks(tasks: AssistantTask[]): Array<{ task: AssistantTask; count: number }> {
-  return tasks.reduce<Array<{ task: AssistantTask; count: number }>>((groups, task) => {
-    const group = groups.find(item => item.task.status === task.status && item.task.summary === task.summary);
-    if (group) group.count += 1;
-    else groups.push({ task, count: 1 });
-    return groups;
-  }, []);
+  onWorkspaceRefresh?: () => Promise<void>;
 }
 
 function eventLabel(event: AssistantTaskEvent): string {
@@ -29,13 +22,25 @@ function eventLabel(event: AssistantTaskEvent): string {
 function compactEvents(events: AssistantTaskEvent[]): Array<AssistantTaskEvent & { repeatCount?: number }> {
   return events.reduce<Array<AssistantTaskEvent & { repeatCount?: number }>>((visible, event) => {
     const previous = visible.at(-1);
-    if (previous && previous.eventKind === event.eventKind && previous.content === event.content) {
+    if (previous && previous.taskId === event.taskId && previous.eventKind === event.eventKind && previous.content === event.content) {
       previous.repeatCount = (previous.repeatCount ?? 1) + 1;
       return visible;
     }
     visible.push({ ...event });
     return visible;
   }, []);
+}
+
+function TaskProcess({ task, events, liveTail, liveTask, resuming, onResume }: {
+  task: AssistantTask; events: Array<AssistantTaskEvent & { repeatCount?: number }>; liveTail: AssistantTaskEvent | null;
+  liveTask: boolean; resuming: boolean; onResume: () => void;
+}) {
+  return <details className="assistant-task-detail">
+    <summary><strong>{taskLabels[task.status]}</strong><span>处理过程</span></summary>
+    {task.summary && <p>{task.summary}</p>}
+    {events.length > 0 && <ol>{events.map(event => <li key={`${event.taskId}:${event.eventKey}`}><time dateTime={event.createdAt}>{formatDateTime(event.createdAt)}</time> <span>{event.eventKey === liveTail?.eventKey ? (liveTask ? '助手正在输出…' : '助手结果已转入会话') : eventLabel(event)}{event.repeatCount && event.repeatCount > 1 ? `（重复 ${event.repeatCount} 次）` : ''}</span></li>)}</ol>}
+    {task.canResume && <button type="button" disabled={resuming} onClick={onResume}>{resuming ? '正在恢复…' : '继续处理'}</button>}
+  </details>;
 }
 
 function mergePendingTurn(turns: AgentTurnDto[], pendingTurn: UserTurnDto | undefined): AgentTurnDto[] {
@@ -49,16 +54,34 @@ function mergePendingTurn(turns: AgentTurnDto[], pendingTurn: UserTurnDto | unde
 }
 
 const LIVE_TASK_STATUSES = new Set(['queued', 'running', 'waiting_input', 'waiting_confirmation']);
+const WORKSPACE_REFRESH_TERMINAL_STATUSES = new Set(['succeeded', 'partial', 'failed']);
 
-export function ConversationPanel({ teacherId, conversationId, transport, messageState, send, onArchive }: Props) {
+export function ConversationPanel({ teacherId, conversationId, transport, messageState, send, onArchive, onWorkspaceRefresh }: Props) {
   const session = useConversation(teacherId, conversationId, transport, messageState?.acceptedRequestId);
   const [draft, setDraft] = useState(() => readDraft(teacherId, conversationId));
   const conversationBodyRef = useRef<HTMLDivElement>(null);
   const keepAtBottom = useRef(true);
   const restoreScrollRef = useRef<{ height: number; top: number; turnCount: number } | null>(null);
   const renderedContentRef = useRef('');
+  const workspaceRefreshes = useRef(new Set<string>());
+  const pendingConfirmationRequests = useRef(new Set<string>());
+  const conversationScope = useRef(`${teacherId}:${conversationId}`);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   const [showJumpToBottom, setShowJumpToBottom] = useState(false);
+  const [workspaceRefreshError, setWorkspaceRefreshError] = useState('');
+  const [confirmationStatuses, setConfirmationStatuses] = useState<Record<string, ConfirmationStatus>>({});
+  const [confirmationBusyId, setConfirmationBusyId] = useState<string | null>(null);
+  const [confirmationError, setConfirmationError] = useState<Record<string, string>>({});
   useEffect(() => { setDraft(readDraft(teacherId, conversationId)); }, [teacherId, conversationId, messageState?.acceptedRequestId, messageState?.sending]);
+  useEffect(() => {
+    conversationScope.current = `${teacherId}:${conversationId}`;
+    workspaceRefreshes.current.clear();
+    pendingConfirmationRequests.current.clear();
+    setWorkspaceRefreshError('');
+    setConfirmationStatuses({});
+    setConfirmationBusyId(null);
+    setConfirmationError({});
+  }, [teacherId, conversationId]);
   const visibleTurns = mergePendingTurn(session.turns, messageState?.pendingTurn);
   const visibleEvents = compactEvents(session.events);
   const latestAssistantEvent = [...session.events].reverse().find(event => event.eventKind === 'assistant_message' && event.content.trim());
@@ -98,7 +121,36 @@ export function ConversationPanel({ teacherId, conversationId, transport, messag
     restoreScrollRef.current = null;
   }, [visibleTurns.length]);
   const tasks = session.tasks.length ? session.tasks : messageState?.task ? [messageState.task] : [];
-  const visibleTasks = compactTasks(tasks);
+  const taskPlacement = new Map<string, AssistantTask>();
+  for (const task of tasks) {
+    const turn = [...visibleTurns].reverse().find(item => item.taskId === task.id);
+    if (turn) taskPlacement.set(turn.id, task);
+  }
+  const historicalTasks = tasks.filter(task => ![...taskPlacement.values()].some(placed => placed.id === task.id));
+  const refreshTargets = [
+    ...tasks.filter(task => WORKSPACE_REFRESH_TERMINAL_STATUSES.has(task.status))
+      .map(task => `task:${task.id}:${task.version ?? 'unknown'}:${task.status}`),
+    ...session.events.filter(event => event.eventKind === 'assistant_message' && event.content.trim())
+      .map(event => `event:${event.taskId}:${event.eventKey}`),
+  ];
+  useEffect(() => {
+    if (!onWorkspaceRefresh) return;
+    const pending = refreshTargets.filter(key => !workspaceRefreshes.current.has(key));
+    if (pending.length === 0) return;
+    pending.forEach(key => workspaceRefreshes.current.add(key));
+    let cancelled = false;
+    void (async () => {
+      for (const _key of pending) {
+        try {
+          await onWorkspaceRefresh();
+          if (!cancelled) setWorkspaceRefreshError('');
+        } catch {
+          if (!cancelled) setWorkspaceRefreshError('助手本轮已返回，资料刷新失败；请先刷新核对，不要重复登记。');
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [onWorkspaceRefresh, refreshTargets.join('|')]);
   const syncStatus = session.syncing
     ? '正在同步…'
     : session.syncError
@@ -111,6 +163,57 @@ export function ConversationPanel({ teacherId, conversationId, transport, messag
     const next = { text, requestId: crypto.randomUUID() };
     setDraft(next); writeDraft(teacherId, conversationId, next);
   };
+  const resizeComposer = (element: HTMLTextAreaElement) => {
+    element.style.height = 'auto';
+    element.style.height = `${Math.min(Math.max(element.scrollHeight, 54), 180)}px`;
+  };
+  const updateConfirmation = (actionId: string, status: ConfirmationStatus) => {
+    setConfirmationStatuses(current => ({ ...current, [actionId]: status }));
+    setConfirmationError(current => {
+      const { [actionId]: _removed, ...remaining } = current;
+      return remaining;
+    });
+  };
+  const finishConfirmation = async (turn: ConfirmationTurnDto, operation: 'confirm' | 'cancel') => {
+    const scope = `${teacherId}:${conversationId}`;
+    if (pendingConfirmationRequests.current.has(turn.actionId) || conversationScope.current !== scope) return;
+    if (turn.status !== 'pending' || !['scheduling.create', 'memos.create'].includes(turn.actionName)) return;
+    if (operation === 'confirm' && (!turn.actionToken || Date.parse(turn.expiresAt) <= Date.now())) return;
+    pendingConfirmationRequests.current.add(turn.actionId);
+    setConfirmationBusyId(turn.actionId);
+    setConfirmationError(current => {
+      const { [turn.actionId]: _removed, ...remaining } = current;
+      return remaining;
+    });
+    try {
+      if (operation === 'confirm') {
+        if (transport?.pendingActionApi) await transport.pendingActionApi.confirm({ teacherId, actionId: turn.actionId, actionToken: turn.actionToken! });
+        else await confirmPendingAction(teacherId, turn.actionId, turn.actionToken!);
+      } else if (transport?.pendingActionApi) await transport.pendingActionApi.cancel({ teacherId, actionId: turn.actionId });
+      else await cancelPendingAction(teacherId, turn.actionId);
+      if (conversationScope.current !== scope) return;
+      updateConfirmation(turn.actionId, operation === 'confirm' ? 'consumed' : 'cancelled');
+      void session.load();
+      void session.reloadTasks();
+      if (operation === 'confirm' && onWorkspaceRefresh) {
+        try {
+          await onWorkspaceRefresh();
+          if (conversationScope.current === scope) setWorkspaceRefreshError('');
+        } catch {
+          if (conversationScope.current === scope) setWorkspaceRefreshError('助手本轮已返回，资料刷新失败；请先刷新核对，不要重复登记。');
+        }
+      }
+    } catch {
+      if (conversationScope.current === scope) setConfirmationError(current => ({
+        ...current,
+        [turn.actionId]: operation === 'confirm' ? '保存尚未确认，请重试。' : '取消尚未确认，请重试。',
+      }));
+    } finally {
+      pendingConfirmationRequests.current.delete(turn.actionId);
+      if (conversationScope.current === scope) setConfirmationBusyId(current => current === turn.actionId ? null : current);
+    }
+  };
+  useLayoutEffect(() => { if (composerRef.current) resizeComposer(composerRef.current); }, [draft.text]);
   return <section className="assistant-conversation" aria-label="当前会话">
     <header className="assistant-conversation-heading">
       <div className="assistant-conversation-title">
@@ -131,30 +234,37 @@ export function ConversationPanel({ teacherId, conversationId, transport, messag
       {session.busy && <p role="status">正在读取会话…</p>}
       {session.error && <div role="alert"><p>{session.error}</p><button type="button" disabled={session.busy} onClick={() => { void session.load(); }}>重新读取会话</button></div>}
       {session.conversation && <>
-        <section className="assistant-tasks" aria-label="任务进度" aria-live="polite">
-          {visibleTasks.map(({ task, count }) => <article key={`${task.status}:${task.summary}`}>
-            <header><strong>{taskLabels[task.status]}</strong></header>
-            <p>{task.summary}</p>
-            {count > 1 && <small>相同状态已合并显示 · {count} 个任务仍可从下方会话内容回看</small>}
-            {task.canResume && transport?.resumeTask && <button type="button" disabled={session.resumingTaskId !== null}
-              onClick={() => { void session.resumeTask(task); }}>{session.resumingTaskId === task.id ? '正在恢复…' : '继续处理'}</button>}
-          </article>)}
-          {session.taskError && <p role="alert">{session.taskError}</p>}
-          {transport?.getTasks && <button type="button" onClick={() => { void session.reloadTasks(); void session.load(); }}>刷新任务和结果</button>}
-        </section>
-        {visibleEvents.length > 0 && <section className="assistant-task-events" aria-label="任务进展记录">
-          <h3>任务进展记录</h3>
-          <ol>{visibleEvents.map(event => <li key={event.eventKey}><time dateTime={event.createdAt}>{formatDateTime(event.createdAt)}</time> <span>{event.eventKey === liveTail?.eventKey ? (liveTask ? '助手正在输出…' : '助手结果已转入会话') : eventLabel(event)}{event.repeatCount && event.repeatCount > 1 ? `（重复 ${event.repeatCount} 次，已合并）` : ''}</span></li>)}</ol>
-        </section>}
         {session.previousCursor && <button type="button" disabled={session.loadingHistory || session.busy} onClick={() => { void loadOlder(); }}>{session.loadingHistory ? '正在加载较早内容…' : '加载较早内容'}</button>}
-        <div className="assistant-turns" aria-label="会话内容">{visibleTurns.map(turn => <TurnContent key={turn.id} turn={turn}
-          pendingLabel={turn.id === messageState?.pendingTurn?.id
-            ? messageState?.sending ? '正在发送…' : messageState?.error?.includes('接收回执') ? '等待接收回执' : '已接收，等待会话记录'
-            : undefined} />)}</div>
+        <div className="assistant-turns" aria-label="会话内容">{visibleTurns.map(turn => {
+          const task = taskPlacement.get(turn.id);
+          const taskEvents = task ? visibleEvents.filter(event => event.taskId === task.id) : [];
+          return <div key={turn.id} className="assistant-turn-with-process"><TurnContent turn={turn}
+            pendingLabel={turn.id === messageState?.pendingTurn?.id
+              ? messageState?.sending ? '正在发送…' : messageState?.error?.includes('接收回执') ? '等待接收回执' : '已接收，等待会话记录'
+              : undefined}
+            confirmation={turn.kind === 'confirmation' ? {
+              status: confirmationStatuses[turn.actionId], busy: confirmationBusyId === turn.actionId, error: confirmationError[turn.actionId],
+              onConfirm: () => { void finishConfirmation(turn, 'confirm'); }, onCancel: () => { void finishConfirmation(turn, 'cancel'); },
+            } : undefined} />
+            {task && <TaskProcess task={task} events={taskEvents} liveTail={liveTail} liveTask={liveTask} resuming={session.resumingTaskId === task.id}
+              onResume={() => { void session.resumeTask(task); }} />}
+          </div>;
+        })}</div>
         {liveTail && <article className="assistant-live-tail" aria-live="polite">
           <header><strong>教学助手</strong><span>{liveTask ? '正在输出…' : '最新结果待写入会话'}</span></header>
           <p>{liveTail.content}</p>
         </article>}
+        {(historicalTasks.length > 0 || session.taskError) && <details className="assistant-historical-process">
+          <summary>历史处理过程</summary>
+          {historicalTasks.map(task => <TaskProcess key={task.id} task={task} events={visibleEvents.filter(event => event.taskId === task.id)} liveTail={liveTail} liveTask={liveTask}
+            resuming={session.resumingTaskId === task.id} onResume={() => { void session.resumeTask(task); }} />)}
+          {session.taskError && <p role="alert">{session.taskError}</p>}
+          {transport?.getTasks && <button type="button" className="assistant-compact-button" onClick={() => { void session.reloadTasks(); void session.load(); }}>刷新处理过程</button>}
+        </details>}
+        {workspaceRefreshError && <p className="assistant-workspace-refresh-error" role="alert">{workspaceRefreshError}<button type="button" className="assistant-compact-button" onClick={() => {
+          if (!onWorkspaceRefresh) return;
+          void onWorkspaceRefresh().then(() => setWorkspaceRefreshError('')).catch(() => {});
+        }}>刷新资料</button></p>}
         {!session.busy && visibleTurns.length === 0 && !liveTail && <p>这条会话还没有消息。可以从整理课堂记录或核对课时开始。</p>}
         {showJumpToBottom && <button type="button" className="assistant-scroll-bottom" onClick={() => {
           const container = conversationBodyRef.current;
@@ -167,13 +277,13 @@ export function ConversationPanel({ teacherId, conversationId, transport, messag
     </div>
     {session.conversation?.status === 'active' && <form className="assistant-composer" onSubmit={event => { event.preventDefault(); void send(conversationId, draft); }}>
       <label htmlFor="assistant-message">交给教学助手的工作</label>
-      <textarea id="assistant-message" rows={4} value={draft.text} disabled={messageState?.sending} readOnly={draft.awaitingReceipt}
+      <textarea ref={composerRef} id="assistant-message" rows={2} value={draft.text} disabled={messageState?.sending} readOnly={draft.awaitingReceipt}
         onKeyDown={event => {
           if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
           event.preventDefault();
           if (draft.text.trim() && !draft.awaitingReceipt && !messageState?.sending && !session.busy && transport) event.currentTarget.form?.requestSubmit();
         }}
-        onChange={event => changeDraft(event.target.value)} placeholder="例如：整理今天的上课记录，核对课时，再写给家长的反馈" />
+        onChange={event => changeDraft(event.target.value)} onInput={event => resizeComposer(event.currentTarget)} placeholder="例如：整理今天的上课记录，核对课时，再写给家长的反馈" />
       <p className="assistant-hint">未发送的输入仅暂存在当前浏览器会话中，退出账号后清除。</p>
       {draft.awaitingReceipt && !messageState?.sending && <p role="status">这条消息的接收情况尚未确认。请先重试确认接收，再编辑或归档；重试不会重复提交同一项工作。</p>}
       {messageState?.error && <p role="alert">{messageState.error}</p>}
