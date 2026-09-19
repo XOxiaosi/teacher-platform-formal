@@ -184,5 +184,10 @@ D06 为范围约束；D07 已明确完整微信私聊，不重复列为待用户
 
 - 已核验本地提交：47ee6d33bb3821fe1cd7b6cce2e1f707e4cbc014（规则、意见、计划、历史清理）；9972a609eb13566da8cb0f19ebc69e756f59a797（CHAT-001/003）；af3ac653ed301e6c58cb363c0c16b8b4c7d04e25（CHAT-002/UI-001）。本条收口文档的提交由 `git log --all --fixed-strings --grep='(GOV-005)'` 查询，不循环回填自身 SHA。
 - 暂存区已清空，本轮显式清单无遗漏；剩余 301 项原有修改/删除/未跟踪内容保留，未混入本轮提交。完整门禁基于当前工作树，不将这批历史内容描述为已逐项审阅的独立回滚版本。
-- 证据：外部 commits.txt、final-status.txt、validation-sha256.json 与完整日志；最终文档治理 25/25、文件长度和差异检查通过。
+- 证据：外部 commits.txt、final-status.txt、validation-sha256.json 与完整日志。最终投影切换 UI-001 后，delivery-governance.log 暴露旧测试仅识别 GOV/A/P 编号，24 通过、1 失败；此前此处写“最终文档治理 25/25”不准确，现纠正。完整门禁的历史通过结果保留，最终状态需以修复后复验为准。
 - 续接：先读取本日志当前投影与用户的样板反馈，再决定 UI-002。未收到视觉认可前保持等待；不把无回复当批准，不自动调用真实模型、上传或部署。
+
+### GOV-005｜2026-09-19｜最终任务投影回归修正
+
+- 修复：治理回归测试的当前任务提取支持 CHAT/UI 编号，与现行任务契约一致；保留“交付门禁失败时不得标完成”的原断言，并显式检查任务编号存在。
+- 验证：受影响的 npm run check:governance、npm run test:governance（25/25，无跳过）、npm run check:file-size、git diff --check 均退出 0，证据 delivery-governance-retry.log。本次仅修改该测试和日志，未改变业务实现；根完整门禁通过记录见 full-check-final.log，之后的回执修正与最终文档分别完成上述专项复验。

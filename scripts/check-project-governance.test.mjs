@@ -40,7 +40,9 @@ test('reject silent approval of pending business semantics', () => {
 });
 test('reject completed tasks when delivery verification is still failing', () => {
   const bundle = structuredClone(baseline);
-  const currentTask = bundle.files['PROJECT_LOG.md'].match(/\| 当前任务 \| (GOV-\d+|A\d{2}|P\d+)/)[1];
+  const match = bundle.files['PROJECT_LOG.md'].match(/\| 当前任务 \| (GOV-\d+|CHAT-\d+|UI-\d+|A\d{2}|P\d+)/);
+  assert.ok(match, 'current task must use a supported governance task identifier');
+  const currentTask = match[1];
   bundle.files['PROJECT_LOG.md'] = bundle.files['PROJECT_LOG.md']
     .replace(/\| 当前任务状态 \|[^\n]+/, '| 当前任务状态 | 已完成 |')
     .replace(new RegExp(`(\\| ${currentTask} \\|[^\\n]*\\| )(?:未开始|进行中|等待确认|被阻塞|已完成|已取消)( \\|)`), '$1已完成$2')
