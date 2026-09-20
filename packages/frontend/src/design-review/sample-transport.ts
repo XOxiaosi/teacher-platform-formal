@@ -128,6 +128,7 @@ export function createReviewTransport(): AssistantTransport {
   const { conversations, tasks } = buildInitialState();
   let sequence = 0;
 
+  const assertTeacher = (teacherId: string) => { if (teacherId !== TEACHER_ID) throw new Error('合成教师不存在'); };
   const getConversation = (id: string) => conversations.get(id);
   const makeSummary = (entry: StoredConversation): ConversationSummaryDto => {
     const detail = cloneConversation(entry.detail, entry.turns);
@@ -147,23 +148,27 @@ export function createReviewTransport(): AssistantTransport {
     runtimeAvailability: 'test_only',
     capabilities: { canRead: true, canWrite: false, writeRequiresConfirmation: true },
     conversationApi: {
-      async list(_teacherId, params) {
+      async list(teacherId, params) {
+        assertTeacher(teacherId);
         const items = [...conversations.values()]
           .filter(entry => !params.status || entry.detail.status === params.status)
           .map(makeSummary);
         return { items, nextCursor: null };
       },
-      async detail(_teacherId, conversationId) {
+      async detail(teacherId, conversationId) {
+        assertTeacher(teacherId);
         const entry = getConversation(conversationId);
         if (!entry) throw new Error('合成会话不存在');
         return { conversation: cloneConversation(entry.detail, entry.turns) };
       },
-      async turns(_teacherId, conversationId) {
+      async turns(teacherId, conversationId) {
+        assertTeacher(teacherId);
         const entry = getConversation(conversationId);
         if (!entry) throw new Error('合成会话不存在');
         return { items: [...entry.turns], previousCursor: null };
       },
-      async archive(_teacherId, conversationId) {
+      async archive(teacherId, conversationId) {
+        assertTeacher(teacherId);
         const entry = getConversation(conversationId);
         if (!entry) throw new Error('合成会话不存在');
         entry.detail = { ...entry.detail, status: 'archived' };
@@ -180,7 +185,8 @@ export function createReviewTransport(): AssistantTransport {
         setConfirmationStatus('cancelled');
       },
     },
-    async createConversation() {
+    async createConversation({ teacherId }) {
+      assertTeacher(teacherId);
       sequence += 1;
       const id = `review-conversation-new-${sequence}`;
       conversations.set(id, { detail: {
@@ -189,7 +195,8 @@ export function createReviewTransport(): AssistantTransport {
       }, turns: [] });
       return id;
     },
-    async sendMessage({ conversationId, message, clientRequestId }) {
+    async sendMessage({ teacherId, conversationId, message, clientRequestId }) {
+      assertTeacher(teacherId);
       const entry = getConversation(conversationId);
       if (!entry) throw new Error('合成会话不存在');
       sequence += 1;
@@ -211,6 +218,22 @@ export function createReviewTransport(): AssistantTransport {
       );
       tasks.set(task.id, task);
       return { accepted: true, task: cloneTask(task) };
+    },
+    async resumeTask({ teacherId, conversationId, taskId }) {
+      const task = tasks.get(taskId);
+      const entry = getConversation(conversationId);
+      if (teacherId !== TEACHER_ID || !task || task.conversationId !== conversationId || !entry) throw new Error('合成任务不存在');
+      if (!task.canResume) return cloneTask(task);
+      const timestamp = Math.max(Date.now(), ...entry.turns.map(turn => Date.parse(turn.createdAt) + 1));
+      const createdAt = new Date(timestamp).toISOString();
+      const content = '### 演示恢复完成\n\n这里展示失败后继续处理的回复效果，未调用真实模型，也未写入教学资料。';
+      entry.turns.push(assistantTurn(`review-resumed-${taskId}`, conversationId, content, createdAt, taskId));
+      task.events.push(
+        { taskId, seq: 2, eventKey: `review:${taskId}:resumed`, eventKind: 'assistant_message', executionId: 'review-execution-resumed', role: 'assistant', content, createdAt },
+        { taskId, seq: 3, eventKey: `review:${taskId}:resumed:terminal`, eventKind: 'task_state', executionId: 'review-execution-resumed', role: 'assistant', content: '演示回复已结束。', createdAt },
+      );
+      Object.assign(task, { status: 'succeeded', canResume: false, version: (task.version ?? 0) + 1, summary: '演示恢复完成，未调用真实模型。' });
+      return cloneTask(task);
     },
     async getTask({ teacherId, conversationId, taskId }) {
       if (teacherId !== TEACHER_ID) throw new Error('合成教师不存在');

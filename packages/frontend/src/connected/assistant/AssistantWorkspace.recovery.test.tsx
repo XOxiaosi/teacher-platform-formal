@@ -21,6 +21,16 @@ beforeEach(() => {
   api.turns.mockResolvedValue({ items: [], previousCursor: null });
 });
 
+async function openHistory() {
+  fireEvent.click(screen.getByRole('button', { name: '历史' }));
+  await screen.findByRole('heading', { name: '历史会话' });
+}
+
+async function selectHistory(id: string) {
+  await openHistory();
+  fireEvent.click(await screen.findByRole('button', { name: new RegExp(`会话${id}`) }));
+}
+
 // These are synthetic session/client lifecycle tests in jsdom, not real-browser,
 // cross-device or authenticated backend acceptance evidence.
 describe('A03 uncertain receipt and synthetic client recovery', () => {
@@ -65,9 +75,9 @@ describe('A03 uncertain receipt and synthetic client recovery', () => {
     fireEvent.change(screen.getByLabelText('交给教学助手的工作'), { target: { value: '改过又换回也不能另开请求' } });
     expect(readDraft('teacher-a', 'one').text).toBe(original.message);
     expect(screen.getByRole('button', { name: '归档会话' })).toBeDisabled();
-    fireEvent.click(screen.getByRole('button', { name: /会话two/ }));
+    await selectHistory('two');
     await screen.findByRole('heading', { name: '会话two' });
-    fireEvent.click(screen.getByRole('button', { name: /会话one/ }));
+    await selectHistory('one');
     await screen.findByRole('heading', { name: '会话one' });
     view.unmount();
     render(<AssistantWorkspace teacherId="teacher-a" transport={transport} />);
@@ -153,8 +163,9 @@ describe('A03 uncertain receipt and synthetic client recovery', () => {
     expect(screen.getByLabelText('交给教学助手的工作')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '归档会话' }));
     await screen.findByText('已归档 · 可完整回看');
-    fireEvent.click(screen.getByRole('button', { name: /会话two/ }));
+    await selectHistory('two');
     await screen.findByRole('heading', { name: '会话two' });
+    await openHistory();
     fireEvent.change(screen.getByLabelText('查看会话'), { target: { value: 'archived' } });
     fireEvent.click(await screen.findByRole('button', { name: /会话one/ }));
     await screen.findByText('已归档 · 可完整回看');

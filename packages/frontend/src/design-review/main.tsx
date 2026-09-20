@@ -2,11 +2,11 @@ import { StrictMode, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { PreviewApp } from '../preview/PreviewApp';
 import { AssistantWorkspace } from '../connected/assistant';
-import { createReviewTransport, DEFAULT_REVIEW_CONVERSATION } from './sample-transport';
+import { createReviewTransport } from './sample-transport';
 import '../preview/preview.css';
 import './review.css';
 
-if (!location.hash) location.hash = `#/agent/${DEFAULT_REVIEW_CONVERSATION}`;
+if (!location.hash) location.hash = '#/agent';
 
 function DesignReview() {
   const [transport] = useState(createReviewTransport);

@@ -33,6 +33,16 @@ function proposedAction(actionName: 'scheduling.create' | 'memos.create' = 'sche
   };
 }
 
+async function openHistory() {
+  fireEvent.click(screen.getByRole('button', { name: '历史' }));
+  await screen.findByRole('heading', { name: '历史会话' });
+}
+
+async function selectHistory(id: string) {
+  await openHistory();
+  fireEvent.click(await screen.findByRole('button', { name: new RegExp(`会话${id}`) }));
+}
+
 describe('A03 server-backed assistant conversations', () => {
   it('completes the latest load when StrictMode runs the effect twice', async () => {
     render(<StrictMode><AssistantWorkspace teacherId="teacher-a" /></StrictMode>);
@@ -45,8 +55,9 @@ describe('A03 server-backed assistant conversations', () => {
     api.list.mockResolvedValue({ items: [{ ...detail(), lastTurnAt: '2026-09-15T12:00:00Z' }], nextCursor: null });
     api.turns.mockResolvedValue({ items: [userTurn('recent', '最近材料')], previousCursor: null });
     render(<AssistantWorkspace teacherId="teacher-a" />);
+    await screen.findByText('最近材料');
+    await openHistory();
     expect((await screen.findAllByText('2026年9月15日 20:00')).length).toBe(2);
-    expect(await screen.findByText('最近材料')).toBeInTheDocument();
   });
 
   it('opens a saved URL and never calls the old executor or renders a board', async () => {
@@ -57,67 +68,6 @@ describe('A03 server-backed assistant conversations', () => {
     fireEvent.change(screen.getByLabelText('交给教学助手的工作'), { target: { value: '整理记录' } });
     expect(screen.getByRole('button', { name: '发送' })).toBeDisabled();
     expect(api.sendLegacy).not.toHaveBeenCalled(); expect(api.confirmLegacy).not.toHaveBeenCalled();
-  });
-  it('creates exactly one conversation while the request is pending and navigates to its real id', async () => {
-    const pending = deferred<ConversationResponse>(); api.create.mockReturnValue(pending.promise);
-    render(<AssistantWorkspace teacherId="teacher-a" />);
-    await screen.findByRole('heading', { name: '会话one' });
-    fireEvent.click(screen.getByRole('button', { name: '新建会话' }));
-    expect(screen.getByRole('button', { name: '正在新建…' })).toBeDisabled();
-    expect(api.create).toHaveBeenCalledTimes(1);
-    await act(async () => pending.resolve({ conversation: detail('server-new') }));
-    await screen.findByRole('heading', { name: '会话server-new' });
-    expect(location.hash).toBe('#/agent/server-new');
-  });
-  it('lets a teacher start from the empty workspace without submitting a prefilled request', async () => {
-    location.hash = '#/agent';
-    render(<AssistantWorkspace teacherId="teacher-a" />);
-    expect(await screen.findByRole('heading', { name: '今天想先完成什么？' })).toBeInTheDocument();
-    expect(screen.queryByLabelText('交给教学助手的工作')).not.toBeInTheDocument();
-    fireEvent.click(screen.getAllByRole('button', { name: '新建会话' }).at(-1)!);
-    await screen.findByRole('heading', { name: '会话new' });
-    expect(api.create).toHaveBeenCalledTimes(1);
-    expect(api.sendLegacy).not.toHaveBeenCalled();
-  });
-  it('keeps the current conversation usable while its navigation list is collapsed or filtered to archived work', async () => {
-    render(<AssistantWorkspace teacherId="teacher-a" />);
-    await screen.findByRole('heading', { name: '会话one' });
-    fireEvent.click(screen.getByRole('button', { name: '收起会话列表' }));
-    expect(screen.getByRole('button', { name: '展开会话列表' })).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByRole('button', { name: /会话two/ })).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '会话one' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '展开会话列表' }));
-    fireEvent.change(screen.getByLabelText('查看会话'), { target: { value: 'archived' } });
-    await waitFor(() => expect(api.list).toHaveBeenCalledWith('teacher-a', { status: 'archived', cursor: undefined }));
-  });
-  it('starts with the navigation collapsed on a narrow screen so the active conversation keeps the available height', async () => {
-    const previousMatchMedia = Object.getOwnPropertyDescriptor(window, 'matchMedia');
-    Object.defineProperty(window, 'matchMedia', { configurable: true, value: vi.fn().mockReturnValue({ matches: true }) });
-    try {
-      render(<AssistantWorkspace teacherId="teacher-a" />);
-      await screen.findByRole('heading', { name: '会话one' });
-      expect(screen.getByRole('button', { name: '展开会话列表' })).toHaveAttribute('aria-expanded', 'false');
-      expect(screen.queryByRole('button', { name: '新建会话' })).not.toBeInTheDocument();
-    } finally {
-      if (previousMatchMedia) Object.defineProperty(window, 'matchMedia', previousMatchMedia);
-      else Reflect.deleteProperty(window, 'matchMedia');
-    }
-  });
-  it('closes the narrow-screen navigation after a teacher chooses a conversation', async () => {
-    const previousMatchMedia = Object.getOwnPropertyDescriptor(window, 'matchMedia');
-    Object.defineProperty(window, 'matchMedia', { configurable: true, value: vi.fn().mockReturnValue({ matches: true }) });
-    try {
-      render(<AssistantWorkspace teacherId="teacher-a" />);
-      await screen.findByRole('heading', { name: '会话one' });
-      fireEvent.click(screen.getByRole('button', { name: '展开会话列表' }));
-      fireEvent.click(await screen.findByRole('button', { name: /会话two/ }));
-      await screen.findByRole('heading', { name: '会话two' });
-      expect(screen.getByRole('button', { name: '展开会话列表' })).toHaveAttribute('aria-expanded', 'false');
-      expect(screen.queryByRole('button', { name: /会话one/ })).not.toBeInTheDocument();
-    } finally {
-      if (previousMatchMedia) Object.defineProperty(window, 'matchMedia', previousMatchMedia);
-      else Reflect.deleteProperty(window, 'matchMedia');
-    }
   });
   it('loads complete older history and paginates the conversation list', async () => {
     api.list.mockImplementation((_teacher, params) => Promise.resolve(params.cursor
@@ -131,6 +81,7 @@ describe('A03 server-backed assistant conversations', () => {
     await screen.findByText('较早完整材料');
     expect(screen.getByText('最近材料')).toBeInTheDocument();
     expect(api.turns).toHaveBeenCalledWith('teacher-a', 'one', { before: 'old-cursor' });
+    await openHistory();
     fireEvent.click(screen.getByRole('button', { name: '加载更多会话' }));
     await screen.findByRole('button', { name: /会话older/ });
     expect(api.list).toHaveBeenCalledWith('teacher-a', { status: 'active', cursor: 'page-two' });
@@ -159,7 +110,7 @@ describe('A03 server-backed assistant conversations', () => {
     const late = deferred<ConversationResponse>(); api.detail.mockImplementation((teacher, id) => teacher === 'teacher-a' && id === 'one'
       ? late.promise : Promise.resolve({ conversation: { ...detail(id), displayTitle: `${teacher}资料` } }));
     const view = render(<AssistantWorkspace teacherId="teacher-a" />);
-    fireEvent.click(await screen.findByRole('button', { name: /会话two/ }));
+    await selectHistory('two');
     await screen.findByRole('heading', { name: 'teacher-a资料' });
     view.rerender(<AssistantWorkspace teacherId="teacher-b" />);
     expect(screen.queryByRole('heading', { name: 'teacher-a资料' })).not.toBeInTheDocument();
@@ -170,11 +121,11 @@ describe('A03 server-backed assistant conversations', () => {
   it('retains separate unsent drafts on conversation changes and remount, then clears them on account change', async () => {
     const view = render(<AssistantWorkspace teacherId="teacher-a" />);
     fireEvent.change(await screen.findByLabelText('交给教学助手的工作'), { target: { value: '学生甲未送达' } });
-    fireEvent.click(screen.getByRole('button', { name: /会话two/ }));
+    await selectHistory('two');
     await screen.findByRole('heading', { name: '会话two' });
     expect(screen.getByLabelText('交给教学助手的工作')).toHaveValue('');
     fireEvent.change(screen.getByLabelText('交给教学助手的工作'), { target: { value: '学生乙未送达' } });
-    fireEvent.click(screen.getByRole('button', { name: /会话one/ }));
+    await selectHistory('one');
     await screen.findByRole('heading', { name: '会话one' });
     expect(screen.getByLabelText('交给教学助手的工作')).toHaveValue('学生甲未送达');
     view.unmount(); const restored = render(<AssistantWorkspace teacherId="teacher-a" />);
@@ -201,7 +152,7 @@ describe('A03 server-backed assistant conversations', () => {
     render(<AssistantWorkspace teacherId="teacher-a" transport={transport} />);
     fireEvent.change(await screen.findByLabelText('交给教学助手的工作'), { target: { value: '待接收内容' } });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
-    expect(screen.getByRole('button', { name: '提交中…' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '提交中' })).toBeDisabled();
     expect(screen.getByLabelText('交给教学助手的工作')).toHaveValue('待接收内容');
     await act(async () => pending.resolve({ accepted: true, task: { id: 'task-1', status: 'unavailable', summary: '内容已收到，等待服务恢复。' } }));
     await screen.findByText('已收到，AI 服务尚不可用');
@@ -240,13 +191,13 @@ describe('A03 server-backed assistant conversations', () => {
     render(<AssistantWorkspace teacherId="teacher-a" transport={transport} />);
     fireEvent.change(await screen.findByLabelText('交给教学助手的工作'), { target: { value: '第一条工作' } });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
-    fireEvent.click(screen.getByRole('button', { name: /会话two/ }));
+    await selectHistory('two');
     await screen.findByRole('heading', { name: '会话two' });
     fireEvent.change(screen.getByLabelText('交给教学助手的工作'), { target: { value: '第二条草稿' } });
     await act(async () => pending.resolve({ accepted: true, task: { id: 'first-task', status: 'succeeded', summary: '第一条结果' } }));
     expect(screen.queryByText('第一条结果')).not.toBeInTheDocument();
     expect(screen.getByLabelText('交给教学助手的工作')).toHaveValue('第二条草稿');
-    fireEvent.click(screen.getByRole('button', { name: /会话one/ }));
+    await selectHistory('one');
     await screen.findByText('第一条结果');
     expect(screen.getByLabelText('交给教学助手的工作')).toHaveValue('');
   });

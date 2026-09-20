@@ -28,7 +28,7 @@ describe('课程摘要信息密度', () => {
 
   it('列表以三项摘要卡呈现状态，不显示备注和形式', () => {
     route('#/schedules'); render(<PreviewApp />); fireEvent.click(screen.getByRole('button', { name: '列表' }));
-    const card = screen.getByRole('button', { name: /查看 .*小班 · 2 人.*待上课 排期详情/ });
+    const card = screen.getByRole('button', { name: /查看 .*14:00 至 15:30 小班 · 2 人.*待上课 排期详情/ });
     expect(card).toHaveTextContent('时间');
     expect(card).toHaveTextContent('地点');
     expect(card).toHaveTextContent('对象');

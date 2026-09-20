@@ -1,7 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { readDraft, writeDraft, type AssistantDraft } from './drafts';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useConversation } from './useConversation';
 import { TurnContent } from './TurnContent';
+import { AssistantComposer } from './AssistantComposer';
+import { readDraft, type AssistantDraft } from './drafts';
 import { taskLabels, type AssistantTransport } from './transport';
 import type { AssistantTask, AssistantTaskEvent } from './transport';
 import type { MessageState } from './useAssistantMessages';
@@ -10,14 +11,14 @@ import { formatDateTime } from '../../shared/date-format';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Archive, ArrowDown, ChevronDown, CircleAlert, LoaderCircle, RotateCcw, Send, Sparkles } from 'lucide-react';
+import { Archive, ArrowDown, ChevronDown, CircleAlert, LoaderCircle, RotateCcw, Sparkles } from 'lucide-react';
 
 interface Props {
   teacherId: string; conversationId: string; transport?: AssistantTransport; messageState?: MessageState;
   send: (conversationId: string, draft: AssistantDraft) => Promise<void>; onArchive: () => void;
   onWorkspaceRefresh?: () => Promise<void>;
+  headerActions?: ReactNode;
 }
 
 function eventLabel(event: AssistantTaskEvent): string {
@@ -62,9 +63,8 @@ function mergePendingTurn(turns: AgentTurnDto[], pendingTurn: UserTurnDto | unde
 const LIVE_TASK_STATUSES = new Set(['queued', 'running', 'waiting_input', 'waiting_confirmation']);
 const WORKSPACE_REFRESH_TERMINAL_STATUSES = new Set(['succeeded', 'partial', 'failed']);
 
-export function ConversationPanel({ teacherId, conversationId, transport, messageState, send, onArchive, onWorkspaceRefresh }: Props) {
+export function ConversationPanel({ teacherId, conversationId, transport, messageState, send, onArchive, onWorkspaceRefresh, headerActions }: Props) {
   const session = useConversation(teacherId, conversationId, transport, messageState?.acceptedRequestId);
-  const [draft, setDraft] = useState(() => readDraft(teacherId, conversationId));
   const conversationBodyRef = useRef<HTMLDivElement>(null);
   const keepAtBottom = useRef(true);
   const restoreScrollRef = useRef<{ height: number; top: number; turnCount: number } | null>(null);
@@ -72,13 +72,12 @@ export function ConversationPanel({ teacherId, conversationId, transport, messag
   const workspaceRefreshes = useRef(new Set<string>());
   const pendingConfirmationRequests = useRef(new Set<string>());
   const conversationScope = useRef(`${teacherId}:${conversationId}`);
-  const composerRef = useRef<HTMLTextAreaElement>(null);
   const [showJumpToBottom, setShowJumpToBottom] = useState(false);
   const [workspaceRefreshError, setWorkspaceRefreshError] = useState('');
   const [confirmationStatuses, setConfirmationStatuses] = useState<Record<string, ConfirmationStatus>>({});
   const [confirmationBusyId, setConfirmationBusyId] = useState<string | null>(null);
   const [confirmationError, setConfirmationError] = useState<Record<string, string>>({});
-  useEffect(() => { setDraft(readDraft(teacherId, conversationId)); }, [teacherId, conversationId, messageState?.acceptedRequestId, messageState?.sending]);
+  const awaitingReceipt = readDraft(teacherId, conversationId).awaitingReceipt;
   useEffect(() => {
     conversationScope.current = `${teacherId}:${conversationId}`;
     workspaceRefreshes.current.clear();
@@ -164,15 +163,6 @@ export function ConversationPanel({ teacherId, conversationId, transport, messag
       : session.lastSyncedAt
         ? `实时更新 · ${formatDateTime(session.lastSyncedAt)}`
         : '实时更新已开启';
-  const changeDraft = (text: string) => {
-    if (draft.awaitingReceipt || messageState?.sending) return;
-    const next = { text, requestId: crypto.randomUUID() };
-    setDraft(next); writeDraft(teacherId, conversationId, next);
-  };
-  const resizeComposer = (element: HTMLTextAreaElement) => {
-    element.style.height = 'auto';
-    element.style.height = `${Math.min(Math.max(element.scrollHeight, 54), 180)}px`;
-  };
   const updateConfirmation = (actionId: string, status: ConfirmationStatus) => {
     setConfirmationStatuses(current => ({ ...current, [actionId]: status }));
     setConfirmationError(current => {
@@ -219,7 +209,6 @@ export function ConversationPanel({ teacherId, conversationId, transport, messag
       if (conversationScope.current === scope) setConfirmationBusyId(current => current === turn.actionId ? null : current);
     }
   };
-  useLayoutEffect(() => { if (composerRef.current) resizeComposer(composerRef.current); }, [draft.text]);
   return <section className="assistant-conversation" aria-label="当前会话">
     <header className="assistant-conversation-heading">
       <div className="assistant-conversation-title">
@@ -228,8 +217,7 @@ export function ConversationPanel({ teacherId, conversationId, transport, messag
           <span className="assistant-sync-dot" aria-hidden="true" />{syncStatus}
         </p>
       </div>
-      {session.conversation?.status === 'active' && <Tooltip><TooltipTrigger asChild><Button type="button" size="sm" variant="ghost" className="assistant-archive" aria-label="归档会话" disabled={session.archiving || messageState?.sending || draft.awaitingReceipt} onClick={() => { void session.archive().then(saved => { if (saved) onArchive(); }); }}><Archive size={15} /><span>{session.archiving ? '归档中…' : '归档会话'}</span></Button></TooltipTrigger><TooltipContent>归档后仍可完整回看</TooltipContent></Tooltip>}
-      {session.conversation?.status === 'archived' && <Badge variant="secondary">已归档 · 可完整回看</Badge>}
+      <div className="assistant-conversation-actions">{headerActions}{session.conversation?.status === 'active' && <Tooltip><TooltipTrigger asChild><Button type="button" size="sm" variant="ghost" className="assistant-archive" aria-label="归档会话" disabled={session.archiving || messageState?.sending || awaitingReceipt} onClick={() => { void session.archive().then(saved => { if (saved) onArchive(); }); }}><Archive size={15} /><span>{session.archiving ? '归档中…' : '归档会话'}</span></Button></TooltipTrigger><TooltipContent>归档后仍可完整回看</TooltipContent></Tooltip>}{session.conversation?.status === 'archived' && <Badge variant="secondary">已归档 · 可完整回看</Badge>}</div>
     </header>
     <div className="assistant-conversation-body" ref={conversationBodyRef} onScroll={event => {
       const container = event.currentTarget;
@@ -281,20 +269,6 @@ export function ConversationPanel({ teacherId, conversationId, transport, messag
         }}><ArrowDown size={15} />回到底部</Button>}
       </>}
     </div>
-    {session.conversation?.status === 'active' && <form className="assistant-composer" onSubmit={event => { event.preventDefault(); void send(conversationId, draft); }}>
-      <div className="assistant-composer-label"><label htmlFor="assistant-message">交给教学助手的工作</label><span>Enter 发送 · Shift + Enter 换行</span></div>
-      <Textarea ref={composerRef} id="assistant-message" rows={2} value={draft.text} disabled={messageState?.sending} readOnly={draft.awaitingReceipt}
-        onKeyDown={event => {
-          if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
-          event.preventDefault();
-          if (draft.text.trim() && !draft.awaitingReceipt && !messageState?.sending && !session.busy && transport) event.currentTarget.form?.requestSubmit();
-        }}
-        onChange={event => changeDraft(event.target.value)} onInput={event => resizeComposer(event.currentTarget)} placeholder="例如：整理今天的上课记录，核对课时，再写给家长的反馈" />
-      <p className="assistant-hint">未发送的输入仅暂存在当前浏览器会话中，退出账号后清除。</p>
-      {draft.awaitingReceipt && !messageState?.sending && <p role="status">这条消息的接收情况尚未确认。请先重试确认接收，再编辑或归档；重试不会重复提交同一项工作。</p>}
-      {messageState?.error && <p role="alert">{messageState.error}</p>}
-      {messageState?.sending && <p role="status">正在提交，等待接收回执…</p>}
-      <Button type="submit" disabled={!transport || !draft.text.trim() || messageState?.sending || session.busy}>{messageState?.sending ? <><LoaderCircle className="assistant-spin" size={16} />提交中…</> : messageState?.error || draft.awaitingReceipt ? <><RotateCcw size={16} />重试发送</> : <><Send size={16} />发送</>}</Button>
-    </form>}
+    {session.conversation?.status === 'active' && <AssistantComposer teacherId={teacherId} draftScope={conversationId} messageState={messageState} available={Boolean(transport)} busy={session.busy} onSend={draft => send(conversationId, draft)} placeholder="继续交代要处理的教学工作…" />}
   </section>;
 }
