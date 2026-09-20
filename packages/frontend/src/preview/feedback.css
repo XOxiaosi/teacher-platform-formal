@@ -1,9 +1,9 @@
 .feedback-body { white-space: pre-wrap; overflow-wrap: anywhere; }
 .feedback-empty { padding: 24px; }
-.feedback-empty p { color: var(--muted); }
+.feedback-empty p { color: var(--text-muted); }
 .dialog:has(.feedback-editor) { width: min(680px, 100%); }
 .feedback-editor textarea { min-height: 240px; line-height: 1.8; }
-.feedback-editor .form-hint { color: var(--muted); font-size: 12px; align-self: center; }
+.feedback-editor .form-hint { color: var(--text-muted); font-size: 12px; align-self: center; }
 .feedback-generation-context { padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--soft); }
 .feedback-generation-context p { margin: 0 0 6px; }
 .feedback-generation-context p:last-child { margin-bottom: 0; }

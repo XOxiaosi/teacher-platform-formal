@@ -1,0 +1,18 @@
+.model-configuration { min-width: 0; }
+.model-configuration h2 { margin-bottom: 6px; }
+.model-configuration h3 { margin: 24px 0 14px; font-size: 16px; }
+.model-configuration p { margin: 0 0 16px; }
+.model-list { display: grid; gap: 10px; margin: 20px 0; padding: 0; border: 0; }
+.model-list legend { margin-bottom: 10px; font-weight: 600; color: var(--ink); }
+.model-card { display: flex; align-items: flex-start; gap: 10px; margin: 0; padding: 14px; border: 1px solid var(--hairline); border-radius: 10px; cursor: pointer; }
+.model-card:has(input:checked) { border-color: var(--ink); background: #faf8f4; }
+.model-card input { flex: 0 0 18px; width: 18px; min-height: 18px; margin: 3px 0 0; accent-color: var(--primary); }
+.model-card span { display: grid; min-width: 0; gap: 4px; }
+.model-card small { color: var(--text-muted); overflow-wrap: anywhere; }
+.model-empty { display: grid; gap: 8px; padding: 18px; margin: 20px 0; background: #f5f1e9; border-radius: 10px; }
+.model-empty span, .model-state { color: var(--text-muted); font-size: 13px; }
+.model-error { color: #9d473c !important; }
+.model-edit { margin-top: 18px; }
+.model-configuration label { min-width: 0; }
+.model-configuration input, .model-configuration select { box-sizing: border-box; max-width: 100%; }
+@media (max-width: 600px) { .model-configuration .settings-form { padding: 18px; } .model-card { padding: 12px; } .model-configuration .button-row { flex-wrap: wrap; } }

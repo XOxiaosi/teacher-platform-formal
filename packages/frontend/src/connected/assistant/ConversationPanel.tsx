@@ -7,6 +7,12 @@ import type { AssistantTask, AssistantTaskEvent } from './transport';
 import type { MessageState } from './useAssistantMessages';
 import { cancelPendingAction, confirmPendingAction, type AgentTurnDto, type ConfirmationStatus, type ConfirmationTurnDto, type UserTurnDto } from '../../api/conversations';
 import { formatDateTime } from '../../shared/date-format';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Textarea } from '@/components/ui/textarea';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Archive, ArrowDown, ChevronDown, CircleAlert, LoaderCircle, RotateCcw, Send, Sparkles } from 'lucide-react';
 
 interface Props {
   teacherId: string; conversationId: string; transport?: AssistantTransport; messageState?: MessageState;
@@ -36,10 +42,10 @@ function TaskProcess({ task, events, liveTail, liveTask, resuming, onResume }: {
   liveTask: boolean; resuming: boolean; onResume: () => void;
 }) {
   return <details className="assistant-task-detail">
-    <summary><strong>{taskLabels[task.status]}</strong><span>处理过程</span></summary>
+    <summary><Badge variant="secondary" className="assistant-task-status">{taskLabels[task.status]}</Badge><span>处理过程</span><ChevronDown size={15} aria-hidden="true" /></summary>
     {task.summary && <p>{task.summary}</p>}
     {events.length > 0 && <ol>{events.map(event => <li key={`${event.taskId}:${event.eventKey}`}><time dateTime={event.createdAt}>{formatDateTime(event.createdAt)}</time> <span>{event.eventKey === liveTail?.eventKey ? (liveTask ? '助手正在输出…' : '助手结果已转入会话') : eventLabel(event)}{event.repeatCount && event.repeatCount > 1 ? `（重复 ${event.repeatCount} 次）` : ''}</span></li>)}</ol>}
-    {task.canResume && <button type="button" disabled={resuming} onClick={onResume}>{resuming ? '正在恢复…' : '继续处理'}</button>}
+    {task.canResume && <Button type="button" size="sm" variant="outline" disabled={resuming} onClick={onResume}><RotateCcw size={14} />{resuming ? '正在恢复…' : '继续处理'}</Button>}
   </details>;
 }
 
@@ -217,13 +223,13 @@ export function ConversationPanel({ teacherId, conversationId, transport, messag
   return <section className="assistant-conversation" aria-label="当前会话">
     <header className="assistant-conversation-heading">
       <div className="assistant-conversation-title">
-        <h2>{session.conversation?.displayTitle ?? '读取会话'}</h2>
+        <div className="assistant-conversation-title-row"><span className="assistant-conversation-icon"><Sparkles size={15} /></span><h2>{session.conversation?.displayTitle ?? '读取会话'}</h2></div>
         <p className={`assistant-sync-status${session.syncError ? ' is-error' : ''}`} role="status" aria-live="polite">
           <span className="assistant-sync-dot" aria-hidden="true" />{syncStatus}
         </p>
       </div>
-      {session.conversation?.status === 'active' && <button type="button" disabled={session.archiving || messageState?.sending || draft.awaitingReceipt} onClick={() => { void session.archive().then(saved => { if (saved) onArchive(); }); }}>{session.archiving ? '归档中…' : '归档会话'}</button>}
-      {session.conversation?.status === 'archived' && <span>已归档 · 可完整回看</span>}
+      {session.conversation?.status === 'active' && <Tooltip><TooltipTrigger asChild><Button type="button" size="sm" variant="ghost" className="assistant-archive" aria-label="归档会话" disabled={session.archiving || messageState?.sending || draft.awaitingReceipt} onClick={() => { void session.archive().then(saved => { if (saved) onArchive(); }); }}><Archive size={15} /><span>{session.archiving ? '归档中…' : '归档会话'}</span></Button></TooltipTrigger><TooltipContent>归档后仍可完整回看</TooltipContent></Tooltip>}
+      {session.conversation?.status === 'archived' && <Badge variant="secondary">已归档 · 可完整回看</Badge>}
     </header>
     <div className="assistant-conversation-body" ref={conversationBodyRef} onScroll={event => {
       const container = event.currentTarget;
@@ -231,14 +237,14 @@ export function ConversationPanel({ teacherId, conversationId, transport, messag
       keepAtBottom.current = atBottom;
       setShowJumpToBottom(!atBottom && Boolean(renderedContentRef.current));
     }}>
-      {session.busy && <p role="status">正在读取会话…</p>}
-      {session.error && <div role="alert"><p>{session.error}</p><button type="button" disabled={session.busy} onClick={() => { void session.load(); }}>重新读取会话</button></div>}
+      {session.busy && <p className="assistant-loading" role="status"><LoaderCircle size={16} />正在读取会话…</p>}
+      {session.error && <Card className="assistant-inline-alert" role="alert"><CardContent><CircleAlert size={18} /><p>{session.error}</p><Button type="button" size="sm" variant="outline" disabled={session.busy} onClick={() => { void session.load(); }}>重新读取会话</Button></CardContent></Card>}
       {session.conversation && <>
-        {session.previousCursor && <button type="button" disabled={session.loadingHistory || session.busy} onClick={() => { void loadOlder(); }}>{session.loadingHistory ? '正在加载较早内容…' : '加载较早内容'}</button>}
+        {session.previousCursor && <Button type="button" className="assistant-load-history" variant="ghost" size="sm" disabled={session.loadingHistory || session.busy} onClick={() => { void loadOlder(); }}>{session.loadingHistory ? '正在加载较早内容…' : '加载较早内容'}</Button>}
         <div className="assistant-turns" aria-label="会话内容">{visibleTurns.map(turn => {
           const task = taskPlacement.get(turn.id);
           const taskEvents = task ? visibleEvents.filter(event => event.taskId === task.id) : [];
-          return <div key={turn.id} className="assistant-turn-with-process"><TurnContent turn={turn}
+          return <div key={turn.id} className="assistant-turn-with-process"><TurnContent turn={turn} demoMode={transport?.runtimeAvailability === 'test_only'}
             pendingLabel={turn.id === messageState?.pendingTurn?.id
               ? messageState?.sending ? '正在发送…' : messageState?.error?.includes('接收回执') ? '等待接收回执' : '已接收，等待会话记录'
               : undefined}
@@ -250,34 +256,34 @@ export function ConversationPanel({ teacherId, conversationId, transport, messag
               onResume={() => { void session.resumeTask(task); }} />}
           </div>;
         })}</div>
-        {liveTail && <article className="assistant-live-tail" aria-live="polite">
-          <header><strong>教学助手</strong><span>{liveTask ? '正在输出…' : '最新结果待写入会话'}</span></header>
+        {liveTail && <Card className="assistant-live-tail" aria-live="polite"><CardContent>
+          <header><div><span className="assistant-turn-role assistant-turn-role-assistant"><Sparkles size={14} />教学助手</span></div><span>{liveTask ? '正在输出…' : '最新结果待写入会话'}</span></header>
           <p>{liveTail.content}</p>
-        </article>}
+        </CardContent></Card>}
         {(historicalTasks.length > 0 || session.taskError) && <details className="assistant-historical-process">
           <summary>历史处理过程</summary>
           {historicalTasks.map(task => <TaskProcess key={task.id} task={task} events={visibleEvents.filter(event => event.taskId === task.id)} liveTail={liveTail} liveTask={liveTask}
             resuming={session.resumingTaskId === task.id} onResume={() => { void session.resumeTask(task); }} />)}
           {session.taskError && <p role="alert">{session.taskError}</p>}
-          {transport?.getTasks && <button type="button" className="assistant-compact-button" onClick={() => { void session.reloadTasks(); void session.load(); }}>刷新处理过程</button>}
+          {transport?.getTasks && <Button type="button" size="sm" variant="outline" className="assistant-compact-button" onClick={() => { void session.reloadTasks(); void session.load(); }}><RotateCcw size={13} />刷新处理过程</Button>}
         </details>}
-        {workspaceRefreshError && <p className="assistant-workspace-refresh-error" role="alert">{workspaceRefreshError}<button type="button" className="assistant-compact-button" onClick={() => {
+        {workspaceRefreshError && <Card className="assistant-workspace-refresh-error" role="alert"><CardContent><CircleAlert size={17} /><p>{workspaceRefreshError}</p><Button type="button" size="sm" variant="outline" className="assistant-compact-button" onClick={() => {
           if (!onWorkspaceRefresh) return;
           void onWorkspaceRefresh().then(() => setWorkspaceRefreshError('')).catch(() => {});
-        }}>刷新资料</button></p>}
-        {!session.busy && visibleTurns.length === 0 && !liveTail && <p>这条会话还没有消息。可以从整理课堂记录或核对课时开始。</p>}
-        {showJumpToBottom && <button type="button" className="assistant-scroll-bottom" onClick={() => {
+        }}>刷新资料</Button></CardContent></Card>}
+        {!session.busy && visibleTurns.length === 0 && !liveTail && <div className="assistant-conversation-empty"><span className="assistant-empty-orb"><Sparkles size={20} /></span><div><h3>从一件具体的教学工作开始</h3><p>例如整理课堂记录、核对课时，或准备给家长的反馈。</p></div></div>}
+        {showJumpToBottom && <Button type="button" className="assistant-scroll-bottom" size="sm" onClick={() => {
           const container = conversationBodyRef.current;
           if (!container) return;
           keepAtBottom.current = true;
           container.scrollTop = container.scrollHeight;
           setShowJumpToBottom(false);
-        }}>回到底部</button>}
+        }}><ArrowDown size={15} />回到底部</Button>}
       </>}
     </div>
     {session.conversation?.status === 'active' && <form className="assistant-composer" onSubmit={event => { event.preventDefault(); void send(conversationId, draft); }}>
-      <label htmlFor="assistant-message">交给教学助手的工作</label>
-      <textarea ref={composerRef} id="assistant-message" rows={2} value={draft.text} disabled={messageState?.sending} readOnly={draft.awaitingReceipt}
+      <div className="assistant-composer-label"><label htmlFor="assistant-message">交给教学助手的工作</label><span>Enter 发送 · Shift + Enter 换行</span></div>
+      <Textarea ref={composerRef} id="assistant-message" rows={2} value={draft.text} disabled={messageState?.sending} readOnly={draft.awaitingReceipt}
         onKeyDown={event => {
           if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
           event.preventDefault();
@@ -288,7 +294,7 @@ export function ConversationPanel({ teacherId, conversationId, transport, messag
       {draft.awaitingReceipt && !messageState?.sending && <p role="status">这条消息的接收情况尚未确认。请先重试确认接收，再编辑或归档；重试不会重复提交同一项工作。</p>}
       {messageState?.error && <p role="alert">{messageState.error}</p>}
       {messageState?.sending && <p role="status">正在提交，等待接收回执…</p>}
-      <button type="submit" disabled={!transport || !draft.text.trim() || messageState?.sending || session.busy}>{messageState?.sending ? '提交中…' : messageState?.error || draft.awaitingReceipt ? '重试发送' : '发送'}</button>
+      <Button type="submit" disabled={!transport || !draft.text.trim() || messageState?.sending || session.busy}>{messageState?.sending ? <><LoaderCircle className="assistant-spin" size={16} />提交中…</> : messageState?.error || draft.awaitingReceipt ? <><RotateCcw size={16} />重试发送</> : <><Send size={16} />发送</>}</Button>
     </form>}
   </section>;
 }

@@ -1,0 +1,147 @@
+@media (max-width: 1050px) { .page { padding-inline: 24px; } }
+
+@media (max-width: 760px) {
+  .page {
+    padding: 20px 16px 40px;
+  }
+  .page h1 {
+    font-size: 28px;
+  }
+  .page-header,
+  .detail-head {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .page-header > .button,
+  .detail-head > .button {
+    width: 100%;
+    margin-left: 0;
+  }
+  .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+  .stat-grid > div {
+    min-height: 115px;
+    padding: 20px 18px;
+  }
+  .today-grid,
+  .detail-grid,
+  .student-detail-layout,
+  .settings-layout {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+  .student-profile {
+    min-height: 0;
+  }
+  .student-profile .button {
+    margin-top: 20px;
+  }
+  .today-side {
+    order: 2;
+  }
+  .schedule-row {
+    grid-template-columns: 1fr auto;
+    gap: 4px 10px;
+    padding: 20px;
+  }
+  .schedule-row time {
+    grid-column: 1 / -1;
+  }
+  .schedule-info {
+    min-width: 0;
+  }
+  .schedule-info b {
+    overflow-wrap: anywhere;
+  }
+  .schedule-action {
+    align-self: end;
+  }
+  .white-card {
+    max-width: 100%;
+  }
+  .student-list > a {
+    grid-template-columns: 38px minmax(0, 1fr) 20px;
+    padding: 12px 14px;
+  }
+  .student-list em {
+    grid-column: 2;
+    grid-row: 2;
+    font-size: 12px;
+  }
+  .student-list i {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+  }
+  .search {
+    max-width: none;
+  }
+  .student-filters {
+    flex-wrap: wrap;
+  }
+  .student-filters .search {
+    flex-basis: 100%;
+    width: 100%;
+    max-width: none;
+  }
+  .feedback-list .white-card,
+  .detail-grid > .white-card,
+  .settings-form,
+  .ai-empty {
+    padding: 20px;
+  }
+  .finance-stats {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .finance-stats > div {
+    padding: 14px 18px;
+  }
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .dialog-layer {
+    align-items: end;
+    padding: 12px;
+  }
+  .dialog {
+    max-height: min(88dvh, 760px);
+    padding: 20px;
+    border-radius: 16px 16px 12px 12px;
+  }
+  .dialog-actions {
+    position: sticky;
+    bottom: -20px;
+    padding: 12px 0 0;
+    background: var(--canvas);
+  }
+  .dialog-actions .button {
+    min-height: 44px;
+  }
+  .preview-toast {
+    right: 12px;
+    bottom: 84px;
+    left: 12px;
+    max-width: none;
+  }
+  .button,
+  .table-actions button {
+    min-height: 44px;
+  }
+  .button.small {
+    min-height: 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

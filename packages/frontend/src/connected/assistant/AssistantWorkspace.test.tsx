@@ -69,6 +69,56 @@ describe('A03 server-backed assistant conversations', () => {
     await screen.findByRole('heading', { name: '会话server-new' });
     expect(location.hash).toBe('#/agent/server-new');
   });
+  it('lets a teacher start from the empty workspace without submitting a prefilled request', async () => {
+    location.hash = '#/agent';
+    render(<AssistantWorkspace teacherId="teacher-a" />);
+    expect(await screen.findByRole('heading', { name: '今天想先完成什么？' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('交给教学助手的工作')).not.toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: '新建会话' }).at(-1)!);
+    await screen.findByRole('heading', { name: '会话new' });
+    expect(api.create).toHaveBeenCalledTimes(1);
+    expect(api.sendLegacy).not.toHaveBeenCalled();
+  });
+  it('keeps the current conversation usable while its navigation list is collapsed or filtered to archived work', async () => {
+    render(<AssistantWorkspace teacherId="teacher-a" />);
+    await screen.findByRole('heading', { name: '会话one' });
+    fireEvent.click(screen.getByRole('button', { name: '收起会话列表' }));
+    expect(screen.getByRole('button', { name: '展开会话列表' })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('button', { name: /会话two/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '会话one' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '展开会话列表' }));
+    fireEvent.change(screen.getByLabelText('查看会话'), { target: { value: 'archived' } });
+    await waitFor(() => expect(api.list).toHaveBeenCalledWith('teacher-a', { status: 'archived', cursor: undefined }));
+  });
+  it('starts with the navigation collapsed on a narrow screen so the active conversation keeps the available height', async () => {
+    const previousMatchMedia = Object.getOwnPropertyDescriptor(window, 'matchMedia');
+    Object.defineProperty(window, 'matchMedia', { configurable: true, value: vi.fn().mockReturnValue({ matches: true }) });
+    try {
+      render(<AssistantWorkspace teacherId="teacher-a" />);
+      await screen.findByRole('heading', { name: '会话one' });
+      expect(screen.getByRole('button', { name: '展开会话列表' })).toHaveAttribute('aria-expanded', 'false');
+      expect(screen.queryByRole('button', { name: '新建会话' })).not.toBeInTheDocument();
+    } finally {
+      if (previousMatchMedia) Object.defineProperty(window, 'matchMedia', previousMatchMedia);
+      else Reflect.deleteProperty(window, 'matchMedia');
+    }
+  });
+  it('closes the narrow-screen navigation after a teacher chooses a conversation', async () => {
+    const previousMatchMedia = Object.getOwnPropertyDescriptor(window, 'matchMedia');
+    Object.defineProperty(window, 'matchMedia', { configurable: true, value: vi.fn().mockReturnValue({ matches: true }) });
+    try {
+      render(<AssistantWorkspace teacherId="teacher-a" />);
+      await screen.findByRole('heading', { name: '会话one' });
+      fireEvent.click(screen.getByRole('button', { name: '展开会话列表' }));
+      fireEvent.click(await screen.findByRole('button', { name: /会话two/ }));
+      await screen.findByRole('heading', { name: '会话two' });
+      expect(screen.getByRole('button', { name: '展开会话列表' })).toHaveAttribute('aria-expanded', 'false');
+      expect(screen.queryByRole('button', { name: /会话one/ })).not.toBeInTheDocument();
+    } finally {
+      if (previousMatchMedia) Object.defineProperty(window, 'matchMedia', previousMatchMedia);
+      else Reflect.deleteProperty(window, 'matchMedia');
+    }
+  });
   it('loads complete older history and paginates the conversation list', async () => {
     api.list.mockImplementation((_teacher, params) => Promise.resolve(params.cursor
       ? { items: [detail('older')], nextCursor: null } : { items: [detail()], nextCursor: 'page-two' }));

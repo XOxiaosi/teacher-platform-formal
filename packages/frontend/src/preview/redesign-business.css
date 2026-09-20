@@ -1,0 +1,255 @@
+/* Business-page layer for the 2026 teacher workspace redesign.
+   Kept separate from the shell so page work can evolve independently. */
+.preview-main .preview-page {
+  --business-teal: #176b5b;
+  --business-teal-strong: #0f5145;
+  --business-teal-soft: #e8f4f0;
+  --business-ink: #17332e;
+  --business-muted: #667a75;
+  --business-border: #dfe8e5;
+  --business-panel: #ffffff;
+  --business-canvas: #f5f8f7;
+  --business-warning: #ad6c18;
+  --business-danger: #b54747;
+  color: var(--business-ink);
+}
+
+.preview-main .preview-page h1,
+.preview-main .preview-page h2,
+.preview-main .preview-page h3 {
+  color: var(--business-ink);
+  font-family: var(--font-sans);
+  font-weight: 650;
+  letter-spacing: -.025em;
+}
+.preview-main .preview-page h1 { font-size: clamp(26px, 3vw, 32px); }
+.preview-main .preview-page h2 { font-size: 17px; }
+.preview-main .preview-page h3 { font-size: 14px; }
+.preview-main .preview-page header p,
+.preview-main .preview-page .page-header p { color: var(--business-muted); }
+.preview-main .preview-page .white-card,
+.preview-main .preview-page .week-scroll,
+.preview-main .preview-page .schedule-list-card,
+.preview-main .preview-page .short-schedule-card {
+  border-color: var(--business-border);
+  border-radius: 14px;
+  background: var(--business-panel);
+  box-shadow: 0 1px 2px rgb(23 51 46 / .025);
+}
+.preview-main .preview-page .button.primary {
+  border-color: var(--business-teal);
+  background: var(--business-teal);
+  box-shadow: 0 1px 2px rgb(23 107 91 / .16);
+}
+.preview-main .preview-page .button.primary:hover { background: var(--business-teal-strong); }
+.preview-main .preview-page .button.secondary {
+  border-color: var(--business-border);
+  background: #fff;
+  color: var(--business-ink);
+}
+.preview-main .preview-page .button.secondary:hover { border-color: #a9c4bd; background: #f8fbfa; }
+.preview-main .preview-page .text-link,
+.preview-main .preview-page .back { color: var(--business-teal); font-weight: 600; }
+.preview-main .preview-page .muted,
+.preview-main .preview-page .empty { color: var(--business-muted); }
+.preview-main .preview-page :where(input, select, textarea) {
+  border-color: #cbdad5;
+  border-radius: 9px;
+  background: #fff;
+  color: var(--business-ink);
+}
+.preview-main .preview-page :where(input, select, textarea):focus {
+  border-color: var(--business-teal);
+  box-shadow: 0 0 0 3px rgb(23 107 91 / .12);
+  outline: 0;
+}
+.preview-main .preview-page :where(button, input, select, textarea):focus-visible { outline-color: var(--business-teal); }
+
+/* Today */
+.today-page .stat-grid { margin-bottom: 28px; gap: 14px; }
+.today-page .stat-grid > div {
+  min-height: 112px;
+  padding: 19px 20px;
+  border: 1px solid var(--business-border);
+  border-radius: 14px;
+  background: var(--business-panel);
+  box-shadow: 0 1px 2px rgb(23 51 46 / .025);
+}
+.today-page .stat-grid > div:first-child { border-color: #b7d7cf; background: linear-gradient(145deg, #f4fbf8, #fff); }
+.today-page .stat-grid strong { color: var(--business-ink); font-size: 30px; font-weight: 700; letter-spacing: -.04em; }
+.today-page .stat-grid .coral { color: var(--business-teal); }
+.today-page .stat-grid .amber { color: var(--business-warning); }
+.today-page .stat-grid span { margin-top: 4px; color: var(--business-muted); font-size: 13px; }
+.today-page .today-grid { gap: 26px; }
+.today-page .today-course-group { margin-top: 12px; }
+.today-page .today-course-group h3 { align-items: center; color: var(--business-ink); }
+.today-page .today-course-group h3 span,
+.today-page .section-head b {
+  display: inline-grid;
+  min-width: 22px;
+  min-height: 22px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--business-teal-soft);
+  color: var(--business-teal);
+  font-size: 12px;
+}
+.today-page .today-course-group .white-card,
+.today-page .today-cancelled .white-card { display: block; gap: 0; padding: 0; }
+.today-page .today-course-open { height: auto; min-height: 0; padding: 20px 22px; color: var(--business-ink); white-space: normal; }
+.today-page .today-course-open:hover { background: #f6fbf9; }
+.today-page .today-course-row { border-color: #edf2f0; }
+.today-page .today-course-row dl { grid-template-columns: 104px minmax(80px, 1fr) minmax(90px, 1fr); }
+.today-page .today-course-row dt { color: var(--business-muted); font-weight: 500; }
+.today-page .today-course-row dd { font-size: 14px; }
+.today-page .today-course-row dd b { font-weight: 650; }
+.today-page .today-side > section { margin-bottom: 20px; }
+.today-page .today-side .white-card { padding: 18px; }
+.today-page .memo-card { display: grid; gap: 4px; }
+.today-page .memo { padding: 9px 2px; color: var(--business-ink); }
+.today-page .memo-add { padding-top: 10px; border-top: 1px solid #edf2f0; }
+.today-page .today-empty { padding: 28px; border-style: dashed; }
+.today-page .today-cancelled summary { color: var(--business-muted); }
+
+/* Students */
+.preview-main .student-filters { gap: 12px; padding: 0; }
+.preview-main .student-filters .search { flex: 1; min-width: 180px; }
+.preview-main .student-filters input { height: 42px; }
+.preview-main .student-filters .grade-filter {
+  gap: 8px;
+  color: var(--business-muted);
+  font-size: 13px;
+}
+.preview-main .student-filters select { min-height: 42px; }
+.preview-main .student-list { overflow: hidden; }
+.preview-main .student-row { gap: 10px; padding-right: 16px; border-color: #edf2f0; }
+.preview-main .student-row > a { grid-template-columns: 44px minmax(0, 1fr) auto 20px; padding: 15px 20px; }
+.preview-main .student-row > a:hover { background: #f6fbf9; }
+.preview-main .student-row strong { color: var(--business-ink); font-weight: 650; }
+.preview-main .student-row small { margin-top: 2px; color: var(--business-muted); }
+.preview-main .student-row em { border-radius: 999px; background: var(--business-teal-soft); color: var(--business-teal); font-size: 12px; font-style: normal; font-weight: 650; padding: 4px 9px; }
+.preview-main .avatar { background: #dff0eb; color: var(--business-teal); font-weight: 700; }
+.preview-main .student-detail-layout { gap: 24px; }
+.preview-main .student-profile {
+  align-self: start;
+  padding: 24px;
+  border: 1px solid var(--business-border);
+  border-radius: 14px;
+  background: var(--business-panel);
+  box-shadow: 0 1px 2px rgb(23 51 46 / .025);
+}
+.preview-main .student-profile h1 { margin-top: 14px; font-size: 22px; }
+.preview-main .student-profile > p { color: var(--business-muted); }
+.preview-main .student-profile > strong { color: var(--business-teal); font-weight: 700; }
+.preview-main .student-profile > strong small { color: var(--business-muted); font-weight: 500; }
+.preview-main .student-timeline { padding: 24px; }
+.preview-main .student-record-entry { border-color: #edf2f0; }
+.preview-main .compact-schedule { border-color: #edf2f0; }
+.preview-main .schedule-tags span {
+  border-color: #d6e7e1;
+  background: #f4faf8;
+  color: #41655c;
+}
+.preview-main .schedule-summary > .text-button { color: var(--business-teal); }
+.preview-main .section-toggle { color: var(--business-ink); }
+
+/* Schedule */
+.preview-main .schedule-head-actions { gap: 10px; }
+.preview-main .schedule-toolbar { padding: 3px; border: 1px solid var(--business-border); border-radius: 10px; background: #fff; }
+.preview-main .schedule-toolbar .button { min-height: 32px; border-color: transparent; padding: 0 10px; }
+.preview-main .schedule-toolbar .button:hover { background: #f3f8f6; }
+.preview-main .view-toggle,
+.preview-main .status-filter { border-color: var(--business-border); border-radius: 10px; background: #fff; }
+.preview-main .view-toggle button,
+.preview-main .status-filter button { color: var(--business-muted); background: transparent; }
+.preview-main .view-toggle button.active,
+.preview-main .status-filter button.active { background: var(--business-teal-soft); color: var(--business-teal); }
+.preview-main .week-scroll { border-radius: 14px; }
+.preview-main .week-day { border-color: #edf2f0; color: var(--business-muted); }
+.preview-main .week-day strong { color: var(--business-ink); font-family: var(--font-sans); font-weight: 650; }
+.preview-main .week-day small { background: var(--business-teal); }
+.preview-main .week-day.is-today,
+.preview-main .week-column.is-today { background-color: #f4fbf8; }
+.preview-main .week-column,
+.preview-main .week-times { border-color: #edf2f0; }
+.preview-main .week-column { background-image: linear-gradient(to bottom, #edf2f0 1px, transparent 1px); }
+.preview-main .week-item { border-color: #cbe2da; border-left-color: var(--business-teal); border-radius: 8px; background: #fff; box-shadow: 0 1px 2px rgb(23 51 46 / .07); color: var(--business-ink); }
+.preview-main .week-item,
+.preview-main .rule-summary { display: block; }
+.preview-main .week-item > span,
+.preview-main .week-item > small { color: #537269; }
+.preview-main .week-item .schedule-status,
+.preview-main .schedule-list-card .schedule-status,
+.preview-main .short-schedule-card .schedule-status { background: var(--business-teal-soft); color: var(--business-teal); }
+.preview-main .week-item.status-completed,
+.preview-main .schedule-list-card.status-completed,
+.preview-main .short-schedule-card.status-completed { border-left-color: #4d8a76; }
+.preview-main .week-item.status-cancelled,
+.preview-main .schedule-list-card.status-cancelled,
+.preview-main .short-schedule-card.status-cancelled { border-left-color: var(--business-danger); }
+.preview-main .schedule-list { gap: 12px; }
+.preview-main .schedule-list-card { border-left: 4px solid var(--business-teal); padding: 18px; }
+.preview-main .schedule-list-card { display: grid; min-height: 0; }
+.preview-main .schedule-list-card:hover { background: #f7fbfa; }
+.preview-main .schedule-list-card dt,
+.preview-main .short-schedule-card dt { color: var(--business-muted); }
+.preview-main .schedule-list-action { color: var(--business-teal); font-weight: 600; }
+.preview-main .short-schedule-card { border-left-color: var(--business-teal); }
+.preview-main .short-schedule-card { display: grid; min-height: 0; }
+.preview-main .recurrence-rules { margin-top: 30px; }
+.preview-main .recurrence-rules article { border-color: var(--business-border); }
+.preview-main .rule-summary span,
+.preview-main .rule-summary small { color: var(--business-muted); }
+
+/* Feedback, finance, and settings */
+.preview-main .feedback-list { display: grid; gap: 14px; }
+.preview-main .feedback-list .white-card { padding: 22px; }
+.preview-main .feedback-meta { align-items: flex-start; }
+.preview-main .feedback-meta h2 { font-size: 17px; }
+.preview-main .feedback-meta p { color: var(--business-muted); }
+.preview-main .feedback-meta > span { border-radius: 999px; background: var(--business-teal-soft); color: var(--business-teal); font-size: 12px; font-weight: 650; padding: 4px 10px; }
+.preview-main .feedback-body { margin: 18px 0; color: #385049; line-height: 1.85; }
+.preview-main .feedback-editor .form-hint,
+.preview-main .feedback-generation-context p { color: var(--business-muted); }
+.preview-main .feedback-generation-context { border-color: #cfe4dc; border-radius: 10px; background: #f3faf7; }
+.preview-main .finance-filter { margin-bottom: 22px; }
+.preview-main .finance-stats { gap: 14px; }
+.preview-main .finance-stats > div { border: 1px solid var(--business-border); border-radius: 14px; background: #fff; box-shadow: 0 1px 2px rgb(23 51 46 / .025); }
+.preview-main .finance-stats span { color: var(--business-muted); }
+.preview-main .finance-stats strong { color: var(--business-ink); font-family: var(--font-sans); font-weight: 700; }
+.preview-main .finance-stats > div:nth-child(2) strong { color: var(--business-teal); }
+.preview-main .finance-table { overflow: hidden; }
+.preview-main .finance-table th { background: #f6faf8; color: var(--business-muted); }
+.preview-main .finance-table td { border-color: #edf2f0; color: var(--business-ink); }
+.preview-main .money { color: var(--business-teal) !important; font-family: var(--font-sans); font-weight: 700; }
+.preview-main .settings-layout { gap: 28px; }
+.preview-main .settings-nav { gap: 5px; padding: 8px; border: 1px solid var(--business-border); border-radius: 12px; background: #fff; }
+.preview-main .settings-nav a { color: var(--business-muted); border-radius: 8px; }
+.preview-main .settings-nav a:hover,
+.preview-main .settings-nav a.active { background: var(--business-teal-soft); color: var(--business-teal); }
+.preview-main .settings-form,
+.preview-main .unavailable-card { padding: 24px; }
+.preview-main .choice-card { border-color: var(--business-border); border-radius: 11px; }
+.preview-main .choice-card:has(input:checked) { border-color: #9bc9bc; background: #f3faf7; }
+.preview-main .choice-card input { accent-color: var(--business-teal); }
+.preview-main .privacy-note { border: 1px solid #d5e7e1; border-radius: 10px; background: #f3faf7; color: #41655c; }
+
+@media (max-width: 720px) {
+  .preview-main .preview-page { padding: 22px 16px 84px; }
+  .today-page .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .today-page .stat-grid > div { min-height: 94px; padding: 14px; }
+  .today-page .today-course-open { padding: 16px; }
+  .today-page .today-course-row dl { grid-template-columns: 74px minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+  .preview-main .student-row { padding-right: 8px; }
+  .preview-main .student-row > a { padding: 14px 12px; }
+  .preview-main .student-row em { padding: 3px 6px; }
+  .preview-main .student-profile,
+  .preview-main .student-timeline,
+  .preview-main .feedback-list .white-card,
+  .preview-main .settings-form,
+  .preview-main .unavailable-card { padding: 18px; }
+  .preview-main .schedule-toolbar { width: 100%; overflow-x: auto; }
+  .preview-main .schedule-list-card dl,
+  .preview-main .short-schedule-card dl { gap: 8px; }
+  .preview-main .settings-nav { padding: 5px; }
+}

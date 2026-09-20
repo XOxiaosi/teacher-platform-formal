@@ -1,0 +1,15 @@
+.finance-page .finance-filter { max-width: none; margin: 0 0 20px; }
+.finance-page .finance-stats strong { overflow-wrap: anywhere; }
+.finance-empty { padding: 32px; text-align: center; }
+.finance-empty p { color: var(--text-muted); }
+@media (max-width: 720px) {
+  .finance-page .finance-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .finance-page .finance-stats > div { padding: 16px; }
+  .finance-page .finance-stats strong { font-size: 26px; }
+  .finance-page .finance-table table, .finance-page .finance-table tbody { display: block; width: 100%; }
+  .finance-page .finance-table thead { display: none; }
+  .finance-page .finance-table tr { display: grid; grid-template-columns: 1fr 1fr; padding: 16px; gap: 12px; border-bottom: 1px solid var(--hairline); }
+  .finance-page .finance-table tr:last-child { border-bottom: 0; }
+  .finance-page .finance-table td { display: block; padding: 0; border: 0; white-space: normal; }
+  .finance-page .finance-table td::before { content: attr(data-label); display: block; margin-bottom: 4px; color: var(--text-muted); font: 12px/1.5 var(--font-sans); }
+}

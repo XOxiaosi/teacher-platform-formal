@@ -3,6 +3,7 @@ import { FinancePage } from './Finance';
 import { FeedbackPage, SettingsPage } from './FeedbackSettings';
 import { SchedulesPage } from './SchedulePage';
 import './workflows.css';
+import './redesign-business.css';
 import type { ReactNode } from 'react';
 import { AssistantWorkspace } from '../connected/assistant';
 import type { AssistantTransport } from '../connected/assistant/transport';

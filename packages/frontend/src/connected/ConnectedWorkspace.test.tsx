@@ -47,7 +47,8 @@ describe('connected workspace server-backed writes', () => {
     expect(mock.records).toHaveBeenCalledWith('teacher-a', 's1', expect.objectContaining({ page: 1 }));
     const before = mock.records.mock.calls.length;
     mock.load.mockResolvedValue(snapshot());
-    fireEvent.click(screen.getByRole('button', { name: '刷新资料' }));
+    fireEvent.keyDown(screen.getByRole('button', { name: '账号菜单' }), { key: 'Enter' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: '刷新资料' }));
     await waitFor(() => expect(mock.records.mock.calls.length).toBeGreaterThan(before));
   });
   it('connects settings to actual model configuration rather than response preferences', async () => {
@@ -72,7 +73,9 @@ describe('connected workspace server-backed writes', () => {
     fireEvent.change(screen.getByLabelText('姓名'), { target: { value: '服务器学生' } });
     fireEvent.change(screen.getByLabelText('年级', { selector: 'input' }), { target: { value: '初一' } });
     fireEvent.click(screen.getByRole('button', { name: '保存学生' }));
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toHaveAttribute('inert');
+    expect(screen.getByRole('dialog')).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getByRole('button', { name: '关闭' })).toBeDisabled();
     expect(screen.queryByText('学生已添加')).not.toBeInTheDocument();
     expect(screen.getByText('正在处理，请稍候…')).toBeInTheDocument();
     expect(mock.command).toHaveBeenCalledWith('students', expect.objectContaining({ name: '服务器学生', grade: '初一', clientRequestId: expect.any(String) }));
@@ -126,7 +129,8 @@ describe('connected workspace server-backed writes', () => {
     expect(mock.command).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole('button', { name: '取消' }));
     mock.load.mockResolvedValue(snapshot());
-    fireEvent.click(screen.getByRole('button', { name: '刷新资料' }));
+    fireEvent.keyDown(screen.getByRole('button', { name: '账号菜单' }), { key: 'Enter' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: '刷新资料' }));
     await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
   });
 });

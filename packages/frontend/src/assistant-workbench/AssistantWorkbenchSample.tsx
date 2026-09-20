@@ -92,7 +92,7 @@ export function AssistantWorkbenchSample() {
     <header className="assistant-sample-intro">
       <span>视觉样板 · 合成资料</span>
       <strong>教学助手工作台</strong>
-      <p>暖白底色、陶土橙重点和正文优先的对话布局。此页面不会连接真实 API。</p>
+      <p>新版对话样板，仅使用合成资料，不连接真实 API。</p>
     </header>
     <AssistantWorkspace teacherId="sample-teacher" transport={sampleTransport} />
   </main>;

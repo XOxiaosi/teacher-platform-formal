@@ -155,6 +155,6 @@ export function ConnectedWorkspace() {
   return <><div inert={busy || undefined} aria-busy={busy}>
     <Shell page={normalized} studioName={snapshot.data.studioName} displayName={auth.displayName || '教师'} accountActions={<><a className="button secondary small" href="#/captures">待核对材料</a><span>{auth.email}</span><button className="button secondary small" onClick={retry}>刷新资料</button><button className="button secondary small" onClick={() => void auth.logout()}>退出登录</button></>}>
       {(error || auth.error) && <div className="connected-error" role="alert">{error || auth.error}</div>}{content}
-    </Shell>{dialog && <Dialog title={dialog.title} onClose={close}>{dialog.body}</Dialog>}
+    </Shell>{dialog && <Dialog title={dialog.title} onClose={close} disabled={busy}>{dialog.body}</Dialog>}
   </div>{busy && <div className="connected-busy" role="status">正在处理，请稍候…</div>}{notice && <div className={`preview-toast ${notice.kind}`} role="status"><span>{notice.text}</span><button aria-label="关闭消息" onClick={() => setNotice(null)}>×</button></div>}</>;
 }

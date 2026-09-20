@@ -69,7 +69,7 @@ export type PreviewActions = {
 
 function getRoute() { return location.hash.replace(/^#\/?/, '').split('?')[0].split('/').filter(Boolean); }
 
-export function PreviewApp() {
+export function PreviewApp({ assistantContent }: { assistantContent?: ReactNode } = {}) {
   const [data, setData] = useState<DemoData>(createDemoData);
   const [ui, setUi] = useState<Record<string, unknown>>({});
   const [route, setRoute] = useState(getRoute);
@@ -98,6 +98,7 @@ export function PreviewApp() {
   if (page === 'students') content = <StudentPages actions={actions} studentId={route[1]} />;
   const normalizedPage = page === 'ai' ? 'agent' : page === 'schedule' ? 'schedules' : page;
   if (['agent', 'schedules', 'finance', 'feedback', 'settings'].includes(normalizedPage)) content = <Workflows page={normalizedPage} actions={actions} />;
+  if (normalizedPage === 'agent' && assistantContent) content = assistantContent;
   return <><Shell page={normalizedPage} studioName={data.studioName}>{content}</Shell>{dialog && <Dialog title={dialog.title} onClose={close}>{dialog.body}</Dialog>}{toastState && <div className={`preview-toast ${toastState.kind || ''}`} role="status">{toastState.text}</div>}</>;
 }
 

@@ -1,0 +1,59 @@
+/* Compatibility tokens for existing business components; the design system owns colors. */
+:root {
+  --canvas: var(--background); --surface-soft: #f0f5f2; --surface-card: #eef4f0;
+  --surface-cream-strong: #edf2ef; --surface-dark: #213e33; --white-card: var(--card);
+  --hairline: var(--border); --hairline-soft: #edf1ef; --ink: var(--foreground);
+  --body: #35433d; --text-muted: var(--muted-foreground); --muted-soft: #7c8b83;
+  --success: #237a60; --warning: #aa741c; --error: var(--destructive);
+  --primary-active: #105545; --font-serif: var(--font-sans); --font-mono: ui-monospace, SFMono-Regular, monospace;
+  --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px; --radius-pill: 999px;
+  --cream: var(--surface-cream-strong); --soft: var(--surface-card); --line: var(--hairline);
+  --white: var(--white-card); --serif: var(--font-sans); --sans: var(--font-sans);
+  --teal: var(--primary); --amber: #aa741c; --text-primary: var(--foreground); --text-secondary: var(--muted-foreground); --coral: var(--primary);
+}
+* { box-sizing: border-box; }
+html, body, #root { min-height: 100%; margin: 0; }
+html, body { height: 100%; overflow: hidden; }
+body { background: var(--background); color: var(--foreground); font: 14px/1.65 var(--font-sans); -webkit-font-smoothing: antialiased; }
+button, input, select, textarea { font: inherit; }
+a { color: inherit; }
+:where(a, button, input, select, textarea):focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
+::selection { background: #d2e9de; }
+.page { width: 100%; max-width: 1340px; margin: 0 auto; padding: 36px 40px 60px; }
+.page > header, .page-header { margin-bottom: 28px; }
+.page h1 { margin: 0; color: var(--ink); font: 650 28px/1.35 var(--font-sans); letter-spacing: -.8px; }
+.page h2 { margin: 0; color: var(--ink); font: 600 18px/1.5 var(--font-sans); letter-spacing: -.2px; }
+.page header p, .page-header p { margin: 7px 0 0; color: var(--text-muted); font-size: 13px; }
+.page-header, .detail-head, .section-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.white-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 2px 4px #182d2203; }
+.button { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; gap: 7px; padding: 0 15px; border: 1px solid transparent; border-radius: 7px; cursor: pointer; font-size: 13px; font-weight: 550; white-space: nowrap; text-decoration: none; transition: background .15s, border-color .15s; }
+.button.primary { background: var(--primary); color: #fff; }
+.button.primary:hover { background: var(--primary-active); }
+.button.secondary { border-color: var(--border); background: white; color: var(--foreground); }
+.button.secondary:hover { border-color: #9bb7a8; background: #f6faf8; }
+.button.small { min-height: 32px; padding: 0 11px; font-size: 12px; }
+.button:disabled { cursor: not-allowed; opacity: .5; }
+.button-row, .dialog-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.muted { color: var(--text-muted); }
+.coral { color: var(--primary); }
+.amber { color: #966417; }
+.text-link, .back { color: var(--primary); font-size: 13px; text-decoration: none; }
+.back { display: inline-block; margin-bottom: 22px; }
+.notice { margin: 0 0 20px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-soft); color: var(--text-muted); font-size: 13px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.student-detail-layout { display: grid; grid-template-columns: 270px minmax(0, 1fr); gap: 24px; align-items: start; }
+.student-profile { display: flex; flex-direction: column; align-items: flex-start; min-height: 320px; padding: 24px; border: 1px solid var(--border); border-radius: 12px; background: white; }
+.student-profile .avatar { margin-bottom: 18px; }
+.student-profile h2 { margin: 0; font-size: 24px; }
+.student-profile p { margin: 4px 0 22px; color: var(--text-muted); }
+.student-profile > strong { display: block; width: 100%; padding: 18px 0; border-block: 1px solid var(--border); color: var(--ink); font: 600 32px/1 var(--font-sans); }
+.student-profile > strong small { color: var(--text-muted); font: 12px var(--font-sans); }
+.student-profile .button { width: 100%; margin-top: auto; }
+.student-filters { display: flex; align-items: end; gap: 12px; margin: 0 0 18px; }
+.student-filters .search { flex: 0 1 320px; max-width: 320px; margin: 0; }
+.student-filters .grade-filter { flex: 0 0 148px; margin: 0; color: var(--text-muted); }
+.student-timeline { min-width: 0; padding: 24px; }
+.student-timeline > h2:first-child { margin-bottom: 12px; }
+.student-timeline .record-title { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--hairline); font-size: 18px; }
+.student-timeline textarea { margin: 12px 0; }
+.demo-banner { padding: 8px 24px; font-size: 12px; color: var(--text-muted); }

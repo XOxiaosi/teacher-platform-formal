@@ -1,0 +1,18 @@
+.settings-configuration .settings-layout > div { min-width: 0; }
+.settings-nav a { color: var(--text-muted); text-decoration: none; padding: 8px 10px; border-radius: 8px; }
+.settings-nav a:hover, .settings-nav a.active { color: var(--ink); background: #eee9e0; }
+.settings-stack { display: grid; gap: 16px; }
+.choice-list { display: grid; gap: 10px; margin: 20px 0; }
+.choice-card { display: flex; grid-template-columns: auto 1fr; align-items: flex-start; gap: 10px; margin: 0; padding: 14px; border: 1px solid var(--hairline); border-radius: 10px; cursor: pointer; }
+.choice-card:has(input:checked) { border-color: var(--ink); background: #faf8f4; }
+.choice-card input { width: 18px; height: 18px; min-height: 0; padding: 0; flex: 0 0 18px; margin: 3px 0 0; accent-color: var(--primary); }
+.choice-card span { display: grid; gap: 4px; }
+.choice-card small { color: var(--text-muted); font-size: 12px; font-weight: 400; }
+.unavailable-card { padding: 20px; }
+.unavailable-card h2 { font-size: 17px; margin-bottom: 8px; }
+.unavailable-card p { color: var(--text-muted); font-size: 13px; }
+.check-result { color: #805f32 !important; }
+.settings-configuration .text-button { position: static; border: 0; background: none; color: var(--text-muted); padding: 12px 0 0; text-align: left; text-decoration: underline; cursor: pointer; }
+.step-preview { margin: 14px 0 0 20px; color: var(--text-muted); font-size: 13px; line-height: 1.8; }
+.privacy-note { display: grid; gap: 6px; padding: 16px; margin: 18px 0; background: #f5f1e9; border-radius: 8px; font-size: 13px; }
+@media (max-width: 600px) { .settings-configuration .page-header { align-items: flex-start; } .settings-configuration .page-header > .button { white-space: nowrap; } .settings-nav { display: flex !important; overflow-x: auto; padding-bottom: 4px; } .settings-nav a { white-space: nowrap; } .settings-configuration .settings-form { padding: 18px; } .settings-configuration .button-row { flex-wrap: wrap; } }

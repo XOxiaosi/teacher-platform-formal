@@ -1,0 +1,27 @@
+.today-course-row { border-bottom: 1px solid var(--hairline); }
+.today-course-row:last-child { border-bottom: 0; }
+.today-course-open { display: block; width: 100%; border: 0; background: transparent; padding: 24px; text-align: left; cursor: pointer; color: var(--ink); }
+.today-course-open:hover { background: var(--canvas); }
+.today-course-open:focus-visible { outline: 2px solid var(--primary); outline-offset: -3px; }
+.today-course-row dl { display: grid; grid-template-columns: 88px minmax(70px, 1fr) minmax(70px, 1fr); gap: 20px; margin: 0; }
+.today-course-row dt { font-size: 11px; color: var(--text-muted); margin-bottom: 8px; }
+.today-course-row dd { font-size: 14px; line-height: 1.6; margin: 0; overflow-wrap: anywhere; }
+.today-course-row time { font-family: var(--font-mono); font-size: 12px; }
+.today-course-row b { font-weight: 500; }
+.today-course-group { margin-top: 18px; }
+.today-course-group h3 { display: flex; gap: 10px; margin: 0 0 10px; font-size: 14px; font-weight: 500; }
+.today-course-group h3 span { color: var(--text-muted); }
+.today-cancelled { margin-top: 20px; color: var(--text-muted); }
+.today-cancelled summary { padding: 10px 0; cursor: pointer; }
+.today-empty { margin-top: 18px; padding: 24px; }
+.today-page .memo-add { display: flex; align-items: center; gap: 8px; }
+.today-page .memo-add input { min-width: 0; }
+@media (max-width: 720px) {
+  .today-page .stat-grid > div { min-height: 88px; padding: 14px 16px; }
+  .today-page .stat-grid strong { font-size: 28px; }
+  .today-page .today-course-row dl { grid-template-columns: 58px minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+}
+@media (max-width: 1100px) {
+  .today-course-open { padding: 20px; }
+  .today-course-row dl { grid-template-columns: 60px minmax(65px, 1fr) minmax(65px, 1fr); gap: 14px; }
+}

@@ -45,6 +45,17 @@ describe('assistant turn presentation', () => {
     expect(document.body.textContent).not.toContain('not-rendered');
   });
 
+  it('labels a test-only confirmation as a page-only demonstration and never as a saved course', () => {
+    render(<TurnContent demoMode turn={{
+      id: 'demo-confirmation', conversationId: 'conversation-1', kind: 'confirmation', actionId: 'demo-action', actionName: 'scheduling.create',
+      target: { type: 'Schedule', id: 'demo-schedule' }, beforeSummary: null, afterSummary: '演示排课结果', parameterSummary: {},
+      status: 'consumed', expiresAt: '2099-01-01T00:00:00Z', actionToken: null, error: null, createdAt: '2026-09-20T12:00:00Z',
+    }} />);
+    expect(screen.getByRole('heading', { name: '演示已确认' })).toBeInTheDocument();
+    expect(screen.getByText('演示已确认，未写入正式资料。')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '查看课表' })).not.toBeInTheDocument();
+  });
+
   it('shows a saved student result with a student route and no raw identifier', () => {
     render(<TurnContent turn={{
       id: 'tool-1', conversationId: 'conversation-1', kind: 'tool', toolCallId: 'call-1', toolName: 'students.create',

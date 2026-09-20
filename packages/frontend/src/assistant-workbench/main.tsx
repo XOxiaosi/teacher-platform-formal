@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AssistantWorkbenchSample } from './AssistantWorkbenchSample';
+import '../preview/preview.css';
 import './sample.css';
 
 if (!location.hash) location.hash = '#/agent/sample-conversation';

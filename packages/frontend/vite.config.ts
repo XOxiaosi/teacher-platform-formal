@@ -1,9 +1,11 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'node:path';
+import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
+  resolve: { alias: { '@': resolve(import.meta.dirname, 'src') } },
   build: {
     rollupOptions: {
       input: {
@@ -11,6 +13,7 @@ export default defineConfig({
         preview: resolve(import.meta.dirname, 'preview.html'),
         prototypeV009: resolve(import.meta.dirname, 'prototype-v009.html'),
         assistantWorkbench: resolve(import.meta.dirname, 'assistant-workbench.html'),
+        designReview: resolve(import.meta.dirname, 'design-review.html'),
       },
     },
   },
