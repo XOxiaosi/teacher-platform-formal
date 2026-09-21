@@ -4,12 +4,14 @@ import { err, notFound, ok, validationError, versionConflict } from '@teacher-pl
 import { decryptFieldValue, decryptJsonFieldValue, encryptFieldValue, encryptJsonFieldValue, type FieldCipher } from '../../shared/field-encryption/index.js';
 import { defaultChangelogFactory, requireChangelogWrite } from '../../shared/changelog/index.js';
 import { captureInclude, lockCaptureEvent, captureWriteClock } from './capture-candidates.js';
-import type { CaptureService, ConfirmedCaptureRecordView } from './types.js';
+import type { CaptureRecordVisibility, CaptureService, ConfirmedCaptureRecordView } from './types.js';
 
 export function createConfirmCaptureRecord(getClient: () => Promise<PrismaClient>, cipher: FieldCipher | undefined): CaptureService['confirmRecord'] {
   return async input => {
     if (!/^[A-Za-z0-9._:-]{8,128}$/.test(input.clientRequestId)) return err(validationError('clientRequestId 格式不合法', 'clientRequestId'));
     if (!input.studentId?.trim()) return err(validationError('studentId 必填', 'studentId'));
+    const visibility: CaptureRecordVisibility = input.visibility ?? 'internal_only';
+    if (visibility !== 'internal_only' && visibility !== 'parent_shareable') return err(validationError('visibility 格式不合法', 'visibility'));
     if (input.candidateId && (!Number.isSafeInteger(input.version) || input.version! < 1)) return err(validationError('候选版本必填', 'version'));
     const prisma = await getClient();
     try {
@@ -26,7 +28,7 @@ export function createConfirmCaptureRecord(getClient: () => Promise<PrismaClient
           const record = await tx.studentRecord.findFirst({ where: { id: candidate.confirmedRecordId, teacherId: input.teacherId } });
           if (!record) return err(versionConflict());
           const structured = decryptJsonFieldValue(cipher, record.structuredData) as { scheduleId?: string } | null;
-          if (record.studentId !== input.studentId || (structured?.scheduleId ?? null) !== (input.scheduleId ?? null)) return err(versionConflict());
+          if (record.studentId !== input.studentId || (structured?.scheduleId ?? null) !== (input.scheduleId ?? null) || record.visibility !== visibility) return err(versionConflict());
           return ok(view(candidate, record, input.scheduleId ?? null, true));
         }
         if (!['pending', 'deferred'].includes(candidate.reviewStatus) || (input.version !== undefined && input.version !== candidate.revision)) return err(versionConflict());
@@ -54,7 +56,7 @@ export function createConfirmCaptureRecord(getClient: () => Promise<PrismaClient
           teacherId: input.teacherId, studentId: input.studentId, sourceRecordId: source.id,
           category: input.scheduleId ? 'lesson_observation' : 'general_note', summary: encryptFieldValue(cipher, payload.text),
           structuredData: encryptJsonFieldValue(cipher, { captureEventId: event.id, captureCandidateId: candidate.id, ...(input.scheduleId ? { scheduleId: input.scheduleId } : {}) }) as Prisma.InputJsonValue,
-          confidence: 'high', reviewStatus: 'confirmed', visibility: 'internal_only', importance: 'normal',
+          confidence: 'high', reviewStatus: 'confirmed', visibility, importance: 'normal',
           occurredAtTs: event.occurredAtTs, createdAtTs: clock.value, updatedAtTs: clock.value,
         } });
         await tx.captureCandidate.update({ where: { id: candidate.id }, data: {
@@ -72,6 +74,6 @@ export function createConfirmCaptureRecord(getClient: () => Promise<PrismaClient
     }
   };
 }
-function view(candidate: { id: string; eventId: string }, record: { id: string; studentId: string; category: string }, scheduleId: string | null, replayed: boolean): ConfirmedCaptureRecordView {
-  return { eventId: candidate.eventId, candidateId: candidate.id, recordId: record.id, studentId: record.studentId, scheduleId, category: record.category === 'lesson_observation' ? 'lesson_observation' : 'general_note', replayed };
+function view(candidate: { id: string; eventId: string }, record: { id: string; studentId: string; category: string; visibility: string }, scheduleId: string | null, replayed: boolean): ConfirmedCaptureRecordView {
+  return { eventId: candidate.eventId, candidateId: candidate.id, recordId: record.id, studentId: record.studentId, scheduleId, category: record.category === 'lesson_observation' ? 'lesson_observation' : 'general_note', visibility: record.visibility === 'parent_shareable' ? 'parent_shareable' : 'internal_only', replayed };
 }

@@ -21,12 +21,26 @@ describe('persistent material inbox', () => {
     const first = within((await screen.findAllByRole('article'))[0]);
     expect(onRecordsChanged).not.toHaveBeenCalled();
     fireEvent.change(first.getByLabelText('归入学生'), { target: { value: 's1' } });
-    mock.confirm.mockResolvedValue({ recordId: 'r1', studentId: 's1' });
+    fireEvent.change(first.getByLabelText('分享范围'), { target: { value: 'parent_shareable' } });
+    mock.confirm.mockResolvedValue({ recordId: 'r1', studentId: 's1', visibility: 'parent_shareable' });
     fireEvent.click(first.getByRole('button', { name: '确认归入档案' }));
     await waitFor(() => expect(onRecordsChanged).toHaveBeenCalledTimes(1));
     expect(mock.list).toHaveBeenCalledTimes(2);
+    expect(mock.confirm).toHaveBeenCalledWith('e1', 'c1', expect.objectContaining({ visibility: 'parent_shareable' }));
     expect(first.getByText('已保存', { selector: 'strong' })).toBeInTheDocument();
     expect(first.getByRole('link', { name: '基于这条记录整理家长反馈' })).toHaveAttribute('href', '#/feedback?studentId=s1&recordId=r1');
+  });
+  it('defaults to teacher-only sharing and explains how to enable parent feedback', async () => {
+    mock.confirm.mockResolvedValue({ recordId: 'r-internal', studentId: 's1', visibility: 'internal_only' });
+    render(<CaptureInbox teacherId="teacher-a" students={students} />);
+    fireEvent.click(await screen.findByRole('button', { name: /今天主动订正/ }));
+    const first = within((await screen.findAllByRole('article'))[0]);
+    fireEvent.change(first.getByLabelText('归入学生'), { target: { value: 's1' } });
+    expect(first.getByLabelText('分享范围')).toHaveValue('internal_only');
+    fireEvent.click(first.getByRole('button', { name: '确认归入档案' }));
+    await first.findByText('已保存', { selector: 'strong' });
+    expect(first.getByText('这条记录当前仅教师可见；如需整理家长反馈，请到学生档案调整分享范围。')).toBeInTheDocument();
+    expect(first.queryByRole('link', { name: '基于这条记录整理家长反馈' })).not.toBeInTheDocument();
   });
   it('does not notify parent records when candidate confirmation fails', async () => {
     const onRecordsChanged = vi.fn().mockResolvedValue(undefined);
@@ -42,7 +56,7 @@ describe('persistent material inbox', () => {
   });
   it('keeps a saved confirmation locked when the parent records refresh fails', async () => {
     const onRecordsChanged = vi.fn().mockRejectedValue(new Error('档案刷新失败'));
-    mock.confirm.mockResolvedValue({ recordId: 'r1', studentId: 's1' });
+    mock.confirm.mockResolvedValue({ recordId: 'r1', studentId: 's1', visibility: 'internal_only' });
     render(<CaptureInbox teacherId="teacher-a" students={students} onRecordsChanged={onRecordsChanged} />);
     fireEvent.click(await screen.findByRole('button', { name: /今天主动订正/ }));
     const first = within((await screen.findAllByRole('article'))[0]);
@@ -68,7 +82,7 @@ describe('persistent material inbox', () => {
     const first = screen.getAllByRole('article')[0];
     expect(within(first).getByRole('button', { name: '确认归入档案' })).toBeDisabled();
     fireEvent.change(within(first).getByLabelText('归入学生'), { target: { value: 's2' } });
-    mock.confirm.mockResolvedValue({ recordId: 'r1', studentId: 's2' });
+    mock.confirm.mockResolvedValue({ recordId: 'r1', studentId: 's2', visibility: 'internal_only' });
     fireEvent.click(within(first).getByRole('button', { name: '确认归入档案' }));
     await waitFor(() => expect(mock.confirm).toHaveBeenCalledWith('e1', 'c1', expect.objectContaining({ studentId: 's2', version: 1 })));
     expect(mock.confirm).toHaveBeenCalledTimes(1);
@@ -82,7 +96,7 @@ describe('persistent material inbox', () => {
     expect(screen.getByRole('button', { name: '确认归入档案' })).toBeDisabled();
   });
   it('retries ambiguous confirmation with the identical request and locks changes', async () => {
-    mock.confirm.mockRejectedValueOnce(new Error('响应中断')).mockResolvedValueOnce({ recordId: 'r1', studentId: 's1' });
+    mock.confirm.mockRejectedValueOnce(new Error('响应中断')).mockResolvedValueOnce({ recordId: 'r1', studentId: 's1', visibility: 'internal_only' });
     render(<CandidateCard teacherId="teacher-a" captureId="e1" item={record().candidate} students={students} onChange={vi.fn().mockResolvedValue(undefined)} />);
     fireEvent.change(screen.getByLabelText('归入学生'), { target: { value: 's1' } });
     fireEvent.click(screen.getByRole('button', { name: '确认归入档案' }));

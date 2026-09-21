@@ -32,7 +32,7 @@ describe('candidate drafts and confirmation recovery in synthetic sessions', () 
     { status: 409, code: 'VERSION_CONFLICT' as const },
   ])('allows correcting a first-attempt $status rejection and selecting a different student', async ({ status, code }) => {
     api.confirm.mockRejectedValueOnce(new ApiError({ code, message: '学生不存在或确认未通过校验' }, status))
-      .mockResolvedValueOnce({ recordId: 'record-b', studentId: 'student-b', scheduleId: null });
+      .mockResolvedValueOnce({ recordId: 'record-b', studentId: 'student-b', scheduleId: null, visibility: 'internal_only' });
     render(<CandidateCard teacherId="teacher-a" captureId="one" item={candidate()} students={students} onChange={vi.fn().mockResolvedValue(undefined)} />);
     fireEvent.change(screen.getByLabelText('归入学生'), { target: { value: 'student-a' } });
     fireEvent.click(screen.getByRole('button', { name: '确认归入档案' }));
@@ -79,7 +79,7 @@ describe('candidate drafts and confirmation recovery in synthetic sessions', () 
 
   it('does not ask for another review when a successful confirmation increments the server version', async () => {
     const onChange = vi.fn().mockResolvedValue(undefined);
-    api.confirm.mockResolvedValue({ recordId: 'saved-once', studentId: 'student-a', scheduleId: null });
+    api.confirm.mockResolvedValue({ recordId: 'saved-once', studentId: 'student-a', scheduleId: null, visibility: 'internal_only' });
     const view = render(<CandidateCard teacherId="teacher-a" captureId="one" item={candidate()} students={students} onChange={onChange} />);
     fireEvent.change(screen.getByLabelText('归入学生'), { target: { value: 'student-a' } });
     fireEvent.click(screen.getByRole('button', { name: '确认归入档案' }));
@@ -129,7 +129,7 @@ describe('candidate drafts and confirmation recovery in synthetic sessions', () 
     await waitFor(() => expect(api.edit).toHaveBeenCalledWith('one', 'candidate-1', { version: 2, text: '我的核对修改' }));
     await waitFor(() => expect(screen.getByRole('button', { name: '确认归入档案' })).toBeEnabled());
     expect(screen.getByLabelText('归入学生')).toHaveValue('student-b');
-    api.confirm.mockResolvedValue({ recordId: 'record-1', studentId: 'student-b', scheduleId: null });
+    api.confirm.mockResolvedValue({ recordId: 'record-1', studentId: 'student-b', scheduleId: null, visibility: 'internal_only' });
     fireEvent.click(screen.getByRole('button', { name: '确认归入档案' }));
     await screen.findByText('已保存', { selector: 'strong' });
     expect(api.confirm).toHaveBeenCalledWith('one', 'candidate-1', expect.objectContaining({ version: 3, studentId: 'student-b' }));
@@ -141,7 +141,7 @@ describe('candidate drafts and confirmation recovery in synthetic sessions', () 
     api.confirm.mockImplementation(async (_capture, _candidate, body) => {
       if (!accepted.has(body.clientRequestId)) { accepted.set(body.clientRequestId, { studentId: body.studentId, version: body.version }); throw new Error('响应丢失'); }
       expect(accepted.get(body.clientRequestId)).toEqual({ studentId: body.studentId, version: body.version });
-      return { recordId: 'saved-once', studentId: body.studentId, scheduleId: null };
+      return { recordId: 'saved-once', studentId: body.studentId, scheduleId: null, visibility: 'internal_only' };
     });
     const first = render(<CandidateCard teacherId="teacher-a" captureId="one" item={candidate()} students={students} onChange={vi.fn().mockResolvedValue(undefined)} />);
     fireEvent.change(screen.getByLabelText('归入学生'), { target: { value: 'student-a' } });
@@ -149,7 +149,7 @@ describe('candidate drafts and confirmation recovery in synthetic sessions', () 
     await screen.findByText('响应丢失');
     const original = api.confirm.mock.calls[0];
     first.unmount();
-    render(<CandidateCard teacherId="teacher-a" captureId="one" item={candidate()} students={students} onChange={vi.fn().mockResolvedValue(undefined)} />);
+    render(<CandidateCard teacherId="teacher-a" captureId="one" item={candidate({ version: 2, reviewStatus: 'confirmed', confirmedRecordId: 'saved-once' })} students={students} onChange={vi.fn().mockResolvedValue(undefined)} />);
     expect(screen.getByLabelText('归入学生')).toBeDisabled();
     expect(screen.getByLabelText('归入学生')).toHaveValue('student-a');
     expect(screen.getByLabelText('拟保存内容')).toBeDisabled();
@@ -160,19 +160,19 @@ describe('candidate drafts and confirmation recovery in synthetic sessions', () 
   });
 
   it('updates a reopened card from a late successful receipt without creating a second confirmation', async () => {
-    const receipt = deferred<{ recordId: string; studentId: string; scheduleId: null }>(); api.confirm.mockReturnValue(receipt.promise);
+    const receipt = deferred<{ recordId: string; studentId: string; scheduleId: null; visibility: 'internal_only' }>(); api.confirm.mockReturnValue(receipt.promise);
     const first = render(<CandidateCard teacherId="teacher-a" captureId="one" item={candidate()} students={students} onChange={vi.fn()} />);
     fireEvent.change(screen.getByLabelText('归入学生'), { target: { value: 'student-a' } });
     fireEvent.click(screen.getByRole('button', { name: '确认归入档案' })); first.unmount();
     render(<CandidateCard teacherId="teacher-a" captureId="one" item={candidate()} students={students} onChange={vi.fn()} />);
     expect(screen.getByRole('button', { name: '重试本次确认' })).toBeInTheDocument();
-    await act(async () => receipt.resolve({ recordId: 'saved-once', studentId: 'student-a', scheduleId: null }));
+    await act(async () => receipt.resolve({ recordId: 'saved-once', studentId: 'student-a', scheduleId: null, visibility: 'internal_only' }));
     await screen.findByText('已保存', { selector: 'strong' });
     expect(api.confirm).toHaveBeenCalledTimes(1);
   });
 
   it('does not acknowledge a confirmation receipt belonging to another student', async () => {
-    api.confirm.mockResolvedValue({ recordId: 'wrong-record', studentId: 'student-b', scheduleId: null });
+    api.confirm.mockResolvedValue({ recordId: 'wrong-record', studentId: 'student-b', scheduleId: null, visibility: 'internal_only' });
     render(<CandidateCard teacherId="teacher-a" captureId="one" item={candidate()} students={students} onChange={vi.fn()} />);
     fireEvent.change(screen.getByLabelText('归入学生'), { target: { value: 'student-a' } });
     fireEvent.click(screen.getByRole('button', { name: '确认归入档案' }));
@@ -182,14 +182,14 @@ describe('candidate drafts and confirmation recovery in synthetic sessions', () 
   });
 
   it('clears only the logged-out teacher and fences a late confirmation from recreating that draft', async () => {
-    const receipt = deferred<{ recordId: string; studentId: string; scheduleId: null }>(); api.confirm.mockReturnValue(receipt.promise);
+    const receipt = deferred<{ recordId: string; studentId: string; scheduleId: null; visibility: 'internal_only' }>(); api.confirm.mockReturnValue(receipt.promise);
     const first = render(<CandidateCard teacherId="teacher-a" captureId="one" item={candidate()} students={students} onChange={vi.fn()} />);
     fireEvent.change(screen.getByLabelText('归入学生'), { target: { value: 'student-a' } });
     fireEvent.click(screen.getByRole('button', { name: '确认归入档案' }));
     writeCaptureDraft('teacher-b', 'one', 'candidate-1', { generation: 'other-generation', text: '乙的独立草稿', studentId: 'student-b', baseVersion: 1 });
     clearCaptureDrafts('teacher-a'); first.unmount();
     const other = render(<CandidateCard teacherId="teacher-b" captureId="one" item={candidate()} students={students} onChange={vi.fn()} />);
-    await act(async () => receipt.resolve({ recordId: 'teacher-a-result', studentId: 'student-a', scheduleId: null }));
+    await act(async () => receipt.resolve({ recordId: 'teacher-a-result', studentId: 'student-a', scheduleId: null, visibility: 'internal_only' }));
     expect(readCaptureDraft('teacher-a', 'one', 'candidate-1')).toBeUndefined();
     expect(within(other.container).getByLabelText('拟保存内容')).toHaveValue('乙的独立草稿');
     expect(screen.queryByText('已保存', { selector: 'strong' })).not.toBeInTheDocument();

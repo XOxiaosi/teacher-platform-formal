@@ -43,9 +43,15 @@ async function cleanup() {
   await prisma.feedbackContextSnapshot.deleteMany({ where: { teacherId: { in: teacherIds } } });
   await prisma.parentFeedback.deleteMany({ where: { teacherId: { in: teacherIds } } });
   await prisma.studentRecord.deleteMany({ where: { teacherId: { in: teacherIds } } });
+  await prisma.studentSourceRecord.deleteMany({ where: { teacherId: { in: teacherIds } } });
+  await prisma.captureDeletionReceipt.deleteMany({ where: { teacherId: { in: teacherIds } } });
+  await prisma.captureCandidate.deleteMany({ where: { teacherId: { in: teacherIds } } });
+  await prisma.captureTask.deleteMany({ where: { teacherId: { in: teacherIds } } });
+  await prisma.captureEvent.deleteMany({ where: { teacherId: { in: teacherIds } } });
   await prisma.lesson.deleteMany({ where: { teacherId: { in: teacherIds } } });
   await prisma.schedule.deleteMany({ where: { teacherId: { in: teacherIds } } });
   await prisma.student.deleteMany({ where: { teacherId: { in: teacherIds } } });
+  await prisma.changeLog.deleteMany({ where: { teacherId: { in: teacherIds } } });
   await prisma.sessionStore.deleteMany({ where: { teacherId: { in: teacherIds } } });
   await prisma.teacherRegistry.deleteMany({ where: { id: { in: teacherIds } } });
   await prisma.teacherInvitation.deleteMany({ where: { email: { contains: 'a06-http-' } } });
@@ -170,5 +176,96 @@ describe('A06 反馈正式认证 HTTP 合成闭环', () => {
     expect(snapshot.body.data.evidence).toHaveLength(1);
     expect(snapshot.body.data.evidence[0]).toMatchObject({ id: record.id, sourceVersion: expect.any(String) });
     expect(snapshot.body.data.evidence[0].summary).toContain('独立完成三道计算题');
+  });
+
+  it('材料确认时显式允许家长表达后可直接生成反馈，确认和保存重放均不重复写入', async () => {
+    const email = `a06-http-${randomBytes(6).toString('hex')}@example.com`;
+    const accepted = await acceptInvitation(app, prisma, {
+      email,
+      password: 'password123',
+      displayName: 'A06 材料反馈教师',
+    });
+    expect(accepted.response.status).toBe(201);
+    const teacherId = accepted.response.body.data.teacher.id as string;
+    teacherIds.push(teacherId);
+    const cookie = accepted.response.headers['set-cookie'][0].split(';')[0];
+
+    const studentResponse = await request(app)
+      .post('/api/v1/students')
+      .set('Cookie', cookie)
+      .send({ name: 'A06 材料学生', grade: '五年级' });
+    expect(studentResponse.status).toBe(201);
+    const studentId = studentResponse.body.data.id as string;
+    studentIds.push(studentId);
+
+    const captured = await request(app)
+      .post('/api/v1/captures')
+      .set('Cookie', cookie)
+      .send({
+        clientRequestId: 'a06-capture-create-0001',
+        sourceType: 'text',
+        text: '今天独立完成三道计算题，并主动检查了每一步。',
+      });
+    expect(captured.status).toBe(201);
+    const captureId = captured.body.data.capture.id as string;
+    const candidate = captured.body.data.capture.candidate as { id: string; version: number };
+    const confirmBody = {
+      clientRequestId: 'a06-capture-confirm-0001',
+      studentId,
+      version: candidate.version,
+      visibility: 'parent_shareable',
+    };
+
+    const confirmed = await request(app)
+      .post(`/api/v1/captures/${captureId}/candidates/${candidate.id}/confirm-record`)
+      .set('Cookie', cookie)
+      .send(confirmBody);
+    expect(confirmed.status).toBe(201);
+    expect(confirmed.body.data).toMatchObject({ studentId, visibility: 'parent_shareable', replayed: false });
+    const recordId = confirmed.body.data.recordId as string;
+
+    const confirmationReplay = await request(app)
+      .post(`/api/v1/captures/${captureId}/candidates/${candidate.id}/confirm-record`)
+      .set('Cookie', cookie)
+      .send(confirmBody);
+    expect(confirmationReplay.status).toBe(200);
+    expect(confirmationReplay.body.data).toMatchObject({ recordId, visibility: 'parent_shareable', replayed: true });
+    expect(await prisma.studentRecord.count({ where: { teacherId, studentId } })).toBe(1);
+    expect(await prisma.studentRecord.findUniqueOrThrow({ where: { id: recordId } }))
+      .toMatchObject({ reviewStatus: 'confirmed', visibility: 'parent_shareable' });
+
+    const generated = await request(app)
+      .post('/api/v1/feedback/generate-draft')
+      .set('Cookie', cookie)
+      .send({ studentId, recordIds: [recordId], focus: 'highlight' });
+    expect(generated.status).toBe(201);
+    expect(generated.body.data.evidence.map((item: { id: string }) => item.id)).toEqual([recordId]);
+    expect(await prisma.parentFeedback.count({ where: { teacherId, studentId } })).toBe(0);
+
+    const saveBody = {
+      studentId,
+      title: generated.body.data.title,
+      content: generated.body.data.content,
+      channel: 'manual-copy',
+      clientRequestId: 'a06-capture-feedback-save-0001',
+      evidence: generated.body.data.evidence,
+      windowStart: generated.body.data.windowStart,
+      windowEnd: generated.body.data.windowEnd,
+    };
+    const saved = await request(app).post('/api/v1/feedback').set('Cookie', cookie).send(saveBody);
+    expect(saved.status).toBe(201);
+    const feedbackId = saved.body.data.id as string;
+    const savedReplay = await request(app).post('/api/v1/feedback').set('Cookie', cookie).send(saveBody);
+    expect(savedReplay.status).toBe(201);
+    expect(savedReplay.body.data).toMatchObject({ id: feedbackId, replayed: true });
+    expect(await prisma.parentFeedback.count({ where: { teacherId, studentId } })).toBe(1);
+
+    const snapshot = await request(app)
+      .get(`/api/v1/feedback/${feedbackId}/snapshot`)
+      .set('Cookie', cookie);
+    expect(snapshot.status).toBe(200);
+    expect(snapshot.body.data.evidence).toEqual([
+      expect.objectContaining({ id: recordId, summary: expect.stringContaining('主动检查') }),
+    ]);
   });
 });

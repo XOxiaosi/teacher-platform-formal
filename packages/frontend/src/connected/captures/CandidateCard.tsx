@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ApiError } from '../../api/client';
-import { confirmCaptureCandidate, editCaptureCandidate, reviewCaptureCandidate, type CaptureCandidate, type CaptureRecord } from '../../api/captures';
+import { confirmCaptureCandidate, editCaptureCandidate, reviewCaptureCandidate, type CaptureCandidate, type CaptureRecord, type CaptureVisibility } from '../../api/captures';
 import { readCaptureDraft, subscribeCaptureDraft, writeCaptureDraft, type CaptureDraft } from './drafts';
 
 export type CaptureStudent = { id: string; name: string; grade: string };
@@ -10,7 +10,7 @@ export function CandidateCard({ teacherId, item, captureId, students, onChange }
 }) {
   const [current, setCurrent] = useState(item);
   const [draft, setDraft] = useState<CaptureDraft>(() => readCaptureDraft(teacherId, captureId, item.id) ?? {
-    generation: crypto.randomUUID(), text: item.payload.text, studentId: '', baseVersion: item.version ?? 1,
+    generation: crypto.randomUUID(), text: item.payload.text, studentId: '', baseVersion: item.version ?? 1, visibility: item.visibility ?? 'internal_only',
   });
   const draftRef = useRef(draft);
   const [error, setError] = useState('');
@@ -58,9 +58,9 @@ export function CandidateCard({ teacherId, item, captureId, students, onChange }
     } finally { active.current = false; if (alive.current) setBusy(false); }
   }
   async function confirm() {
-    if (active.current || locked) return;
+    if (active.current || (locked && !draftRef.current.pendingConfirm)) return;
     const wasUncertain = !!draftRef.current.pendingConfirm;
-    const pending = draftRef.current.pendingConfirm ?? { clientRequestId: crypto.randomUUID(), studentId: draftRef.current.studentId, version: draftRef.current.baseVersion };
+    const pending = draftRef.current.pendingConfirm ?? { clientRequestId: crypto.randomUUID(), studentId: draftRef.current.studentId, version: draftRef.current.baseVersion, visibility: draftRef.current.visibility ?? 'internal_only' };
     const attemptGeneration = crypto.randomUUID();
     saveDraft({ ...draftRef.current, generation: attemptGeneration, pendingConfirm: pending });
     await run(async () => {
@@ -81,10 +81,10 @@ export function CandidateCard({ teacherId, item, captureId, students, onChange }
         }
         throw failure;
       }
-      if (!result?.recordId || result.studentId !== pending.studentId) throw new Error('尚未取得与本次确认匹配的保存回执，请重试核对。');
+      if (!result?.recordId || result.studentId !== pending.studentId || !isCaptureVisibility(result.visibility) || result.visibility !== pending.visibility) throw new Error('尚未取得与本次确认匹配的保存回执，请重试核对。');
       const latest = readCaptureDraft(teacherId, captureId, item.id);
       if (latest?.generation === attemptGeneration && latest.pendingConfirm?.clientRequestId === pending.clientRequestId) {
-        saveDraft({ ...latest, pendingConfirm: undefined, confirmedRecordId: result.recordId });
+        saveDraft({ ...latest, pendingConfirm: undefined, confirmedRecordId: result.recordId, visibility: result.visibility });
       }
     });
   }
@@ -102,10 +102,15 @@ export function CandidateCard({ teacherId, item, captureId, students, onChange }
       {!locked && <button className="button secondary" disabled={busy} onClick={acceptCurrentVersion}>保留输入，按最新版本重新核对</button>}
     </section>}
     <label>{locked && draft.text !== current.payload.text ? '保留的未保存输入' : '拟保存内容'}<textarea value={draft.text} disabled={busy || locked || uncertain} onChange={(event) => saveDraft({ ...draftRef.current, text: event.target.value })} /></label>
-    {!locked && <>
+    {(!locked || uncertain) && <>
       <label>归入学生<select value={draft.studentId} disabled={busy || uncertain} onChange={(event) => saveDraft({ ...draftRef.current, studentId: event.target.value })}>
         <option value="">请选择学生</option>{students.map((student, index) => <option key={student.id} value={student.id}>{student.name} · {student.grade || '年级待补充'}{students.filter(other => other.name === student.name && other.grade === student.grade).length > 1 ? ` · 档案 ${index + 1}` : ''}</option>)}
       </select></label>
+      <label>分享范围<select aria-label="分享范围" value={draft.visibility ?? 'internal_only'} disabled={busy || uncertain} onChange={(event) => saveDraft({ ...draftRef.current, visibility: event.target.value as CaptureVisibility })}>
+        <option value="internal_only">仅教师可见</option>
+        <option value="parent_shareable">允许用于家长表达</option>
+      </select></label>
+      <p>{(draft.visibility ?? 'internal_only') === 'parent_shareable' ? '确认后可基于这条记录整理家长反馈。' : '默认仅教师可见；如需用于家长反馈，请选择“允许用于家长表达”。'}</p>
       <p>确认后将此项归入所选学生档案；其他候选仍需分别核对。</p>
       {uncertain && <p role="status">尚未取得保存回执，请重试本次确认或刷新材料核对结果。</p>}
       <div className="button-row">
@@ -116,12 +121,17 @@ export function CandidateCard({ teacherId, item, captureId, students, onChange }
       </div>
     </>}
     {(current.confirmedRecordId || draft.confirmedRecordId) && <p>已保存正式记录，可在学生档案中回看。</p>}
-    {(draft.confirmedRecordId && draft.studentId) && <p className="button-row">
+    {(draft.confirmedRecordId && draft.studentId && draft.visibility === 'parent_shareable') && <p className="button-row">
       <a className="button secondary" href={`#/feedback?studentId=${encodeURIComponent(draft.studentId)}&recordId=${encodeURIComponent(draft.confirmedRecordId)}`}>
         基于这条记录整理家长反馈
       </a>
     </p>}
+    {(draft.confirmedRecordId && draft.studentId && (draft.visibility ?? 'internal_only') === 'internal_only') && <p>这条记录当前仅教师可见；如需整理家长反馈，请到学生档案调整分享范围。</p>}
     <p className="assistant-hint">未保存的核对输入暂存在当前浏览器会话中，退出账号后清除。</p>
     {error && <p role="alert">{error}</p>}
   </article>;
+}
+
+function isCaptureVisibility(value: unknown): value is CaptureVisibility {
+  return value === 'internal_only' || value === 'parent_shareable';
 }

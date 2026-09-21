@@ -22,7 +22,7 @@ function fake(): CaptureService {
     list: vi.fn(async () => ({ ok: true, value: { items: [captureView], nextCursor: null } })),
     editCandidate: vi.fn(async () => ({ ok: true, value: captureView })),
     reviewCandidate: vi.fn(async () => ({ ok: true, value: captureView })),
-    confirmRecord: vi.fn(async () => ({ ok: true, value: { eventId: 'cap-1', candidateId: 'candidate-1', recordId: 'record-1', studentId: 'student-1', scheduleId: null, category: 'general_note' as const, replayed: false } })),
+    confirmRecord: vi.fn(async () => ({ ok: true, value: { eventId: 'cap-1', candidateId: 'candidate-1', recordId: 'record-1', studentId: 'student-1', scheduleId: null, category: 'general_note' as const, visibility: 'internal_only' as const, replayed: false } })),
     createText: vi.fn(async () => ({ ok: true, value: { capture: captureView, replayed: false } })),
     get: vi.fn(async () => ({ ok: true, value: captureView })),
     requestDeletion: vi.fn(async () => ({ ok: true, value: { receipt: { id: 'receipt-1', eventId: 'cap-1', status: 'completed', attemptCount: 1, retryable: false, lastErrorCode: null, createdAt: new Date(), completedAt: new Date() }, replayed: false } })),
@@ -60,7 +60,14 @@ describe('A04 candidate review API', () => {
     expect((await request(instance).post('/captures/cap-1/candidates/candidate-1/review').send({ version: 3, action: 'defer' })).status).toBe(200);
     expect(service.reviewCandidate).toHaveBeenCalledWith({ teacherId: 'teacher-a', eventId: 'cap-1', candidateId: 'candidate-1', version: 3, action: 'defer' });
     expect((await request(instance).post('/captures/cap-1/candidates/candidate-1/confirm-record').send({ version: 4, studentId: 'student-1', clientRequestId: 'confirm-0001' })).status).toBe(201);
-    expect(service.confirmRecord).toHaveBeenCalledWith({ teacherId: 'teacher-a', eventId: 'cap-1', candidateId: 'candidate-1', version: 4, studentId: 'student-1', clientRequestId: 'confirm-0001', scheduleId: undefined });
+    expect(service.confirmRecord).toHaveBeenCalledWith({ teacherId: 'teacher-a', eventId: 'cap-1', candidateId: 'candidate-1', version: 4, studentId: 'student-1', clientRequestId: 'confirm-0001', scheduleId: undefined, visibility: undefined });
+  });
+  it('accepts supported sharing visibility and rejects unsupported values before a write service call', async () => {
+    const service = fake(); const instance = app(service);
+    expect((await request(instance).post('/captures/cap-1/candidates/candidate-1/confirm-record').send({ version: 4, studentId: 'student-1', clientRequestId: 'confirm-0002', visibility: 'parent_shareable' })).status).toBe(201);
+    expect(service.confirmRecord).toHaveBeenCalledWith({ teacherId: 'teacher-a', eventId: 'cap-1', candidateId: 'candidate-1', version: 4, studentId: 'student-1', clientRequestId: 'confirm-0002', scheduleId: undefined, visibility: 'parent_shareable' });
+    expect((await request(instance).post('/captures/cap-1/candidates/candidate-1/confirm-record').send({ version: 4, studentId: 'student-1', clientRequestId: 'confirm-0003', visibility: 'needs_review' })).status).toBe(400);
+    expect(service.confirmRecord).toHaveBeenCalledTimes(1);
   });
   it('missing versions and unsupported actions are rejected before a write service call', async () => {
     const service = fake(); const instance = app(service);

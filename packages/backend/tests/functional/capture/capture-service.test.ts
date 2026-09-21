@@ -156,6 +156,27 @@ describe('T-015 capture service persistence', () => {
     expect(record.reviewStatus).toBe('confirmed');
   });
 
+  it('确认记录显式保存分享范围，默认内部可见，幂等重放范围变化冲突', async () => {
+    const student = await prisma.student.create({ data: { teacherId: TEACHERS[0], name: '分享范围学生', grade: '初一' } });
+    const service = createCaptureService({ prisma, cipher });
+    const created = await service.createText({ teacherId: TEACHERS[0], clientRequestId: 'capture-visibility-0001', text: '可分享的课堂反馈' });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const internal = await service.confirmRecord({ teacherId: TEACHERS[0], eventId: created.value.capture.id, clientRequestId: 'confirm-visibility-0001', studentId: student.id });
+    expect(internal).toMatchObject({ ok: true, value: { visibility: 'internal_only', replayed: false } });
+    const persisted = await prisma.studentRecord.findFirstOrThrow({ where: { teacherId: TEACHERS[0], studentId: student.id } });
+    expect(persisted.visibility).toBe('internal_only');
+    expect(await service.confirmRecord({ teacherId: TEACHERS[0], eventId: created.value.capture.id, clientRequestId: 'confirm-visibility-0001', studentId: student.id, visibility: 'parent_shareable' })).toMatchObject({ ok: false, error: { code: 'VERSION_CONFLICT' } });
+
+    const shareableCapture = await service.createText({ teacherId: TEACHERS[0], clientRequestId: 'capture-visibility-0002', text: '可供家长查看的课堂反馈' });
+    expect(shareableCapture.ok).toBe(true);
+    if (!shareableCapture.ok) return;
+    const shareable = await service.confirmRecord({ teacherId: TEACHERS[0], eventId: shareableCapture.value.capture.id, clientRequestId: 'confirm-visibility-0002', studentId: student.id, visibility: 'parent_shareable' });
+    expect(shareable).toMatchObject({ ok: true, value: { visibility: 'parent_shareable', replayed: false } });
+    expect(await prisma.studentRecord.findUniqueOrThrow({ where: { id: shareable.ok ? shareable.value.recordId : '' } })).toMatchObject({ visibility: 'parent_shareable' });
+  });
+
   it('删除 claim 后进程中断，租约过期时由重启服务恢复并可完成重试', async () => {
     const created = await createCaptureService({ prisma, cipher }).createText({
       teacherId: TEACHERS[0], clientRequestId: 'capture-delete-crash-0001', text: '崩溃恢复后删除',

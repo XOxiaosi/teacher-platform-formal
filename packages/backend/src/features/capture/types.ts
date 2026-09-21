@@ -19,6 +19,7 @@ export interface CaptureView {
 export interface CaptureCandidateIdentity {
   teacherId: string; eventId: string; candidateId: string; version: number;
 }
+export type CaptureRecordVisibility = 'internal_only' | 'parent_shareable';
 export interface DeletionReceiptView {
   id: string; eventId: string; status: 'pending' | 'completed' | 'failed'; attemptCount: number;
   retryable: boolean; lastErrorCode: string | null; createdAt: Date; completedAt: Date | null;
@@ -30,6 +31,7 @@ export interface ConfirmedCaptureRecordView {
   studentId: string;
   scheduleId: string | null;
   category: 'general_note' | 'lesson_observation';
+  visibility: CaptureRecordVisibility;
   replayed: boolean;
 }
 export interface CaptureService {
@@ -41,7 +43,7 @@ export interface CaptureService {
   requestDeletion(input: { teacherId: string; eventId: string; clientRequestId: string }): Promise<Result<{ receipt: DeletionReceiptView; replayed: boolean }, CommonError>>;
   getDeletionReceipt(input: { teacherId: string; receiptId: string }): Promise<Result<DeletionReceiptView, CommonError>>;
   retryDeletion(input: { teacherId: string; receiptId: string }): Promise<Result<{ receipt: DeletionReceiptView; replayed: boolean }, CommonError>>;
-  confirmRecord(input: { teacherId: string; eventId: string; clientRequestId: string; studentId: string; scheduleId?: string; candidateId?: string; version?: number }): Promise<Result<ConfirmedCaptureRecordView, CommonError>>;
+  confirmRecord(input: { teacherId: string; eventId: string; clientRequestId: string; studentId: string; scheduleId?: string; candidateId?: string; version?: number; visibility?: CaptureRecordVisibility }): Promise<Result<ConfirmedCaptureRecordView, CommonError>>;
 }
 export interface CreateCaptureServiceOptions {
   prisma: PrismaClient;

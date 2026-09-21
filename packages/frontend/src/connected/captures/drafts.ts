@@ -1,9 +1,12 @@
-export interface CaptureConfirmationDraft { clientRequestId: string; studentId: string; version: number }
+import type { CaptureVisibility } from '../../api/captures';
+
+export interface CaptureConfirmationDraft { clientRequestId: string; studentId: string; version: number; visibility: CaptureVisibility }
 export interface CaptureDraft {
   generation: string;
   text: string;
   studentId: string;
   baseVersion: number;
+  visibility?: CaptureVisibility;
   pendingConfirm?: CaptureConfirmationDraft;
   confirmedRecordId?: string;
 }
@@ -16,17 +19,23 @@ function valid(value: unknown): value is CaptureDraft {
   if (!value || typeof value !== 'object') return false;
   const draft = value as Partial<CaptureDraft>;
   if (typeof draft.generation !== 'string' || typeof draft.text !== 'string' || typeof draft.studentId !== 'string' || !Number.isSafeInteger(draft.baseVersion) || draft.baseVersion! < 1) return false;
+  if (draft.visibility !== undefined && !['internal_only', 'parent_shareable'].includes(draft.visibility)) return false;
   if (draft.confirmedRecordId !== undefined && typeof draft.confirmedRecordId !== 'string') return false;
   const pending = draft.pendingConfirm;
-  return pending === undefined || !!(pending && typeof pending.clientRequestId === 'string' && typeof pending.studentId === 'string' && Number.isSafeInteger(pending.version) && pending.version >= 1);
+  return pending === undefined || !!(pending && typeof pending.clientRequestId === 'string' && typeof pending.studentId === 'string' && Number.isSafeInteger(pending.version) && pending.version >= 1 && (pending.visibility === undefined || ['internal_only', 'parent_shareable'].includes(pending.visibility)));
+}
+function normalize(value: CaptureDraft): CaptureDraft {
+  const visibility = value.visibility ?? 'internal_only';
+  return { ...value, visibility, pendingConfirm: value.pendingConfirm ? { ...value.pendingConfirm, visibility: value.pendingConfirm.visibility ?? visibility } : undefined };
 }
 export function readCaptureDraft(teacherId: string, captureId: string, candidateId: string): CaptureDraft | undefined {
   const id = key(teacherId, captureId, candidateId);
   try {
     const value: unknown = JSON.parse(sessionStorage.getItem(id) ?? 'null');
-    if (valid(value)) return value;
+    if (valid(value)) return normalize(value);
   } catch { /* Retain the current-page fallback when storage is unavailable. */ }
-  return memory.get(id);
+  const fallback = memory.get(id);
+  return fallback ? normalize(fallback) : undefined;
 }
 export function writeCaptureDraft(teacherId: string, captureId: string, candidateId: string, draft: CaptureDraft): void {
   const id = key(teacherId, captureId, candidateId); memory.set(id, draft);

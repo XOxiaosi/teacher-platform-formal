@@ -22,7 +22,8 @@ function confirmRecordBody(body: unknown) {
     return err(validationError('clientRequestId 与 studentId 必填', 'body'));
   }
   if (value.scheduleId !== undefined && typeof value.scheduleId !== 'string') return err(validationError('scheduleId 格式不合法', 'scheduleId'));
-  return { ok: true as const, value: { clientRequestId: value.clientRequestId, studentId: value.studentId, scheduleId: value.scheduleId as string | undefined } };
+  if (value.visibility !== undefined && !['internal_only', 'parent_shareable'].includes(value.visibility as string)) return err(validationError('visibility 格式不合法', 'visibility'));
+  return { ok: true as const, value: { clientRequestId: value.clientRequestId, studentId: value.studentId, scheduleId: value.scheduleId as string | undefined, visibility: value.visibility as 'internal_only' | 'parent_shareable' | undefined } };
 }
 export function createCaptureRouter(dependencies: CaptureRouteDependencies): Router {
   const router = Router();

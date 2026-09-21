@@ -1,5 +1,7 @@
 import { apiRequest } from './client';
 
+export type CaptureVisibility = 'internal_only' | 'parent_shareable';
+
 export interface CaptureCandidate {
   id: string;
   candidateType: 'verbatim_note';
@@ -9,6 +11,7 @@ export interface CaptureCandidate {
   version?: number;
   confirmedRecordId?: string | null;
   confidence: null;
+  visibility?: CaptureVisibility;
 }
 
 export interface CaptureTask {
@@ -77,7 +80,7 @@ export function reviewCaptureCandidate(eventId: string, candidateId: string, bod
   return apiRequest(`/captures/${encodeURIComponent(eventId)}/candidates/${encodeURIComponent(candidateId)}/review`, { method: 'POST', body });
 }
 
-export function confirmCaptureCandidate(eventId: string, candidateId: string, body: { version: number; clientRequestId: string; studentId: string }): Promise<ConfirmCaptureResult> {
+export function confirmCaptureCandidate(eventId: string, candidateId: string, body: { version: number; clientRequestId: string; studentId: string; visibility: CaptureVisibility }): Promise<ConfirmCaptureResult> {
   return apiRequest(`/captures/${encodeURIComponent(eventId)}/candidates/${encodeURIComponent(candidateId)}/confirm-record`, { method: 'POST', body });
 }
 
@@ -99,7 +102,7 @@ export function retryCaptureDeletion(receiptId: string): Promise<CaptureDeletion
   return apiRequest(`/capture-deletions/${encodeURIComponent(receiptId)}/retry`, { method: 'POST' });
 }
 
-export interface ConfirmCaptureResult { recordId: string; studentId: string; scheduleId: string | null; }
+export interface ConfirmCaptureResult { recordId: string; studentId: string; scheduleId: string | null; visibility?: CaptureVisibility; }
 export function confirmCapture(eventId: string, body: { clientRequestId: string; studentId: string; scheduleId?: string }): Promise<ConfirmCaptureResult> {
   return apiRequest(`/captures/${encodeURIComponent(eventId)}/confirm-record`, { method: 'POST', body });
 }
