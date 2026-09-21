@@ -62,7 +62,7 @@ describe('UI审查修复：工作台与缴费', () => {
     route('#/agent'); render(<PreviewApp />);
     expect(screen.getByText('助手暂不可用')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '记录学生情况' })).toHaveAttribute('href', '#/students');
-    expect(screen.getByRole('link', { name: '设置响应偏好' })).toHaveAttribute('href', '#/settings/models');
+    expect(screen.getByRole('link', { name: '查看 DeepSeek 服务' })).toHaveAttribute('href', '#/settings/models');
     expect(screen.getByRole('button', { name: '发送' })).toBeDisabled();
   });
 });

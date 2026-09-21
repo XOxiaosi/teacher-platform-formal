@@ -13,7 +13,7 @@ describe('独立免登录原型的运行边界', () => {
     const localStyles = ['students-edit.css', 'settings-configuration.css']
       .map((name) => readFileSync(join(directory, name), 'utf8')).join('\n');
     expect(localStyles).not.toMatch(/(?:^|\n)\.text-button\s*\{/);
-    expect(localStyles).toContain('.choice-card input { width: 18px; height: 18px; min-height: 0;');
+    expect(localStyles).toContain('.settings-form label input { min-height: 42px;');
     const scheduleStyle = readFileSync(join(directory, 'schedule.css'), 'utf8');
     expect(scheduleStyle).toContain('.week-scroll .week-item.compact');
     expect(scheduleStyle).toContain('.short-schedule-list');
@@ -41,12 +41,17 @@ describe('独立免登录原型的运行边界', () => {
     // Vite 的开发热更新不属于原型业务；构建后的入口无需后端和 U 盘。
   });
 
-  it('正式前端表达移除开发提示，但不伪造外部服务或加入敏感输入', () => {
-    expect(runtime).not.toMatch(/type=["'](?:password|file)["']/);
-    expect(runtime).not.toMatch(/(?:setApiKey|apiKey\s*:|accessToken\s*:)/);
-    expect(runtime).not.toMatch(/测试版|示例|演示|刷新还原|请勿输入真实资料|伪造成功/);
-    expect(runtime).toContain('模型未配置');
-    expect(runtime).toContain('微信未连接');
+  it('预留密钥只存在指定演示组件，其余页面不引入凭据或文件上传', () => {
+    const otherRuntime = runtimeFiles.filter(name => name !== 'DeepSeekSettings.tsx')
+      .map(name => readFileSync(join(directory, name), 'utf8')).join('\n');
+    expect(otherRuntime).not.toMatch(/type=["'](?:password|file)["']/);
+    expect(otherRuntime).not.toMatch(/(?:setApiKey|apiKey\s*:|accessToken\s*:)/);
+    const deepseek = readFileSync(join(directory, 'DeepSeekSettings.tsx'), 'utf8');
+    expect(deepseek).toContain('type="password"');
+    expect(deepseek).not.toMatch(/usePreviewState|setUi|savePreferences/);
+    expect(deepseek).toContain('未保存或验证 API Key');
+    expect(runtime).toContain('真实收发未验证');
+    expect(runtime).not.toMatch(/伪造成功|微信发送已确认/);
   });
 
   it('排期模型不包含课程标题、学科、目标或授课内容', () => {

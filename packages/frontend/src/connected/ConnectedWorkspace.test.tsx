@@ -3,17 +3,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConnectedWorkspace } from './ConnectedWorkspace';
 import { createDemoData } from '../preview/data';
 
-const mock = vi.hoisted(() => ({ load: vi.fn(), command: vi.fn(), schedule: vi.fn(), payment: vi.fn(), update: vi.fn(), logout: vi.fn(), records: vi.fn(), generate: vi.fn(), createFeedback: vi.fn(), updateFeedback: vi.fn() }));
+const mock = vi.hoisted(() => ({ availability: vi.fn(), load: vi.fn(), command: vi.fn(), schedule: vi.fn(), payment: vi.fn(), update: vi.fn(), logout: vi.fn(), records: vi.fn(), generate: vi.fn(), createFeedback: vi.fn(), updateFeedback: vi.fn() }));
 vi.mock('../app/teacher-context', () => ({ useAuth: () => ({ teacherId: 'teacher-a', displayName: '验收老师', email: 'a@example.test', logout: mock.logout }) }));
 vi.mock('./workspace-api', () => ({ loadWorkspace: mock.load, workspaceCommand: mock.command, schedulingCommand: mock.schedule }));
 vi.mock('../api/payments', () => ({ createPayment: mock.payment }));
 vi.mock('../api/students', () => ({ updateStudentProfile: mock.update, listStudentRecords: mock.records, reviewStudentRecord: vi.fn(), getStudentRecordSource: vi.fn() }));
 vi.mock('../api/feedback', () => ({ generateFeedbackDraft: mock.generate, createFeedback: mock.createFeedback, updateFeedbackContent: mock.updateFeedback }));
-vi.mock('./ModelConfiguration', () => ({ ModelConfiguration: ({ teacherId }: { teacherId: string }) => <div>具体模型配置：{teacherId}</div> }));
+vi.mock('../api/teaching-tasks', () => ({ getTeachingRuntimeAvailability: mock.availability }));
 vi.mock('../connected/assistant', () => ({ AssistantWorkspace: ({ teacherId }: { teacherId: string }) => <section aria-label="正式教学助手入口"><h1>教学助手</h1><p>当前账号：{teacherId}</p></section> }));
 
 const snapshot = () => ({ data: createDemoData(), studentVersions: { s1: 'v1', s2: 'v2' }, feedbackVersions: {}, memoVersions: { m1: 'm1-v1' }, preferenceVersion: null });
-beforeEach(() => { vi.clearAllMocks(); location.hash = '#/students'; mock.load.mockResolvedValue(snapshot()); mock.command.mockResolvedValue({}); mock.schedule.mockResolvedValue({}); });
+beforeEach(() => { vi.clearAllMocks(); mock.availability.mockResolvedValue({ runtimeAvailability: 'unavailable' }); location.hash = '#/students'; mock.load.mockResolvedValue(snapshot()); mock.command.mockResolvedValue({}); mock.schedule.mockResolvedValue({}); });
 
 describe('connected workspace server-backed writes', () => {
   it('connects feedback generation to an explicit save with evidence and request receipt', async () => {
@@ -51,12 +51,19 @@ describe('connected workspace server-backed writes', () => {
     fireEvent.click(await screen.findByRole('menuitem', { name: '刷新资料' }));
     await waitFor(() => expect(mock.records.mock.calls.length).toBeGreaterThan(before));
   });
-  it('connects settings to actual model configuration rather than response preferences', async () => {
+  it.each([
+    ['available', '教学 AI 已启用'], ['unavailable', '服务暂不可用'], ['test_only', '真实模型未启用'],
+  ])('shows the server capability %s without exposing provider credentials to teachers', async (runtimeAvailability, label) => {
+    mock.availability.mockResolvedValue({ runtimeAvailability });
     location.hash = '#/settings/models';
     render(<ConnectedWorkspace />);
-    await screen.findByRole('heading', { name: '模型与 API', level: 1 });
-    expect(screen.getByText('具体模型配置：teacher-a')).toBeInTheDocument();
-    expect(screen.queryByText('助手响应偏好')).not.toBeInTheDocument();
+    await screen.findByRole('heading', { name: 'AI 服务', level: 1 });
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(label));
+    expect(mock.availability).toHaveBeenCalledWith('teacher-a');
+    expect(screen.getByRole('heading', { name: 'DeepSeek 服务' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /添加 API|保存 API/ })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/API Key|供应商|API 地址|协议|模型 ID/)).not.toBeInTheDocument();
+    expect(screen.queryByText('提交演示配置')).not.toBeInTheDocument();
   });
   it('mounts the formal assistant entry for the authenticated teacher', async () => {
     location.hash = '#/agent';

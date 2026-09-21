@@ -1,0 +1,18 @@
+.support-heading { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 18px; }
+.support-heading > svg { color: #176b5b; margin-top: 3px; flex-shrink: 0; }
+.support-heading h2 { margin: 0 0 4px; }
+.support-heading p, .workspace-support .support-hint { color: #687b75; font-size: 13px; line-height: 1.7; }
+.workspace-support form { display: grid; gap: 15px; }
+.workspace-support label { display: grid; gap: 7px; font-size: 13px; }
+.workspace-support textarea { min-height: 90px; }
+.support-memory { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 9px; padding-top: 18px; margin-top: 22px; border-top: 1px solid #e3eae6; color: #687b75; font-size: 12px; line-height: 1.8; }
+.support-memory > svg { flex-shrink: 0; margin-top: 3px; }
+.support-memory > span { flex: 1; min-width: 160px; }
+.support-memory a, .support-faq a { color: #176b5b; text-decoration: underline; text-underline-offset: 3px; }
+.support-faq details, .support-feedback { padding: 14px 0; border-top: 1px solid #e3eae6; font-size: 13px; }
+.support-faq summary, .support-feedback summary { cursor: pointer; color: #273f36; font-weight: 550; line-height: 1.6; }
+.support-faq p { margin: 10px 0; color: #687b75; line-height: 1.8; }
+.support-feedback form { margin-top: 15px; }
+.support-issue { background: #f3f8f5; padding: 14px; border-radius: 10px; display: grid; gap: 7px; font-size: 13px; }
+.support-issue span { color: #687b75; font-size: 12px; }
+.support-issue p { white-space: pre-wrap; overflow-wrap: anywhere; }

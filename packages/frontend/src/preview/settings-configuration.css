@@ -1,18 +1,36 @@
 .settings-configuration .settings-layout > div { min-width: 0; }
-.settings-nav a { color: var(--text-muted); text-decoration: none; padding: 8px 10px; border-radius: 8px; }
-.settings-nav a:hover, .settings-nav a.active { color: var(--ink); background: #eee9e0; }
+.settings-nav { display: grid; gap: 4px; align-content: start; }
+.settings-nav a { color: var(--text-muted); text-decoration: none; padding: 9px 11px; border-radius: 8px; font-size: 14px; }
+.settings-nav a:hover, .settings-nav a.active { color: var(--ink); background: #eaf4f0; }
 .settings-stack { display: grid; gap: 16px; }
-.choice-list { display: grid; gap: 10px; margin: 20px 0; }
-.choice-card { display: flex; grid-template-columns: auto 1fr; align-items: flex-start; gap: 10px; margin: 0; padding: 14px; border: 1px solid var(--hairline); border-radius: 10px; cursor: pointer; }
-.choice-card:has(input:checked) { border-color: var(--ink); background: #faf8f4; }
-.choice-card input { width: 18px; height: 18px; min-height: 0; padding: 0; flex: 0 0 18px; margin: 3px 0 0; accent-color: var(--primary); }
-.choice-card span { display: grid; gap: 4px; }
-.choice-card small { color: var(--text-muted); font-size: 12px; font-weight: 400; }
-.unavailable-card { padding: 20px; }
-.unavailable-card h2 { font-size: 17px; margin-bottom: 8px; }
-.unavailable-card p { color: var(--text-muted); font-size: 13px; }
-.check-result { color: #805f32 !important; }
-.settings-configuration .text-button { position: static; border: 0; background: none; color: var(--text-muted); padding: 12px 0 0; text-align: left; text-decoration: underline; cursor: pointer; }
-.step-preview { margin: 14px 0 0 20px; color: var(--text-muted); font-size: 13px; line-height: 1.8; }
-.privacy-note { display: grid; gap: 6px; padding: 16px; margin: 18px 0; background: #f5f1e9; border-radius: 8px; font-size: 13px; }
-@media (max-width: 600px) { .settings-configuration .page-header { align-items: flex-start; } .settings-configuration .page-header > .button { white-space: nowrap; } .settings-nav { display: flex !important; overflow-x: auto; padding-bottom: 4px; } .settings-nav a { white-space: nowrap; } .settings-configuration .settings-form { padding: 18px; } .settings-configuration .button-row { flex-wrap: wrap; } }
+.settings-form { border-color: #dfebe7; box-shadow: 0 8px 26px rgb(19 61 51 / 5%); }
+.settings-form h2 { margin: 0 0 8px; font-size: 18px; letter-spacing: -.02em; }
+.settings-form > div > p, .settings-form form > p { color: var(--text-muted); font-size: 13px; line-height: 1.7; }
+.settings-form label { display: grid; gap: 7px; margin: 20px 0 0; color: var(--ink); font-size: 13px; font-weight: 650; }
+.settings-form label input { min-height: 42px; border-color: #cbded7; background: #fcfefd; }
+.settings-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; color: var(--primary); }
+.settings-card-heading > div { display: grid; gap: 9px; }
+.settings-card-heading h2 { color: var(--ink); }
+.settings-helper { display: flex; align-items: flex-start; gap: 7px; margin: 14px 0 0; color: #58706a !important; font-size: 12px !important; }
+.button-row { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 18px; }
+.dirty-state { color: #805f32 !important; }
+.saved { color: #176b5b !important; }
+.dsh-path { display: flex; align-items: center; gap: 10px; margin: 18px 0; color: #176b5b; font-size: 13px; font-weight: 700; }
+.dsh-path span { padding: 6px 10px; border: 1px solid #cce1da; border-radius: 999px; background: #f1f8f5; }
+.dsh-path i { width: 22px; height: 1px; background: #8db9ac; }
+.deepseek-settings [data-slot="badge"] { width: fit-content; }
+.connection-shortcuts p { margin: 0; }
+.wechat-connection .connection-success { display: flex; align-items: center; gap: 7px; color: #176b5b; font-weight: 650; }
+.wechat-qr-dialog { max-width: min(94vw, 470px); }
+.demo-qr { display: grid; justify-items: center; gap: 9px; padding: 22px; border: 1px dashed #8ab9aa; border-radius: 14px; background: repeating-linear-gradient(45deg, #f6fbf9, #f6fbf9 7px, #eff7f4 7px, #eff7f4 14px); color: #176b5b; font-size: 12px; font-weight: 700; }
+.connection-step { margin: 0; color: var(--text-muted); line-height: 1.6; }
+.connection-error { color: #a84236; }
+.connection-phone { display: flex; align-items: center; gap: 12px; padding: 15px; border-radius: 10px; background: #f3f9f7; color: #176b5b; }
+.connection-phone p { margin: 0; }
+.pairing-code { display: grid; gap: 7px; padding: 12px 0; color: var(--text-muted); font-size: 13px; }
+.pairing-code summary { color: var(--ink); cursor: pointer; font-weight: 650; }
+.pairing-code strong { letter-spacing: .16em; color: #176b5b; font-size: 19px; }
+.cancel-demo-connection { justify-self: start; color: var(--text-muted); }
+.privacy-note { display: grid; gap: 6px; padding: 15px; margin: 18px 0; border-radius: 10px; background: #f3f8f6; color: #5c706b; font-size: 13px; }
+.privacy-note b { color: var(--ink); }
+@media (max-width: 600px) { .settings-configuration .page-header { align-items: flex-start; } .settings-configuration .page-header > .button { white-space: nowrap; } .settings-nav { display: flex; overflow-x: auto; padding-bottom: 4px; } .settings-nav a { white-space: nowrap; } .settings-configuration .settings-form { padding: 18px; } .wechat-qr-dialog { padding: 20px; } .settings-card-heading { gap: 10px; } }

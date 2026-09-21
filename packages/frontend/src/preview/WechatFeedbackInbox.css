@@ -1,0 +1,64 @@
+.wechat-feedback-inbox,
+.wechat-feedback-dialog {
+  --business-teal: #176b5b;
+  --business-teal-soft: #e8f4f0;
+  --business-ink: #17332e;
+  --business-muted: #667a75;
+  --business-border: #dfe8e5;
+  --business-warning: #ad6c18;
+}
+.wechat-feedback-inbox { margin-top: 30px; }
+.today-page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.today-wechat-jump { border-color: #b9d7ce; color: var(--business-teal); }
+.today-wechat-jump:hover { background: var(--business-teal-soft); }
+.wechat-feedback-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 12px; }
+.wechat-feedback-heading h2 { margin: 0; }
+.wechat-feedback-heading > div > p:last-child { margin: 5px 0 0; color: var(--business-muted); font-size: 13px; }
+.wechat-feedback-eyebrow { margin: 0 0 5px; color: var(--business-teal); font-size: 12px; font-weight: 700; letter-spacing: .08em; }
+.wechat-feedback-demo-note { margin: 0 0 12px; padding: 10px 12px; border: 1px solid #d5e8e1; border-radius: 10px; background: #f3faf7; color: #41655c; font-size: 12px; }
+.wechat-feedback-filter { display: flex; gap: 3px; width: fit-content; max-width: 100%; margin-bottom: 12px; padding: 3px; overflow-x: auto; border: 1px solid var(--business-border); border-radius: 10px; background: #fff; }
+.wechat-feedback-filter .is-active { background: var(--business-teal-soft); color: var(--business-teal); }
+.wechat-feedback-list { overflow: hidden; }
+.wechat-feedback-list > [data-slot="card-content"] { padding: 0; }
+.wechat-feedback-row { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 18px 20px; border-bottom: 1px solid #edf2f0; }
+.wechat-feedback-row:last-child { border-bottom: 0; }
+.wechat-feedback-row-main { min-width: 0; }
+.wechat-feedback-row-title { display: flex; align-items: center; gap: 8px; }
+.wechat-feedback-row-title strong { color: var(--business-ink); font-size: 15px; }
+.wechat-feedback-row-main > p { margin: 7px 0; color: #416058; font-size: 13px; }
+.wechat-feedback-row-meta { display: flex; flex-wrap: wrap; gap: 8px 12px; color: var(--business-muted); font-size: 12px; }
+.wechat-feedback-unavailable > [data-slot="card-content"] { display: grid; gap: 6px; }
+.wechat-feedback-unavailable p { margin: 0; color: var(--business-ink); }
+.wechat-feedback-unavailable small { color: var(--business-muted); }
+.wechat-feedback-unavailable-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.wechat-feedback-dialog { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; min-width: 0; overflow-wrap: anywhere; }
+.wechat-feedback-dialog select, .wechat-feedback-dialog textarea { min-width: 0; width: 100%; max-width: 100%; }
+.wechat-feedback-dialog section { display: grid; gap: 8px; }
+.wechat-feedback-dialog h3 { margin: 0; font-size: 14px; }
+.wechat-feedback-dialog blockquote { margin: 0; padding: 14px; border-left: 3px solid var(--business-teal); border-radius: 8px; background: #f5faf8; color: #385049; line-height: 1.8; white-space: pre-wrap; }
+.wechat-feedback-source { margin: 0; color: var(--business-muted); font-size: 12px; }
+.wechat-feedback-proposal { padding: 14px; border: 1px solid var(--business-border); border-radius: 10px; background: #fbfdfc; }
+.wechat-feedback-proposal label { display: grid; gap: 6px; color: var(--business-ink); font-size: 13px; font-weight: 650; }
+.wechat-feedback-proposal label + label { margin-top: 12px; }
+.wechat-feedback-proposal textarea { min-height: 96px; font-weight: 400; }
+.wechat-feedback-warning { margin: 0; color: var(--business-warning); font-size: 12px; }
+.wechat-feedback-outcomes { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px !important; }
+.wechat-feedback-outcomes > div { display: grid; gap: 3px; padding: 12px; border: 1px solid #dce9e4; border-radius: 9px; background: #f8fbfa; }
+.wechat-feedback-outcomes span, .wechat-feedback-outcomes small { color: var(--business-muted); font-size: 12px; }
+.wechat-feedback-outcomes strong { color: var(--business-ink); font-size: 13px; }
+.wechat-feedback-error, .wechat-feedback-review { margin: 0; padding: 10px 12px; border-radius: 9px; font-size: 12px; }
+.wechat-feedback-error { border: 1px solid #f0cece; background: #fff7f7; color: #934040; }
+.wechat-feedback-review { background: #f5f8f7; color: var(--business-muted); }
+@media (max-width: 720px) {
+  .today-page-header { align-items: stretch; flex-direction: column; }
+  .today-wechat-jump { width: 100%; }
+  .wechat-feedback-heading, .wechat-feedback-row { align-items: flex-start; flex-direction: column; }
+  .wechat-feedback-row { gap: 12px; padding: 16px; }
+  .wechat-feedback-row > button { width: 100%; }
+  .wechat-feedback-filter { width: 100%; }
+  .wechat-feedback-filter button { flex: 1 0 auto; }
+  .wechat-feedback-outcomes { grid-template-columns: 1fr; }
+  .wechat-feedback-dialog .dialog-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .wechat-feedback-dialog .dialog-actions > button { min-width: 0; width: 100%; white-space: normal; }
+  .wechat-feedback-dialog .dialog-actions > button:last-child { grid-column: 1 / -1; }
+}
