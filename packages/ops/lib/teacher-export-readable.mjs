@@ -23,6 +23,8 @@ export const READABLE_JSON_FIELDS = Object.freeze({
   AINote: ['extractedData'], CaptureCandidate: ['payload', 'originalPayload'], ConversationTurn: ['toolCalls', 'toolResults'],
   AgentExecution: ['error'], PendingAction: ['parameters'], ChangeLog: ['before', 'after', 'diff'],
   CommunicationDetail: ['parentConcerns', 'teacherResponses', 'agreements', 'followUps'], StudentRecord: ['structuredData'],
+  FeedbackDraftTask: ['requestCiphertext', 'draftCiphertext', 'generationCiphertext', 'errorCiphertext'],
+  FeedbackDraftAttempt: ['resultCiphertext', 'errorCiphertext'],
   FeedbackEvidence: ['parentConcerns', 'followUps'], TaskRuntime: ['dshCheckpoint', 'lastError'], StepReceipt: ['resultRef', 'error'],
   ScheduleRevision: ['beforeCiphertext', 'afterCiphertext'], WebMutationReceipt: ['ciphertext'],
   ParentFeedback: ['creationReceiptCiphertext'],

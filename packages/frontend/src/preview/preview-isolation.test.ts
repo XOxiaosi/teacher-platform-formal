@@ -32,6 +32,7 @@ describe('独立免登录原型的运行边界', () => {
     expect(main).toContain('./PreviewApp');
     expect(main).not.toContain('../app/');
     expect(runtime).not.toMatch(/(?:from\s+|import\s*)['"][^'"]*(?:\/api\/|\/teacher-context|@teacher-platform\/)/);
+    expect(runtime).not.toMatch(/(?:from\s+|import\s*)['"][^'"]*\/connected(?:\/|['"])/);
   });
 
   it('没有业务网络请求、持久存储或外部资源地址', () => {

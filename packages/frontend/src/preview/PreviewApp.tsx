@@ -6,6 +6,13 @@ import { Dialog, Shell } from './Chrome';
 import { TodayPage } from './Today';
 import { StudentPages } from './Students';
 import { Workflows } from './Workflows';
+import type {
+  CreateFeedbackDraftTaskBody,
+  FeedbackDraftTask,
+  FeedbackDraftTaskReceipt,
+  RetryFeedbackDraftTaskBody,
+  UpdateFeedbackDraftTaskBody,
+} from '../contracts/feedback-draft';
 
 export type Toast = { text: string; kind?: 'warn' | 'ok' } | null;
 export type FeedbackEvidenceItem = {
@@ -50,6 +57,7 @@ export type FeedbackSaveInput = {
   evidence?: FeedbackEvidenceItem[];
   windowStart?: string;
   windowEnd?: string;
+  generationTaskId?: string;
 };
 export type FeedbackSnapshot = {
   feedbackId: string;
@@ -65,6 +73,11 @@ export type PreviewActions = {
   saveMemo?: (text: string) => Promise<void>;
   toggleMemo?: (id: string, done: boolean) => Promise<void>;
   generateFeedbackDraft?: (input: GenerateFeedbackDraftRequest) => Promise<GenerateFeedbackDraftResult>;
+  createFeedbackDraftTask?: (input: CreateFeedbackDraftTaskBody) => Promise<FeedbackDraftTaskReceipt>;
+  listFeedbackDraftTasks?: () => Promise<FeedbackDraftTask[]>;
+  getFeedbackDraftTask?: (taskId: string) => Promise<FeedbackDraftTask>;
+  retryFeedbackDraftTask?: (taskId: string, input: RetryFeedbackDraftTaskBody) => Promise<FeedbackDraftTaskReceipt>;
+  updateFeedbackDraftTask?: (taskId: string, input: UpdateFeedbackDraftTaskBody) => Promise<FeedbackDraftTask>;
   saveFeedback?: (feedback: FeedbackSaveInput) => Promise<void>;
   viewFeedbackSnapshot?: (feedbackId: string) => Promise<FeedbackSnapshot>;
   savePreferences?: (changes: { studioName?: string; modelChoice?: string; wechatChannel?: string }) => Promise<void>;

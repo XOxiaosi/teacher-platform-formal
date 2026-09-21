@@ -18,6 +18,7 @@ model Student {
   lessonLedgerAdjustmentConfirmations LessonLedgerAdjustmentConfirmation[]
   completionSnapshots ScheduleCompletionSnapshot[]
   parentFeedbacks ParentFeedback[]
+  feedbackDraftTasks FeedbackDraftTask[]
   studentRecords  StudentRecord[]
   studentSourceRecords StudentSourceRecord[]
 }

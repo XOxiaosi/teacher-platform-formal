@@ -16,7 +16,7 @@ import { createConversationService } from '../../features/conversation/index.js'
 import { createAgentExecutionService } from '../../features/agent-execution/index.js';
 import { createTeachingTaskService } from '../../features/teaching-tasks/index.js';
 import { createMemoService } from '../../features/memos/index.js';
-import { createFeedbackService } from '../../features/feedback/index.js';
+import { createFeedbackDraftTaskService, createFeedbackService } from '../../features/feedback/index.js';
 import {
   createPendingActionAgendaReader,
   createPendingActionService,
@@ -226,6 +226,8 @@ export function createCoreRouteDependencies(
   );
   const assembleParentFeedbackContext = createAssembleParentFeedbackContextUseCase({ prisma, getClient: clientProvider.getClient, cipher: fieldCipher });
   const generateFeedbackDraft = createGenerateFeedbackDraftUseCase({ prisma, aiClient, context: assembleParentFeedbackContext, getClient: clientProvider.getClient });
+  const feedbackDraftTasks = createFeedbackDraftTaskService({ prisma, getClient: clientProvider.getClient, cipher: fieldCipher,
+    context: assembleParentFeedbackContext, generator: generateFeedbackDraft });
   const captureScoreFromText = createCaptureScoreFromTextUseCase({ prisma, aiClient, assessments, getClient: clientProvider.getClient });
   const platformServices = createPlatformServicesForMode(localSafeMode);
   const communicationModeration = platformServices.moderation?.provider === 'local'
@@ -471,6 +473,7 @@ export function createCoreRouteDependencies(
     agent: { agentConverse, agentExecutions },
     feedback: {
       generateFeedbackDraft,
+      feedbackDraftTasks,
       feedbackService: createFeedbackService({
         prisma,
         trustedClock,

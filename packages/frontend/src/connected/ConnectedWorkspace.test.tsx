@@ -3,22 +3,22 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConnectedWorkspace } from './ConnectedWorkspace';
 import { createDemoData } from '../preview/data';
 
-const mock = vi.hoisted(() => ({ availability: vi.fn(), load: vi.fn(), command: vi.fn(), schedule: vi.fn(), payment: vi.fn(), update: vi.fn(), logout: vi.fn(), records: vi.fn(), generate: vi.fn(), createFeedback: vi.fn(), updateFeedback: vi.fn(), feedbackSnapshot: vi.fn() }));
+const mock = vi.hoisted(() => ({ availability: vi.fn(), load: vi.fn(), command: vi.fn(), schedule: vi.fn(), payment: vi.fn(), update: vi.fn(), logout: vi.fn(), records: vi.fn(), generate: vi.fn(), createFeedback: vi.fn(), updateFeedback: vi.fn(), feedbackSnapshot: vi.fn(), createDraftTask: vi.fn(), listDraftTasks: vi.fn(), getDraftTask: vi.fn(), retryDraftTask: vi.fn(), updateDraftTask: vi.fn() }));
 vi.mock('../app/teacher-context', () => ({ useAuth: () => ({ teacherId: 'teacher-a', displayName: '验收老师', email: 'a@example.test', logout: mock.logout }) }));
 vi.mock('./workspace-api', () => ({ loadWorkspace: mock.load, workspaceCommand: mock.command, schedulingCommand: mock.schedule }));
 vi.mock('../api/payments', () => ({ createPayment: mock.payment }));
 vi.mock('../api/students', () => ({ updateStudentProfile: mock.update, listStudentRecords: mock.records, reviewStudentRecord: vi.fn(), getStudentRecordSource: vi.fn() }));
-vi.mock('../api/feedback', () => ({ generateFeedbackDraft: mock.generate, createFeedback: mock.createFeedback, getFeedbackSnapshot: mock.feedbackSnapshot, updateFeedbackContent: mock.updateFeedback }));
+vi.mock('../api/feedback', () => ({ generateFeedbackDraft: mock.generate, createFeedback: mock.createFeedback, getFeedbackSnapshot: mock.feedbackSnapshot, updateFeedbackContent: mock.updateFeedback, createFeedbackDraftTask: mock.createDraftTask, listFeedbackDraftTasks: mock.listDraftTasks, getFeedbackDraftTask: mock.getDraftTask, retryFeedbackDraftTask: mock.retryDraftTask, updateFeedbackDraftTask: mock.updateDraftTask }));
 vi.mock('../api/teaching-tasks', () => ({ getTeachingRuntimeAvailability: mock.availability }));
 vi.mock('../connected/assistant', () => ({ AssistantWorkspace: ({ teacherId }: { teacherId: string }) => <section aria-label="正式教学助手入口"><h1>教学助手</h1><p>当前账号：{teacherId}</p></section> }));
 
 const snapshot = () => ({ data: createDemoData(), studentVersions: { s1: 'v1', s2: 'v2' }, feedbackVersions: {}, memoVersions: { m1: 'm1-v1' }, preferenceVersion: null });
-beforeEach(() => { vi.clearAllMocks(); mock.availability.mockResolvedValue({ runtimeAvailability: 'unavailable' }); location.hash = '#/students'; mock.load.mockResolvedValue(snapshot()); mock.command.mockResolvedValue({}); mock.schedule.mockResolvedValue({}); });
+beforeEach(() => { vi.clearAllMocks(); mock.availability.mockResolvedValue({ runtimeAvailability: 'unavailable' }); location.hash = '#/students'; mock.load.mockResolvedValue(snapshot()); mock.command.mockResolvedValue({}); mock.schedule.mockResolvedValue({}); mock.listDraftTasks.mockResolvedValue({ items: [] }); });
 
 describe('connected workspace server-backed writes', () => {
   it('connects feedback generation to an explicit save with evidence and request receipt', async () => {
     location.hash = '#/feedback';
-    mock.generate.mockResolvedValue({ studentId: 's1', lessonIds: ['lesson-1'], title: '课堂进展', content: '小雨主动验算，下一次继续保持。', rationale: '使用具体课堂行为。', source: 'ai', evidence: [{ id: 'record-1', type: 'record', occurredAt: '2026-09-14T08:00:00Z', category: 'lesson_observation', summary: '主动验算' }], windowStart: '2026-09-14T08:00:00Z', windowEnd: '2026-09-14T10:00:00Z' });
+    mock.createDraftTask.mockResolvedValue({ replayed: false, task: { id: 'task-1', studentId: 's1', status: 'succeeded', version: 1, attemptCount: 1, retryable: false, request: { studentId: 's1' }, draft: { title: '课堂进展', content: '小雨主动验算，下一次继续保持。' }, generation: { lessonIds: ['lesson-1'], rationale: '使用具体课堂行为。', evidence: [{ id: 'record-1', type: 'record', occurredAt: '2026-09-14T08:00:00Z', category: 'lesson_observation', summary: '主动验算' }], windowStart: '2026-09-14T08:00:00Z', windowEnd: '2026-09-14T10:00:00Z' }, error: null, savedFeedbackId: null, createdAt: '2026-09-14T08:00:00Z', updatedAt: '2026-09-14T08:00:00Z' } });
     mock.createFeedback.mockResolvedValue({ id: 'feedback-1', studentId: 's1', title: '课堂进展', content: '小雨主动验算，下一次继续保持。', status: 'draft' });
     render(<ConnectedWorkspace />);
     await screen.findByRole('heading', { name: '家长反馈' });
@@ -28,10 +28,9 @@ describe('connected workspace server-backed writes', () => {
     await screen.findByDisplayValue('小雨主动验算，下一次继续保持。');
     fireEvent.click(screen.getByRole('button', { name: '保存草稿' }));
     await waitFor(() => expect(mock.createFeedback).toHaveBeenCalledWith('teacher-a', expect.objectContaining({
-      studentId: 's1', lessonId: 'lesson-1', evidence: expect.arrayContaining([expect.objectContaining({ id: 'record-1' })]),
-      windowStart: '2026-09-14T08:00:00Z', windowEnd: '2026-09-14T10:00:00Z', clientRequestId: expect.any(String),
+      studentId: 's1', generationTaskId: 'task-1', clientRequestId: expect.any(String),
     })));
-    expect(mock.generate).toHaveBeenCalledWith('teacher-a', { studentId: 's1' });
+    expect(mock.createDraftTask).toHaveBeenCalledWith('teacher-a', expect.objectContaining({ studentId: 's1', clientRequestId: expect.any(String) }));
   });
   it('mounts complete server record details and reloads them with the workspace', async () => {
     location.hash = '#/students/s1';

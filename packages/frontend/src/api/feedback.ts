@@ -6,45 +6,66 @@ import type {
   ListResult,
   ParentFeedbackData,
 } from './types';
+import type {
+  CreateFeedbackDraftTaskBody,
+  FeedbackDraftTask,
+  FeedbackDraftTaskReceipt,
+  FeedbackEvidenceItem,
+  GenerateFeedbackDraftRequest,
+  GenerateFeedbackDraftResult,
+  RetryFeedbackDraftTaskBody,
+  UpdateFeedbackDraftTaskBody,
+} from '../contracts/feedback-draft';
+export type {
+  CreateFeedbackDraftTaskBody,
+  FeedbackDraftTask,
+  FeedbackDraftTaskGeneration,
+  FeedbackDraftTaskReceipt,
+  FeedbackDraftTaskRequest,
+  FeedbackDraftTaskStatus,
+  FeedbackEvidenceItem,
+  GenerateFeedbackDraftRequest,
+  GenerateFeedbackDraftResult,
+  RetryFeedbackDraftTaskBody,
+  UpdateFeedbackDraftTaskBody,
+} from '../contracts/feedback-draft';
 
-export interface GenerateFeedbackDraftRequest {
-  studentId: string;
-  lessonIds?: string[];
-  recordIds?: string[];
-  tone?: 'formal' | 'warm' | 'concise';
-  classSize?: '1v1' | 'small' | 'large';
-  parentType?: 'normal' | 'scores' | 'sensitive';
-  focus?: 'highlight' | 'problem' | 'cooperation' | 'summary';
+export function createFeedbackDraftTask(
+  teacherId: string,
+  body: CreateFeedbackDraftTaskBody,
+): Promise<FeedbackDraftTaskReceipt> {
+  return apiRequest('/feedback/draft-tasks', { method: 'POST', teacherId, body });
 }
 
-export interface FeedbackEvidenceItem {
-  id: string;
-  sourceVersion?: string;
-  originalDeleted?: boolean;
-  type: 'assessment' | 'record' | 'lesson';
-  occurredAt: string;
-  category: string | null;
-  summary: string | null;
-  examName: string | null;
-  subject: string | null;
-  score: number | null;
-  fullScore: number | null;
-  previousScore: number | null;
+export function listFeedbackDraftTasks(
+  teacherId: string,
+  studentId?: string,
+): Promise<{ items: FeedbackDraftTask[] }> {
+  const query = studentId ? `?studentId=${encodeURIComponent(studentId)}` : '';
+  return apiRequest(`/feedback/draft-tasks${query}`, { method: 'GET', teacherId });
 }
 
-export interface GenerateFeedbackDraftResult {
-  studentId: string;
-  lessonIds: string[];
-  title: string;
-  content: string;
-  source: 'ai';
-  rationale: string;
-  classSize?: '1v1' | 'small' | 'large';
-  parentType?: 'normal' | 'scores' | 'sensitive';
-  focus?: 'highlight' | 'problem' | 'cooperation' | 'summary';
-  evidence?: FeedbackEvidenceItem[];
-  windowStart?: string;
-  windowEnd?: string;
+export function getFeedbackDraftTask(
+  teacherId: string,
+  taskId: string,
+): Promise<FeedbackDraftTask> {
+  return apiRequest(`/feedback/draft-tasks/${encodeURIComponent(taskId)}`, { method: 'GET', teacherId });
+}
+
+export function retryFeedbackDraftTask(
+  teacherId: string,
+  taskId: string,
+  body: RetryFeedbackDraftTaskBody,
+): Promise<FeedbackDraftTaskReceipt> {
+  return apiRequest(`/feedback/draft-tasks/${encodeURIComponent(taskId)}/retry`, { method: 'POST', teacherId, body });
+}
+
+export function updateFeedbackDraftTask(
+  teacherId: string,
+  taskId: string,
+  body: UpdateFeedbackDraftTaskBody,
+): Promise<FeedbackDraftTask> {
+  return apiRequest(`/feedback/draft-tasks/${encodeURIComponent(taskId)}/draft`, { method: 'PATCH', teacherId, body });
 }
 
 export function generateFeedbackDraft(
@@ -105,6 +126,8 @@ export interface CreateFeedbackBody {
   evidence?: FeedbackEvidenceItem[];
   windowStart?: string;
   windowEnd?: string;
+  /** 持久化生成任务存在时，服务端从任务的冻结依据生成快照。 */
+  generationTaskId?: string;
 }
 
 export function createFeedback(

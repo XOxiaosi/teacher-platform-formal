@@ -171,6 +171,13 @@ export const D48_HISTORICAL_TIME_SOURCE_MATRIX: readonly D48HistoricalTimeSource
   { key: 'StepReceipt.updatedAtTs', rowCount: 0, source: 'N_A', invariant: 'N_A', anomaly: null, migrationConversion: 'NONE' },
   { key: 'ConversationTurn.invalidatedAtTs', rowCount: 0, source: 'N_A', invariant: 'N_A', anomaly: null, migrationConversion: 'NONE' },
   { key: 'ConversationTurn.redactedAtTs', rowCount: 0, source: 'N_A', invariant: 'N_A', anomaly: null, migrationConversion: 'NONE' },
+  // A05 反馈生成恢复任务为迁移后新表，没有旧快照历史数据。
+  { key: 'FeedbackDraftTask.createdAtTs', rowCount: 0, source: 'N_A', invariant: 'N_A', anomaly: null, migrationConversion: 'NONE' },
+  { key: 'FeedbackDraftTask.updatedAtTs', rowCount: 0, source: 'N_A', invariant: 'N_A', anomaly: null, migrationConversion: 'NONE' },
+  { key: 'FeedbackDraftAttempt.modelCallStartedAtTs', rowCount: 0, source: 'N_A', invariant: 'N_A', anomaly: null, migrationConversion: 'NONE' },
+  { key: 'FeedbackDraftAttempt.modelCallEndedAtTs', rowCount: 0, source: 'N_A', invariant: 'N_A', anomaly: null, migrationConversion: 'NONE' },
+  { key: 'FeedbackDraftAttempt.createdAtTs', rowCount: 0, source: 'N_A', invariant: 'N_A', anomaly: null, migrationConversion: 'NONE' },
+  { key: 'FeedbackDraftAttempt.updatedAtTs', rowCount: 0, source: 'N_A', invariant: 'N_A', anomaly: null, migrationConversion: 'NONE' },
 ] as const satisfies readonly D48HistoricalTimeSourceEntry[];
 
 /** LOS_ANGELES_WALL 字段列表（需显式时区转换） */

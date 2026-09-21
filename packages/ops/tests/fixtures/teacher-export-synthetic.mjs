@@ -11,7 +11,7 @@ const ORDER = [
   'RecurrenceRule', 'RecurrenceRuleParticipant', 'Schedule', 'ScheduleParticipant', 'ScheduleRevision',
   'Lesson', 'Payment', 'LessonLedgerAdjustmentConfirmation', 'LessonLedgerEntry', 'ScheduleCompletionSnapshot',
   'StudentSourceRecord', 'StudentRecord', 'AssessmentDetail', 'CommunicationDetail',
-  'ParentFeedback', 'FeedbackContextSnapshot', 'FeedbackEvidence',
+  'ParentFeedback', 'FeedbackDraftTask', 'FeedbackDraftAttempt', 'FeedbackContextSnapshot', 'FeedbackEvidence',
 ];
 const SECRET = new Set(['passwordHash', 'tokenHash', 'apiKeyEnc', 'claimToken', 'leaseToken']);
 export function syntheticRow(modelName, teacher) {

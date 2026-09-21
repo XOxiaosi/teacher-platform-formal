@@ -19,7 +19,7 @@ import type {
   PendingActionService,
 } from '../../features/pending-action/types.js';
 import type { TrustedClock } from '../../shared/trusted-clock/types.js';
-import type { FeedbackService } from '../../features/feedback/types.js';
+import type { FeedbackDraftTaskService, FeedbackService } from '../../features/feedback/types.js';
 import type { RequirementService } from '../../features/requirements/index.js';
 import type { ProviderConfigService } from '../../features/provider-configs/index.js';
 import type { ProviderUsageService } from '../../features/provider-usage/index.js';
@@ -154,6 +154,7 @@ export interface EditRouteDependencies {
 export interface FeedbackGenerateRouteDependencies {
   generateFeedbackDraft: GenerateFeedbackDraftUseCase;
   feedbackService: FeedbackService;
+  feedbackDraftTasks: FeedbackDraftTaskService;
 }
 
 export interface RequirementRouteDependencies {

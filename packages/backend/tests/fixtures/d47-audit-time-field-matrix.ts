@@ -161,6 +161,13 @@ export const D47_AUDIT_TIME_FIELD_MATRIX = [
   { key: 'StepReceipt.updatedAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
   { key: 'ConversationTurn.invalidatedAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
   { key: 'ConversationTurn.redactedAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  // A05 反馈生成恢复任务（新表，无历史数据；调用边界与审计字段统一使用数据库可信时间）
+  { key: 'FeedbackDraftTask.createdAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'FeedbackDraftTask.updatedAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'FeedbackDraftAttempt.modelCallStartedAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'FeedbackDraftAttempt.modelCallEndedAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'FeedbackDraftAttempt.createdAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
+  { key: 'FeedbackDraftAttempt.updatedAtTs', semantics: 'INSTANT', currentSource: 'TRUSTED_DB', newWriteRisk: 'LOW', migrationRisk: 'LOW' },
 ] as const satisfies readonly D47AuditTimeFieldEntry[];
 
 export interface D47AuditTimeFieldEvidence {
@@ -182,4 +189,10 @@ export const D47_NEW_TIME_FIELD_EVIDENCE = [
   { key: 'TeacherWorkspacePreference.updatedAtTs', source: 'TRUSTED_DB', purpose: '教师工作区偏好版本时刻', path: 'packages/backend/src/app/routes/workspace-web.service.ts' },
   { key: 'WebMutationReceipt.createdAtTs', source: 'TRUSTED_DB', purpose: '工作区变更幂等收据创建时刻', path: 'packages/backend/src/app/routes/workspace-web.service.ts' },
   { key: 'SchedulingWebMutationReceipt.createdAtTs', source: 'TRUSTED_DB', purpose: '排课变更幂等收据创建时刻', path: 'packages/backend/src/features/scheduling-web/scheduling-web-service.ts' },
+  { key: 'FeedbackDraftTask.createdAtTs', source: 'TRUSTED_DB', purpose: '反馈生成任务创建审计时刻', path: 'packages/contracts/prisma/student-feedback.prisma' },
+  { key: 'FeedbackDraftTask.updatedAtTs', source: 'TRUSTED_DB', purpose: '反馈生成任务状态版本时刻', path: 'packages/contracts/prisma/student-feedback.prisma' },
+  { key: 'FeedbackDraftAttempt.modelCallStartedAtTs', source: 'TRUSTED_DB', purpose: '模型尝试开始与租约判定时刻', path: 'packages/backend/src/features/feedback/feedback-draft-task-service.ts' },
+  { key: 'FeedbackDraftAttempt.modelCallEndedAtTs', source: 'TRUSTED_DB', purpose: '模型尝试终态审计时刻', path: 'packages/backend/src/features/feedback/feedback-draft-task-service.ts' },
+  { key: 'FeedbackDraftAttempt.createdAtTs', source: 'TRUSTED_DB', purpose: '反馈生成尝试创建审计时刻', path: 'packages/contracts/prisma/student-feedback.prisma' },
+  { key: 'FeedbackDraftAttempt.updatedAtTs', source: 'TRUSTED_DB', purpose: '反馈生成尝试状态版本时刻', path: 'packages/contracts/prisma/student-feedback.prisma' },
 ] as const satisfies readonly D47AuditTimeFieldEvidence[];

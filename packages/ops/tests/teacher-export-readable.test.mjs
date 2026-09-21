@@ -38,6 +38,29 @@ test('readableRow 只按显式字段表转换，保留非加密字段', () => {
   });
 });
 
+test('readableRow 解密反馈草稿任务与尝试的全部密文 JSON 字段', () => {
+  const task = readableRow('FeedbackDraftTask', {
+    id: 'task-1', requestCiphertext: fieldCipher('{"studentId":"s1"}'),
+    draftCiphertext: fieldCipher('{"content":"草稿"}'),
+    generationCiphertext: fieldCipher('{"model":"deepseek"}'),
+    errorCiphertext: fieldCipher('{"code":"TEMPORARY"}'),
+  }, keys);
+  assert.deepEqual(task, {
+    id: 'task-1', requestCiphertext: { studentId: 's1' },
+    draftCiphertext: { content: '草稿' },
+    generationCiphertext: { model: 'deepseek' },
+    errorCiphertext: { code: 'TEMPORARY' },
+  });
+  const attempt = readableRow('FeedbackDraftAttempt', {
+    id: 'attempt-1', resultCiphertext: fieldCipher('{"title":"反馈"}'),
+    errorCiphertext: fieldCipher('{"retryable":true}'),
+  }, keys);
+  assert.deepEqual(attempt, {
+    id: 'attempt-1', resultCiphertext: { title: '反馈' },
+    errorCiphertext: { retryable: true },
+  });
+});
+
 test('readable media 解密后校验 sha256/大小，旧明文只在 encryptionVersion=null 时兼容', () => {
   const plain = Buffer.from('synthetic-media-中文');
   const row = { encryptionVersion: 'aes-256-gcm', sha256: createHash('sha256').update(plain).digest('hex'), sizeBytes: plain.length };

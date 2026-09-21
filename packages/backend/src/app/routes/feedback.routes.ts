@@ -45,9 +45,10 @@ export function createFeedbackRouter(dependencies: FeedbackGenerateRouteDependen
       channel: parsed.value.channel,
       parentName: parsed.value.parentName,
       clientRequestId: parsed.value.clientRequestId,
-      evidence: parsed.value.evidence as CreateFeedbackInput['evidence'],
-      windowStart: parsed.value.windowStart,
-      windowEnd: parsed.value.windowEnd,
+      evidence: parsed.value.generationTaskId ? undefined : parsed.value.evidence as CreateFeedbackInput['evidence'],
+      windowStart: parsed.value.generationTaskId ? undefined : parsed.value.windowStart,
+      windowEnd: parsed.value.generationTaskId ? undefined : parsed.value.windowEnd,
+      generationTaskId: parsed.value.generationTaskId,
     };
     const result = await dependencies.feedbackService.createFeedback(input);
     sendResult(res, result, 201);
@@ -121,6 +122,40 @@ export function createFeedbackRouter(dependencies: FeedbackGenerateRouteDependen
     sendResult(res, result, 201);
   });
 
+  router.post('/feedback/draft-tasks', async (req, res) => {
+    const teacher = getTeacherId(req); if (!teacher.ok) return void sendTeacherError(res, teacher.error);
+    const parsed = parseDraftTaskBody(req.body, true); if (!parsed.ok) return void sendTeacherError(res, parsed.error);
+    sendResult(res, await dependencies.feedbackDraftTasks.create({ teacherId: teacher.value, ...parsed.value }), 201);
+  });
+  router.get('/feedback/draft-tasks', async (req, res) => {
+    const teacher = getTeacherId(req); if (!teacher.ok) return void sendTeacherError(res, teacher.error);
+    const studentId = typeof req.query.studentId === 'string' ? req.query.studentId.trim() : undefined;
+    if (req.query.studentId !== undefined && !studentId) return void sendTeacherError(res, validationError('studentId 必须是非空字符串', 'studentId'));
+    sendResult(res, await dependencies.feedbackDraftTasks.list({ teacherId: teacher.value, studentId }), 200);
+  });
+  router.get('/feedback/draft-tasks/:taskId', async (req, res) => {
+    const teacher = getTeacherId(req); if (!teacher.ok) return void sendTeacherError(res, teacher.error);
+    sendResult(res, await dependencies.feedbackDraftTasks.get({ teacherId: teacher.value, taskId: req.params.taskId }), 200);
+  });
+  router.post('/feedback/draft-tasks/:taskId/retry', async (req, res) => {
+    const teacher = getTeacherId(req); if (!teacher.ok) return void sendTeacherError(res, teacher.error);
+    const body = isPlainObject(req.body) ? req.body : {};
+    if (typeof body.clientRequestId !== 'string' || !body.clientRequestId.trim() || !Number.isInteger(body.expectedVersion)) {
+      return void sendTeacherError(res, validationError('clientRequestId 和 expectedVersion 必填', 'body'));
+    }
+    sendResult(res, await dependencies.feedbackDraftTasks.retry({ teacherId: teacher.value, taskId: req.params.taskId,
+      clientRequestId: body.clientRequestId.trim(), expectedVersion: Number(body.expectedVersion) }), 200);
+  });
+  router.patch('/feedback/draft-tasks/:taskId/draft', async (req, res) => {
+    const teacher = getTeacherId(req); if (!teacher.ok) return void sendTeacherError(res, teacher.error);
+    const body = isPlainObject(req.body) ? req.body : {};
+    if (!Number.isInteger(body.expectedVersion) || typeof body.title !== 'string' || typeof body.content !== 'string') {
+      return void sendTeacherError(res, validationError('expectedVersion、title 和 content 必填', 'body'));
+    }
+    sendResult(res, await dependencies.feedbackDraftTasks.updateDraft({ teacherId: teacher.value, taskId: req.params.taskId,
+      expectedVersion: Number(body.expectedVersion), title: body.title, content: body.content }), 200);
+  });
+
   return router;
 }
 
@@ -136,6 +171,7 @@ function parseCreateFeedbackBody(body: unknown): Result<
     evidence?: unknown[];
     windowStart?: string;
     windowEnd?: string;
+    generationTaskId?: string;
   },
   CommonError
 > {
@@ -191,6 +227,10 @@ function parseCreateFeedbackBody(body: unknown): Result<
   if (windowEnd !== undefined && windowEnd !== null && typeof windowEnd !== 'string') {
     return { ok: false, error: validationError('windowEnd 必须是字符串', 'windowEnd') };
   }
+  const generationTaskId = record.generationTaskId;
+  if (generationTaskId !== undefined && generationTaskId !== null && (typeof generationTaskId !== 'string' || generationTaskId.trim() === '')) {
+    return { ok: false, error: validationError('generationTaskId 必须是非空字符串', 'generationTaskId') };
+  }
 
   return {
     ok: true,
@@ -205,8 +245,26 @@ function parseCreateFeedbackBody(body: unknown): Result<
       evidence: Array.isArray(evidence) ? evidence : undefined,
       windowStart: typeof windowStart === 'string' ? windowStart : undefined,
       windowEnd: typeof windowEnd === 'string' ? windowEnd : undefined,
+      generationTaskId: typeof generationTaskId === 'string' ? generationTaskId.trim() : undefined,
     },
   };
+}
+
+function parseDraftTaskBody(body: unknown, requireRequestId: boolean): Result<{
+  clientRequestId: string; studentId: string; lessonIds?: string[]; recordIds?: string[];
+  tone?: FeedbackDraftTone; classSize?: FeedbackClassSize; parentType?: FeedbackParentType; focus?: FeedbackFocus; title?: string; content?: string;
+}, CommonError> {
+  const parsed = parseBody(body, { requireLessonIds: true }); if (!parsed.ok) return parsed;
+  const record = isPlainObject(body) ? body : {};
+  const clientRequestId = record.clientRequestId;
+  if (requireRequestId && (typeof clientRequestId !== 'string' || !clientRequestId.trim() || clientRequestId.length > 128)) {
+    return { ok: false, error: validationError('clientRequestId 必填且不超过 128 个字符', 'clientRequestId') };
+  }
+  for (const key of ['title', 'content'] as const) if (record[key] !== undefined && typeof record[key] !== 'string') {
+    return { ok: false, error: validationError(`${key} 必须是字符串`, key) };
+  }
+  return { ok: true, value: { ...parsed.value, clientRequestId: typeof clientRequestId === 'string' ? clientRequestId.trim() : '',
+    title: typeof record.title === 'string' ? record.title : undefined, content: typeof record.content === 'string' ? record.content : undefined } };
 }
 
 function parseListFeedbackQuery(query: unknown): Result<
@@ -266,7 +324,7 @@ function isFeedbackStatus(value: string): value is FeedbackStatus {
   return value === 'draft' || value === 'reviewed' || value === 'sent' || value === 'archived';
 }
 
-function parseBody(body: unknown): Result<
+function parseBody(body: unknown, options: { requireLessonIds?: boolean } = {}): Result<
   {
     studentId: string;
     lessonIds?: string[];
@@ -289,6 +347,11 @@ function parseBody(body: unknown): Result<
   if (lessonIds !== undefined) {
     if (!Array.isArray(lessonIds) || lessonIds.some((id) => typeof id !== 'string')) {
       return { ok: false, error: validationError('lessonIds 必须是字符串数组', 'lessonIds') };
+    }
+    const normalizedLessonIds = lessonIds.map((id) => id.trim());
+    if (options.requireLessonIds && (normalizedLessonIds.length === 0 || normalizedLessonIds.some((id) => id === '')
+      || new Set(normalizedLessonIds).size !== normalizedLessonIds.length)) {
+      return { ok: false, error: validationError('lessonIds 必须是非空且不重复的字符串数组', 'lessonIds') };
     }
   }
 
@@ -335,7 +398,7 @@ function parseBody(body: unknown): Result<
     ok: true,
     value: {
       studentId: studentId.trim(),
-      lessonIds: lessonIds as string[] | undefined,
+      lessonIds: Array.isArray(lessonIds) ? lessonIds.map((id) => id.trim()) : undefined,
       recordIds: recordIds as string[] | undefined,
       tone: tone as FeedbackDraftTone | undefined,
       classSize: classSize as FeedbackClassSize | undefined,

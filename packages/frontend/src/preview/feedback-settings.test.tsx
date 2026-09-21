@@ -1,10 +1,11 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FeedbackPage } from './FeedbackSettings';
 import { createDemoData } from './data';
 import type { PreviewActions } from './PreviewApp';
+import type { FeedbackDraftTask } from '../contracts/feedback-draft';
 
 const generateDraft = vi.fn();
 
@@ -14,12 +15,12 @@ beforeEach(() => {
   generateDraft.mockImplementation(async ({ studentId, recordIds }: { studentId: string; recordIds?: string[] }) => ({ studentId, recordIds, lessonIds: ['lesson-1'], title: '课堂进展', content: '小雨主动验算，下一次继续保持。', source: 'ai' as const, rationale: '使用具体课堂行为。', evidence: [{ id: 'record-1', type: 'record' as const, occurredAt: '2026-09-14T08:00:00Z', category: 'lesson_observation', summary: '主动验算', examName: null, subject: null, score: null, fullScore: null, previousScore: null }], windowStart: '2026-08-17T17:28:13.335Z', windowEnd: '2026-09-16T17:28:13.335Z' }));
 });
 
-function Harness({ empty = true, generator = false }: { empty?: boolean; generator?: boolean }) {
+function Harness({ empty = true, generator = false, taskActions = {} }: { empty?: boolean; generator?: boolean; taskActions?: Partial<PreviewActions> }) {
   const seed = createDemoData();
   const [data, setData] = useState(empty ? { ...seed, feedbacks: [] } : seed);
   const [ui, setUi] = useState<Record<string, unknown>>({});
   const [dialog, setDialog] = useState<ReactNode>(null);
-  const actions: PreviewActions = { data, setData, ui, setUi, open: (_title, body) => setDialog(body), toast: vi.fn(), close: () => setDialog(null), complete: vi.fn(), saveSchedule: vi.fn(), cancelSchedule: vi.fn(), saveRule: vi.fn(), replaceRuleFrom: vi.fn(), setRuleEnabled: vi.fn(), addPayment: vi.fn(), ...(generator ? { generateFeedbackDraft: generateDraft } : {}) };
+  const actions: PreviewActions = { data, setData, ui, setUi, open: (_title, body) => setDialog(body), toast: vi.fn(), close: () => setDialog(null), complete: vi.fn(), saveSchedule: vi.fn(), cancelSchedule: vi.fn(), saveRule: vi.fn(), replaceRuleFrom: vi.fn(), setRuleEnabled: vi.fn(), addPayment: vi.fn(), ...(generator ? { generateFeedbackDraft: generateDraft } : {}), ...taskActions };
   return <><FeedbackPage actions={actions} />{dialog && <div role="dialog">{dialog}</div>}</>;
 }
 
@@ -30,14 +31,14 @@ function EvidenceHarness({ loadSnapshot }: { loadSnapshot: () => Promise<unknown
 }
 
 describe('feedback settings', () => {
-  it('offers an empty-state entry and saves a trimmed feedback for a selected student', () => {
+  it('offers an empty-state entry and saves a trimmed feedback for a selected student', async () => {
     render(<Harness />);
     fireEvent.click(screen.getAllByRole('button', { name: '新建反馈' })[0]);
     fireEvent.change(screen.getByLabelText('选择学生'), { target: { value: 's2' } });
     fireEvent.change(screen.getByLabelText('标题'), { target: { value: '  课后反馈  ' } });
     fireEvent.change(screen.getByLabelText('正文'), { target: { value: '第一段\n\n第二段' } });
     fireEvent.submit(screen.getByRole('dialog').querySelector('form') as HTMLFormElement);
-    expect(screen.getByText('课后反馈')).toBeInTheDocument();
+    await screen.findByText('课后反馈');
     expect(screen.getByText(/第一段/)).toBeInTheDocument();
     expect(screen.getByText(/王浩然 · 草稿/)).toBeInTheDocument();
   });
@@ -81,5 +82,49 @@ describe('feedback settings', () => {
     expect(screen.getByText('主动验算')).toBeInTheDocument();
     expect(screen.getByText(/科目：数学/)).toBeInTheDocument();
     expect(loadSnapshot).toHaveBeenCalledTimes(1);
+  });
+
+  it('restores a failed server task, preserves its input, and starts a new retry after a failed receipt', async () => {
+    const failed = (version: number): FeedbackDraftTask => ({
+      id: 'task-failed', studentId: 's2', status: 'failed', version, attemptCount: version, retryable: true,
+      request: { studentId: 's2', title: '原始标题', content: '原始正文' }, draft: null, generation: null,
+      error: { code: 'MODEL_UNAVAILABLE', message: '模型暂不可用' }, savedFeedbackId: null,
+      createdAt: '2026-09-20T08:00:00Z', updatedAt: '2026-09-20T08:00:00Z',
+    });
+    const retry = vi.fn()
+      .mockResolvedValueOnce({ task: failed(2), replayed: false })
+      .mockResolvedValueOnce({ task: { ...failed(3), status: 'succeeded', retryable: false, draft: { title: '新标题', content: '新正文' }, generation: { lessonIds: [], rationale: '已完成' } }, replayed: false });
+    render(<Harness taskActions={{ listFeedbackDraftTasks: vi.fn().mockResolvedValue([failed(1)]), retryFeedbackDraftTask: retry }} />);
+    fireEvent.click(await screen.findByRole('button', { name: '继续编辑' }));
+    expect(screen.getByDisplayValue('原始正文')).toBeInTheDocument();
+    expect(screen.getByLabelText('选择学生')).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: '重试生成' }));
+    await waitFor(() => expect(retry).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: '重试生成' }));
+    await waitFor(() => expect(retry).toHaveBeenCalledTimes(2));
+    expect(retry.mock.calls[0][1].clientRequestId).not.toBe(retry.mock.calls[1][1].clientRequestId);
+    expect(screen.getByDisplayValue('新正文')).toBeInTheDocument();
+  });
+
+  it('blocks formal save from a running task and keeps pure manual feedback compatible', async () => {
+    const running: FeedbackDraftTask = { id: 'task-running', studentId: 's2', status: 'running', version: 1, attemptCount: 1, retryable: false, request: { studentId: 's2', title: '处理中', content: '等待结果' }, draft: null, generation: null, error: null, savedFeedbackId: null, createdAt: '2026-09-20T08:00:00Z', updatedAt: '2026-09-20T08:00:00Z' };
+    render(<Harness taskActions={{ listFeedbackDraftTasks: vi.fn().mockResolvedValue([running]) }} />);
+    fireEvent.click(await screen.findByRole('button', { name: '继续编辑' }));
+    expect(screen.getByRole('status')).toHaveTextContent('正在由服务端生成反馈');
+    expect(screen.getByRole('button', { name: '保存草稿' })).toBeDisabled();
+  });
+
+  it('keeps teacher edits when a running-task poll returns a server result', async () => {
+    const running: FeedbackDraftTask = { id: 'task-poll', studentId: 's2', status: 'running', version: 1, attemptCount: 1, retryable: false, request: { studentId: 's2', title: '处理中', content: '等待结果' }, draft: null, generation: null, error: null, savedFeedbackId: null, createdAt: '2026-09-20T08:00:00Z', updatedAt: '2026-09-20T08:00:00Z' };
+    let resolvePoll!: (task: FeedbackDraftTask) => void;
+    const poll = vi.fn(() => new Promise<FeedbackDraftTask>((resolve) => { resolvePoll = resolve; }));
+    render(<Harness taskActions={{ listFeedbackDraftTasks: vi.fn().mockResolvedValue([running]), getFeedbackDraftTask: poll, updateFeedbackDraftTask: vi.fn() }} />);
+    fireEvent.click(await screen.findByRole('button', { name: '继续编辑' }));
+    await waitFor(() => expect(poll).toHaveBeenCalledTimes(1));
+    fireEvent.change(screen.getByLabelText('标题'), { target: { value: '教师正在修改的标题' } });
+    resolvePoll({ ...running, status: 'succeeded', version: 2, draft: { title: '服务端生成标题', content: '服务端生成正文' }, generation: { lessonIds: [], rationale: '生成完成' } });
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+    expect(screen.getByDisplayValue('教师正在修改的标题')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '暂存修改' })).toBeInTheDocument();
   });
 });

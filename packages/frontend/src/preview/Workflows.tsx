@@ -5,15 +5,12 @@ import { SchedulesPage } from './SchedulePage';
 import './workflows.css';
 import './redesign-business.css';
 import type { ReactNode } from 'react';
-import { AssistantWorkspace } from '../connected/assistant';
-import type { AssistantTransport } from '../connected/assistant/transport';
 
-export function Workflows({ page, actions, modelSettings, teacherId, assistantTransport, onAssistantWorkspaceRefresh }: {
-  page: string; actions: PreviewActions; modelSettings?: ReactNode; teacherId?: string; assistantTransport?: AssistantTransport;
-  onAssistantWorkspaceRefresh?: () => Promise<void>;
+export function Workflows({ page, actions, modelSettings, assistantContent }: {
+  page: string; actions: PreviewActions; modelSettings?: ReactNode; assistantContent?: ReactNode;
 }) {
   if (page === 'agent') {
-    if (actions.connected && teacherId) return <AssistantWorkspace teacherId={teacherId} transport={assistantTransport} onWorkspaceRefresh={onAssistantWorkspaceRefresh} />;
+    if (assistantContent) return assistantContent;
     return <AgentPage connected={Boolean(actions.connected)} />;
   }
   if (page === 'schedules') return <SchedulesPage actions={actions} />;

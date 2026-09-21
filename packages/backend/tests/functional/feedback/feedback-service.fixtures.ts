@@ -73,6 +73,8 @@ export async function cleanup() {
   // Phase 3.3-A 红灯阶段，数据库可能尚未 db push 出 ParentFeedback 表；
   // cleanup 不应让红灯退化为 schema 环境失败。实现阶段同步数据库后该清理会真实生效。
   try {
+    await prisma.feedbackDraftAttempt.deleteMany({ where: { teacherId: { in: [TEACHER_A, TEACHER_B] } } });
+    await prisma.feedbackDraftTask.deleteMany({ where: { teacherId: { in: [TEACHER_A, TEACHER_B] } } });
     await prisma.feedbackEvidence.deleteMany({
       where: { teacherId: { in: [TEACHER_A, TEACHER_B] } },
     });

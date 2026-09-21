@@ -3,7 +3,17 @@ import { useAuth } from '../app/teacher-context';
 import { createCapture, confirmCapture } from '../api/captures';
 import { createPayment } from '../api/payments';
 import { updateStudentProfile } from '../api/students';
-import { createFeedback, generateFeedbackDraft, getFeedbackSnapshot, updateFeedbackContent } from '../api/feedback';
+import {
+  createFeedback,
+  createFeedbackDraftTask,
+  generateFeedbackDraft,
+  getFeedbackDraftTask,
+  getFeedbackSnapshot,
+  listFeedbackDraftTasks,
+  retryFeedbackDraftTask,
+  updateFeedbackContent,
+  updateFeedbackDraftTask,
+} from '../api/feedback';
 import { Dialog, Shell } from '../preview/Chrome';
 import { Confirm, type PreviewActions, type Toast } from '../preview/PreviewApp';
 import { TodayPage } from '../preview/Today';
@@ -18,6 +28,7 @@ import { PlatformAIStatus } from './PlatformAIStatus';
 import { CaptureInbox } from './captures/CaptureInbox';
 import { StudentRecordPanel } from './student-records/StudentRecordPanel';
 import { getTeachingRuntimeAvailability } from '../api/teaching-tasks';
+import { AssistantWorkspace } from './assistant';
 import { createTeachingTaskTransport } from './assistant/teaching-task-transport';
 
 const routeParts = () => location.hash.replace(/^#\/?/, '').split('?')[0].split('/').filter(Boolean);
@@ -114,19 +125,24 @@ export function ConnectedWorkspace() {
     },
     saveMemo: (text) => command('memos', { text }),
     toggleMemo: (id, done) => command('memo-status', { id, done, expectedUpdatedAt: snapshotRef.current!.memoVersions[id] }),
+    // 旧的预览入口仍保留在 PreviewActions 中；正式反馈页优先使用持久化任务。
     generateFeedbackDraft: (input) => generateFeedbackDraft(auth.teacherId!, input),
+    ...(typeof createFeedbackDraftTask === 'function' && { createFeedbackDraftTask: (input: Parameters<typeof createFeedbackDraftTask>[1]) => createFeedbackDraftTask(auth.teacherId!, input) }),
+    ...(typeof listFeedbackDraftTasks === 'function' && { listFeedbackDraftTasks: async () => (await listFeedbackDraftTasks(auth.teacherId!)).items }),
+    ...(typeof getFeedbackDraftTask === 'function' && { getFeedbackDraftTask: (taskId: string) => getFeedbackDraftTask(auth.teacherId!, taskId) }),
+    ...(typeof retryFeedbackDraftTask === 'function' && { retryFeedbackDraftTask: (taskId: string, input: Parameters<typeof retryFeedbackDraftTask>[2]) => retryFeedbackDraftTask(auth.teacherId!, taskId, input) }),
+    ...(typeof updateFeedbackDraftTask === 'function' && { updateFeedbackDraftTask: (taskId: string, input: Parameters<typeof updateFeedbackDraftTask>[2]) => updateFeedbackDraftTask(auth.teacherId!, taskId, input) }),
     viewFeedbackSnapshot: (feedbackId) => getFeedbackSnapshot(auth.teacherId!, feedbackId),
-    saveFeedback: async ({ id, studentId, title, content, lessonId, evidence, windowStart, windowEnd }) => {
+    saveFeedback: async ({ id, studentId, title, content, lessonId, evidence, windowStart, windowEnd, generationTaskId }) => {
       if (id) {
         await transaction(() => updateFeedbackContent(auth.teacherId!, id, { expectedUpdatedAt: snapshotRef.current!.feedbackVersions[id], changes: { title, content } }));
         return;
       }
-      const intent = `feedback:${JSON.stringify({ studentId, lessonId, title, content, evidence, windowStart, windowEnd })}`;
+      const intent = `feedback:${JSON.stringify({ studentId, lessonId, title, content, evidence, windowStart, windowEnd, generationTaskId })}`;
       await transaction(async () => {
-        const result = await createFeedback(auth.teacherId!, {
-          studentId, title, content, lessonId, evidence, windowStart, windowEnd,
-          clientRequestId: requestKey(intent),
-        });
+        const result = await createFeedback(auth.teacherId!, generationTaskId
+          ? { studentId, title, content, generationTaskId, clientRequestId: requestKey(intent) }
+          : { studentId, title, content, lessonId, evidence, windowStart, windowEnd, clientRequestId: requestKey(intent) });
         keys.current.delete(intent);
         return result;
       });
@@ -152,7 +168,7 @@ export function ConnectedWorkspace() {
   };
   const page = route[0] || 'today';
   const normalized = page === 'schedule' ? 'schedules' : page === 'ai' ? 'agent' : page;
-  const content = page === 'captures' ? <CaptureInbox key={auth.teacherId} teacherId={auth.teacherId!} onRecordsChanged={reload} students={snapshot.data.students} /> : page === 'students' ? <StudentPages actions={actions} studentId={route[1]} recordPanel={(studentId) => <StudentRecordPanel teacherId={auth.teacherId!} studentId={studentId} refreshToken={snapshot} onRecordsChanged={reload} />} /> : ['agent', 'schedules', 'finance', 'feedback', 'settings'].includes(normalized) ? <Workflows page={normalized} actions={actions} teacherId={auth.teacherId!} assistantTransport={assistantTransport} onAssistantWorkspaceRefresh={reload} modelSettings={<PlatformAIStatus availability={teachingRuntimeAvailability} />} /> : <TodayPage actions={actions} />;
+  const content = page === 'captures' ? <CaptureInbox key={auth.teacherId} teacherId={auth.teacherId!} onRecordsChanged={reload} students={snapshot.data.students} /> : page === 'students' ? <StudentPages actions={actions} studentId={route[1]} recordPanel={(studentId) => <StudentRecordPanel teacherId={auth.teacherId!} studentId={studentId} refreshToken={snapshot} onRecordsChanged={reload} />} /> : ['agent', 'schedules', 'finance', 'feedback', 'settings'].includes(normalized) ? <Workflows page={normalized} actions={actions} assistantContent={<AssistantWorkspace teacherId={auth.teacherId!} transport={assistantTransport} onWorkspaceRefresh={reload} />} modelSettings={<PlatformAIStatus availability={teachingRuntimeAvailability} />} /> : <TodayPage actions={actions} />;
   return <><div inert={busy || undefined} aria-busy={busy}>
     <Shell page={normalized} studioName={snapshot.data.studioName} displayName={auth.displayName || '教师'} accountActions={<><a className="button secondary small" href="#/captures">待核对材料</a><span>{auth.email}</span><button className="button secondary small" onClick={retry}>刷新资料</button><button className="button secondary small" onClick={() => void auth.logout()}>退出登录</button></>}>
       {(error || auth.error) && <div className="connected-error" role="alert">{error || auth.error}</div>}{content}

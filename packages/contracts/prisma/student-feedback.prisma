@@ -20,10 +20,60 @@ model ParentFeedback {
   student Student @relation(fields: [studentId], references: [id])
   lesson  Lesson? @relation(fields: [lessonId], references: [id])
   contextSnapshot FeedbackContextSnapshot?
+  generationTask FeedbackDraftTask? @relation("FeedbackDraftTaskSavedFeedback")
 
   @@unique([teacherId, clientRequestId])
   @@index([studentId])
   @@index([lessonId])
+}
+
+// Durable, teacher-owned feedback generation work.  Input, draft, generation
+// result and provider errors are opaque encrypted JSON; only lifecycle fields
+// needed for locking, retry and tenant filtering remain queryable.
+model FeedbackDraftTask {
+  id                 String   @id @default(cuid())
+  teacherId          String
+  studentId          String
+  clientRequestId    String
+  requestFingerprint String
+  status             String   @default("running") // running | succeeded | failed | evidence_changed | uncertain | saved
+  version            Int      @default(1)
+  attemptCount       Int      @default(0)
+  retryable          Boolean  @default(false)
+  requestCiphertext  String
+  draftCiphertext    String?
+  generationCiphertext String?
+  errorCiphertext    String?
+  savedFeedbackId    String?  @unique
+  createdAtTs        DateTime @default(now()) @db.Timestamptz(3)
+  updatedAtTs        DateTime @updatedAt @db.Timestamptz(3)
+
+  student Student @relation(fields: [studentId], references: [id])
+  savedFeedback ParentFeedback? @relation("FeedbackDraftTaskSavedFeedback", fields: [savedFeedbackId], references: [id])
+  attempts FeedbackDraftAttempt[]
+
+  @@unique([teacherId, clientRequestId])
+  @@index([teacherId, studentId, status, updatedAtTs])
+}
+
+model FeedbackDraftAttempt {
+  id                 String   @id @default(cuid())
+  taskId             String
+  teacherId          String
+  clientRequestId    String
+  requestFingerprint String
+  status             String   @default("running") // running | succeeded | failed | evidence_changed | uncertain
+  modelCallStartedAtTs DateTime?
+  modelCallEndedAtTs DateTime?
+  resultCiphertext   String?
+  errorCiphertext    String?
+  createdAtTs        DateTime @default(now()) @db.Timestamptz(3)
+  updatedAtTs        DateTime @updatedAt @db.Timestamptz(3)
+
+  task FeedbackDraftTask @relation(fields: [taskId], references: [id], onDelete: Restrict)
+
+  @@unique([taskId, clientRequestId])
+  @@index([teacherId, taskId, createdAtTs])
 }
 
 // D40 学生长期资料库：原始证据

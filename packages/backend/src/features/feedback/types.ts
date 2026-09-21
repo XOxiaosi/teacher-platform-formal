@@ -86,6 +86,96 @@ export interface CreateFeedbackInput {
   windowEnd?: string;
   /** 可选的租户内幂等请求编号（1-128 字符）。 */
   clientRequestId?: string;
+  /** Durable generation task authority. When present, evidence is taken from the task. */
+  generationTaskId?: string;
+}
+
+export type FeedbackDraftTaskStatus = 'running' | 'succeeded' | 'failed' | 'evidence_changed' | 'uncertain' | 'saved';
+
+export type FeedbackDraftEvidence = Omit<FeedbackEvidenceSnapshotInput, 'id'> & { id: string };
+
+export interface FeedbackDraftGeneration {
+  lessonIds: string[];
+  evidence: FeedbackDraftEvidence[];
+  windowStart: string;
+  windowEnd: string;
+  rationale: string;
+}
+
+export interface FeedbackDraftContextExecutor {
+  execute(input: {
+    teacherId: string;
+    studentId: string;
+    lessonIds?: string[];
+    recordIds?: string[];
+  }): Promise<Result<{
+    studentId: string;
+    lessonIds?: string[];
+    evidence: FeedbackDraftEvidence[];
+    windowStart: string;
+    windowEnd: string;
+  }, CommonError>>;
+}
+
+export interface FeedbackDraftGeneratorExecutor {
+  execute(input: {
+    teacherId: string;
+    studentId: string;
+    lessonIds?: string[];
+    recordIds?: string[];
+    tone?: 'formal' | 'warm' | 'concise';
+    classSize?: '1v1' | 'small' | 'large';
+    parentType?: 'normal' | 'scores' | 'sensitive';
+    focus?: 'highlight' | 'problem' | 'cooperation' | 'summary';
+  }): Promise<Result<{
+    studentId: string;
+    lessonIds: string[];
+    title: string;
+    content: string;
+    rationale: string;
+    source: 'ai';
+    evidence: FeedbackDraftEvidence[];
+    windowStart: string;
+    windowEnd: string;
+  }, CommonError>>;
+}
+
+export interface FeedbackDraftTaskData {
+  id: string;
+  studentId: string;
+  status: FeedbackDraftTaskStatus;
+  version: number;
+  attemptCount: number;
+  retryable: boolean;
+  request: Record<string, unknown>;
+  draft: { title: string; content: string };
+  generation: FeedbackDraftGeneration | null;
+  error: { message: string; code?: string } | null;
+  savedFeedbackId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CreateFeedbackDraftTaskInput {
+  teacherId: string;
+  clientRequestId: string;
+  studentId: string;
+  lessonIds?: string[];
+  recordIds?: string[];
+  tone?: 'formal' | 'warm' | 'concise';
+  classSize?: '1v1' | 'small' | 'large';
+  parentType?: 'normal' | 'scores' | 'sensitive';
+  focus?: 'highlight' | 'problem' | 'cooperation' | 'summary';
+  title?: string;
+  content?: string;
+}
+
+export interface FeedbackDraftTaskService {
+  create(input: CreateFeedbackDraftTaskInput): Promise<Result<{ task: FeedbackDraftTaskData; replayed: boolean }, CommonError>>;
+  list(input: { teacherId: string; studentId?: string }): Promise<Result<{ items: FeedbackDraftTaskData[] }, CommonError>>;
+  get(input: { teacherId: string; taskId: string }): Promise<Result<FeedbackDraftTaskData, CommonError>>;
+  retry(input: { teacherId: string; taskId: string; clientRequestId: string; expectedVersion: number }): Promise<Result<{ task: FeedbackDraftTaskData; replayed: boolean }, CommonError>>;
+  updateDraft(input: { teacherId: string; taskId: string; expectedVersion: number; title: string; content: string }): Promise<Result<FeedbackDraftTaskData, CommonError>>;
 }
 
 export interface GetFeedbackInput {

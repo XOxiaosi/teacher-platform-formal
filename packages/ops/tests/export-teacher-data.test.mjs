@@ -106,8 +106,8 @@ test('parseArgs：三种身份互斥，缺一或多一均报错', () => {
   assert.throws(() => parseArgs(['--bogus']), /未知参数/);
 });
 
-test('BUSINESS_TABLES：43 个业务表固定清单（教师库 37 + 共享库 6，P12 t4 补漏 MediaAsset 等）', () => {
-  assert.equal(BUSINESS_TABLES.length, 43);
+test('BUSINESS_TABLES：45 个业务表固定清单（教师库 39 + 共享库 6，P12 t4 补漏 MediaAsset 等）', () => {
+  assert.equal(BUSINESS_TABLES.length, 45);
   assert.ok(BUSINESS_TABLES.includes('Student'));
   assert.ok(BUSINESS_TABLES.includes('FeedbackEvidence'));
   // P12 t4：P8+ 新增表全部纳入
@@ -211,9 +211,9 @@ test('end-to-end：--teacher-id 导出 → account.json 无 passwordHash + manif
   assert.equal(account.email, TEACHER_EMAIL);
   assert.equal('passwordHash' in account, false);
 
-  // manifest：43 表 + 行数正确 + sha256 存在 + 来源库标注
+  // manifest：45 表 + 行数正确 + sha256 存在 + 来源库标注
   const manifest = JSON.parse(await readFile(join(outDir, 'manifest.json'), 'utf8'));
-  assert.equal(manifest.tables.length, 43);
+  assert.equal(manifest.tables.length, 45);
   assert.equal(manifest.teacherId, TEACHER_ID);
   const studentEntry = manifest.tables.find((t) => t.table === 'Student');
   assert.equal(studentEntry.rows, 2);
@@ -249,7 +249,7 @@ test('end-to-end：--teacher-id 导出 → account.json 无 passwordHash + manif
   assert.equal(identityJsonl.trim().split('\n').length, 1);
   assert.equal(JSON.parse(identityJsonl.trim()).externalUserId, 'wxid_export_test');
   const files = await readdir(join(outDir, 'tables'));
-  assert.equal(files.length, 43);
+  assert.equal(files.length, 45);
 
   // P13 t2：媒体文件本体——manifest.media 条目 {path,sha256,sizeBytes} + 副本逐字节一致 + 源未删
   assert.equal(manifest.media.length, 1);
@@ -326,9 +326,9 @@ test('P14 t5 e2e：--zip 输出单包（manifest+account+tables+media）→ 解�
     `Expand-Archive -Path '${zipPath}' -DestinationPath '${unzipDir}' -Force`,
   ], { stdio: 'pipe' });
 
-  // 结构：manifest.json / account.json / tables/*.jsonl（43）/ media/*
+  // 结构：manifest.json / account.json / tables/*.jsonl（45）/ media/*
   const manifest = JSON.parse(await readFile(join(unzipDir, 'manifest.json'), 'utf8'));
-  assert.equal(manifest.tables.length, 43);
+  assert.equal(manifest.tables.length, 45);
   assert.equal(manifest.media.length, 1);
   assert.deepEqual(manifest.media[0], {
     path: mediaKey,
@@ -339,7 +339,7 @@ test('P14 t5 e2e：--zip 输出单包（manifest+account+tables+media）→ 解�
   assert.equal(account.email, TEACHER_EMAIL);
   assert.equal('passwordHash' in account, false);
   const unzipTables = await readdir(join(unzipDir, 'tables'));
-  assert.equal(unzipTables.length, 43);
+  assert.equal(unzipTables.length, 45);
   const studentLines = await readFile(join(unzipDir, 'tables', 'student.jsonl'), 'utf8');
   assert.equal(studentLines.trim().split('\n').length, 2);
 

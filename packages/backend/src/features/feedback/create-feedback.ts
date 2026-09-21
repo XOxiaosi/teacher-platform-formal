@@ -56,21 +56,22 @@ type CreationReceipt = {
 };
 
 function canonicalFingerprint(input: Parameters<FeedbackService['createFeedback']>[0]): string {
-  const evidence = input.evidence?.map((item) => ({
+  const evidence = input.generationTaskId ? null : input.evidence?.map((item) => ({
     id: item.id ?? null,
     type: item.type,
     sourceVersion: item.sourceVersion ?? null,
   })) ?? null;
   const canonical = {
     studentId: input.studentId,
-    lessonId: input.lessonId ?? null,
+    lessonId: input.generationTaskId ? null : input.lessonId ?? null,
     title: input.title,
     content: input.content,
     channel: input.channel ?? null,
     parentName: input.parentName ?? null,
     evidence,
-    windowStart: input.windowStart ?? null,
-    windowEnd: input.windowEnd ?? null,
+    windowStart: input.generationTaskId ? null : input.windowStart ?? null,
+    windowEnd: input.generationTaskId ? null : input.windowEnd ?? null,
+    generationTaskId: input.generationTaskId ?? null,
   };
   return createHash('sha256').update(JSON.stringify(canonical)).digest('hex');
 }
@@ -180,7 +181,7 @@ export function createFeedbackWriter(options: CreateFeedbackServiceOptions): Fee
       if (!input.content || input.content.trim() === '') return err(validationError('content 不能为空', 'content'));
 
       let validatedEvidence: FeedbackEvidenceSnapshotInput[] | undefined;
-      if (input.evidence !== undefined) {
+      if (!input.generationTaskId && input.evidence !== undefined) {
         const ev = validateEvidenceArray(input.evidence);
         if (!ev.ok) return err(validationError(ev.message, ev.field));
         validatedEvidence = ev.value;
@@ -188,12 +189,12 @@ export function createFeedbackWriter(options: CreateFeedbackServiceOptions): Fee
 
       let windowStartDate: Date | null = null;
       let windowEndDate: Date | null = null;
-      if (input.windowStart !== undefined) {
+      if (!input.generationTaskId && input.windowStart !== undefined) {
         const parsed = parseRfc3339Instant(input.windowStart);
         if (parsed === undefined) return err(validationError('windowStart 必须是带时区的严格 RFC3339 时间', 'windowStart'));
         windowStartDate = parsed;
       }
-      if (input.windowEnd !== undefined) {
+      if (!input.generationTaskId && input.windowEnd !== undefined) {
         const parsed = parseRfc3339Instant(input.windowEnd);
         if (parsed === undefined) return err(validationError('windowEnd 必须是带时区的严格 RFC3339 时间', 'windowEnd'));
         windowEndDate = parsed;
@@ -225,12 +226,34 @@ export function createFeedbackWriter(options: CreateFeedbackServiceOptions): Fee
           }
           const student = await tx.student.findFirst({ where: { id: input.studentId, teacherId: input.teacherId }, select: { id: true } });
           if (!student) return { kind: 'error' as const, error: notFound('学生不存在') };
-          if (input.lessonId !== undefined) {
-            const lesson = await tx.lesson.findFirst({ where: { id: input.lessonId, teacherId: input.teacherId, studentId: input.studentId }, select: { id: true } });
+          let effectiveLessonId: string | undefined = input.generationTaskId ? undefined : input.lessonId;
+          if (effectiveLessonId !== undefined) {
+            const lesson = await tx.lesson.findFirst({ where: { id: effectiveLessonId, teacherId: input.teacherId, studentId: input.studentId }, select: { id: true } });
             if (!lesson) return { kind: 'error' as const, error: notFound('课次不存在') };
           }
 
           let admittedEvidence = validatedEvidence;
+          let taskToSave: string | undefined;
+          if (input.generationTaskId) {
+            const generationTask = await tx.feedbackDraftTask.findFirst({ where: { id: input.generationTaskId, teacherId: input.teacherId },
+              select: { id: true, studentId: true, status: true, generationCiphertext: true, savedFeedbackId: true } });
+            if (!generationTask || generationTask.studentId !== input.studentId) return { kind: 'error' as const, error: notFound('反馈草稿任务不存在') };
+            if (generationTask.savedFeedbackId) return { kind: 'error' as const, error: validationError('该反馈草稿任务已保存', 'generationTaskId') };
+            if (generationTask.status !== 'succeeded' || !generationTask.generationCiphertext) {
+              return { kind: 'error' as const, error: validationError('该反馈草稿任务尚不可保存', 'generationTaskId') };
+            }
+            const payload = decryptJsonFieldValue(cipher, generationTask.generationCiphertext) as { evidence?: FeedbackEvidenceSnapshotInput[]; windowStart?: string; windowEnd?: string; lessonIds?: string[] } | null;
+            if (!payload || !Array.isArray(payload.evidence)) return { kind: 'error' as const, error: internalError('反馈草稿任务依据无效') };
+            admittedEvidence = payload.evidence;
+            windowStartDate = payload.windowStart ? parseRfc3339Instant(payload.windowStart) ?? null : null;
+            windowEndDate = payload.windowEnd ? parseRfc3339Instant(payload.windowEnd) ?? null : null;
+            effectiveLessonId = payload.lessonIds?.[0];
+            if (effectiveLessonId) {
+              const lesson = await tx.lesson.findFirst({ where: { id: effectiveLessonId, teacherId: input.teacherId, studentId: input.studentId }, select: { id: true } });
+              if (!lesson) return { kind: 'error' as const, error: notFound('反馈草稿任务课程不存在') };
+            }
+            taskToSave = generationTask.id;
+          }
           if (admittedEvidence !== undefined) {
             const resolved = await resolveFeedbackEvidence({ client: tx, teacherId: input.teacherId, studentId: input.studentId,
               references: admittedEvidence, cipher, lock: true });
@@ -240,12 +263,12 @@ export function createFeedbackWriter(options: CreateFeedbackServiceOptions): Fee
 
           const id = clientRequestId ? randomUUID() : undefined;
           const creationData: ParentFeedbackData = {
-            id: id ?? '', teacherId: input.teacherId, studentId: input.studentId, lessonId: input.lessonId ?? null,
+            id: id ?? '', teacherId: input.teacherId, studentId: input.studentId, lessonId: effectiveLessonId ?? null,
             title: input.title, content: input.content, status: 'draft', channel: input.channel ?? null, parentName: input.parentName ?? null,
             sentAt: null, moderationFlagged: null, moderationReasons: null, createdAt: now.value, updatedAt: now.value,
           };
           const feedbackData = {
-            ...(id ? { id } : {}), teacherId: input.teacherId, studentId: input.studentId, lessonId: input.lessonId ?? null,
+            ...(id ? { id } : {}), teacherId: input.teacherId, studentId: input.studentId, lessonId: effectiveLessonId ?? null,
             ...(clientRequestId ? {
               clientRequestId, requestFingerprint,
               creationReceiptCiphertext: encryptJsonFieldValue(cipher, receiptPayload(creationData)),
@@ -256,11 +279,16 @@ export function createFeedbackWriter(options: CreateFeedbackServiceOptions): Fee
             createdAtTs: now.value, updatedAtTs: now.value,
           };
           const feedback = await tx.parentFeedback.create({ data: feedbackData });
+          if (taskToSave) {
+            const linked = await tx.feedbackDraftTask.updateMany({ where: { id: taskToSave, teacherId: input.teacherId, status: 'succeeded', savedFeedbackId: null },
+              data: { savedFeedbackId: feedback.id, status: 'saved', retryable: false, version: { increment: 1 }, updatedAtTs: now.value } });
+            if (linked.count !== 1) throw new ParentFeedbackCreateTransactionRollback();
+          }
           await requireChangelogWrite(changelogFactory(tx).recordChange({
             teacherId: input.teacherId, module: 'feedback', action: 'create', targetType: 'ParentFeedback', targetId: feedback.id,
             before: null,
             after: {
-              id: feedback.id, teacherId: input.teacherId, studentId: input.studentId, lessonId: input.lessonId ?? null,
+              id: feedback.id, teacherId: input.teacherId, studentId: input.studentId, lessonId: effectiveLessonId ?? null,
               title: input.title, content: input.content, status: 'draft', channel: input.channel ?? null, parentName: input.parentName ?? null,
               sentAtTs: null, moderationFlagged: null, moderationReasons: null, createdAtTs: now.value, updatedAtTs: now.value,
             },
