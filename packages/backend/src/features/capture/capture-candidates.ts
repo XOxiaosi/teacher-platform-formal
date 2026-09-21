@@ -13,6 +13,39 @@ export async function captureWriteClock(tx: Prisma.TransactionClient) {
   const at = rows[0]?.now;
   return at instanceof Date && !Number.isNaN(at.getTime()) ? ok(at) : err(internalError('数据库可信时间不可用'));
 }
+type ConfirmedRecordProjection = {
+  id: string;
+  studentId: string;
+  reviewStatus: string;
+  visibility: string;
+  updatedAtTs: Date;
+  structuredData: Prisma.JsonValue | null;
+  student: { teacherId: string } | null;
+};
+type ConfirmedRecordMap = ReadonlyMap<string, ConfirmedRecordProjection>;
+
+/** Load all referenced records in one tenant-scoped query. Missing or corrupt references stay null. */
+export async function loadConfirmedRecords(
+  prisma: PrismaClient | Prisma.TransactionClient,
+  teacherId: string,
+  rows: CaptureRow[],
+): Promise<ConfirmedRecordMap> {
+  const ids = [...new Set(rows.flatMap(row => row.candidates.map(candidate => candidate.confirmedRecordId).filter((id): id is string => Boolean(id))))];
+  if (ids.length === 0) return new Map();
+  const records = await prisma.studentRecord.findMany({
+    where: { teacherId, id: { in: ids }, student: { teacherId } },
+    select: {
+      id: true,
+      studentId: true,
+      reviewStatus: true,
+      visibility: true,
+      updatedAtTs: true,
+      structuredData: true,
+      student: { select: { teacherId: true } },
+    },
+  });
+  return new Map(records.map(record => [record.id, record]));
+}
 export async function invalidateCaptureSources(tx: Prisma.TransactionClient, teacherId: string, eventId: string, at: Date) {
   const ids = (await tx.captureCandidate.findMany({ where: { eventId, teacherId }, select: { id: true } })).map(item => item.id);
   await tx.studentSourceRecord.updateMany({ where: {
@@ -22,13 +55,15 @@ export async function invalidateCaptureSources(tx: Prisma.TransactionClient, tea
     ],
   }, data: { rawText: null, captureStatus: 'deleted', updatedAtTs: at } });
 }
-export function captureView(row: CaptureRow, cipher: FieldCipher | undefined): CaptureView {
+export function captureView(row: CaptureRow, cipher: FieldCipher | undefined, records: ConfirmedRecordMap = new Map()): CaptureView {
   const candidates = row.candidates.map((candidate): CaptureCandidateView => ({
     id: candidate.id, candidateType: 'verbatim_note',
     payload: decryptJsonFieldValue(cipher, candidate.payload) as { text: string },
     originalPayload: decryptJsonFieldValue(cipher, candidate.originalPayload ?? candidate.payload) as { text: string },
     reviewStatus: candidate.reviewStatus as CaptureCandidateView['reviewStatus'], version: candidate.revision,
-    confirmedRecordId: candidate.confirmedRecordId, confidence: null,
+    confirmedRecordId: candidate.confirmedRecordId,
+    confirmedRecord: projectConfirmedRecord(row.id, row.candidates.length, candidate, records, cipher),
+    confidence: null,
   }));
   return {
     id: row.id, sourceType: 'text', sourceChannel: 'web', rawText: decryptFieldValue(cipher, row.rawText ?? ''),
@@ -36,6 +71,38 @@ export function captureView(row: CaptureRow, cipher: FieldCipher | undefined): C
     task: { id: row.tasks[0].id, status: row.tasks[0].status, processorVersion: row.tasks[0].processorVersion },
     confirmedRecordId: candidates[0]?.confirmedRecordId ?? null, candidate: candidates[0], candidates,
   };
+}
+
+function projectConfirmedRecord(
+  eventId: string,
+  candidateCount: number,
+  candidate: CaptureRow['candidates'][number],
+  records: ConfirmedRecordMap,
+  cipher: FieldCipher | undefined,
+): CaptureCandidateView['confirmedRecord'] {
+  if (!candidate.confirmedRecordId) return null;
+  const record = records.get(candidate.confirmedRecordId);
+  if (!record || record.student?.teacherId !== candidate.teacherId) return null;
+  const reviewStatus = ['candidate', 'confirmed', 'rejected', 'superseded'].includes(record.reviewStatus)
+    ? record.reviewStatus as NonNullable<CaptureCandidateView['confirmedRecord']>['reviewStatus']
+    : null;
+  const visibility = ['internal_only', 'parent_shareable', 'needs_review'].includes(record.visibility)
+    ? record.visibility as NonNullable<CaptureCandidateView['confirmedRecord']>['visibility']
+    : null;
+  if (!reviewStatus || !visibility) return null;
+  try {
+    const source = decryptJsonFieldValue(cipher, record.structuredData) as {
+      captureEventId?: unknown;
+      captureCandidateId?: unknown;
+    } | null;
+    const eventMatches = source?.captureEventId === eventId;
+    const candidateMatches = source?.captureCandidateId === candidate.id;
+    const legacySingleCandidateMatches = source?.captureCandidateId === undefined && candidateCount === 1;
+    if (!eventMatches || (!candidateMatches && !legacySingleCandidateMatches)) return null;
+  } catch {
+    return null;
+  }
+  return { id: record.id, studentId: record.studentId, reviewStatus, visibility, updatedAt: record.updatedAtTs };
 }
 export function matchesCandidateInput(row: CaptureRow, candidates: { text: string }[] | undefined, cipher: FieldCipher | undefined) {
   if (candidates === undefined) return row.tasks[0]?.processorVersion !== 'manual-candidates-v1';
@@ -60,7 +127,8 @@ export function createCandidateOperations(getClient: () => Promise<PrismaClient>
         revision: { increment: 1 }, updatedAtTs: clock.value,
       } });
       const updated = await tx.captureEvent.findUniqueOrThrow({ where: { id: event.id }, include: captureInclude });
-      return ok(captureView(updated, cipher));
+      const records = await loadConfirmedRecords(tx, input.teacherId, [updated]);
+      return ok(captureView(updated, cipher, records));
     });
   }
   return {
@@ -74,7 +142,9 @@ export function createCandidateOperations(getClient: () => Promise<PrismaClient>
         where: { teacherId: input.teacherId, redactedAtTs: null, deletionReceipt: null, ...(cursor ? { OR: [{ createdAtTs: { lt: cursor.createdAtTs } }, { createdAtTs: cursor.createdAtTs, id: { lt: cursor.id } }] } : {}) },
         include: captureInclude, orderBy: [{ createdAtTs: 'desc' }, { id: 'desc' }], take: limit + 1,
       });
-      return ok({ items: rows.slice(0, limit).map(row => captureView(row, cipher)), nextCursor: rows.length > limit ? rows[limit - 1].id : null });
+      const page = rows.slice(0, limit);
+      const records = await loadConfirmedRecords(prisma, input.teacherId, page);
+      return ok({ items: page.map(row => captureView(row, cipher, records)), nextCursor: rows.length > limit ? rows[limit - 1].id : null });
     },
     async editCandidate(input) {
       if (typeof input.text !== 'string' || !input.text.trim()) return err(validationError('候选内容不能为空', 'text'));

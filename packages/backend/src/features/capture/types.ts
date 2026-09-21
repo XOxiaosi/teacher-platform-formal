@@ -6,7 +6,15 @@ export interface CaptureCandidateView {
   id: string; candidateType: 'verbatim_note'; payload: { text: string };
   originalPayload: { text: string }; version: number;
   reviewStatus: 'pending' | 'confirmed' | 'rejected' | 'deferred';
-  confirmedRecordId: string | null; confidence: null;
+  confirmedRecordId: string | null;
+  confirmedRecord: {
+    id: string;
+    studentId: string;
+    reviewStatus: 'candidate' | 'confirmed' | 'rejected' | 'superseded';
+    visibility: 'internal_only' | 'parent_shareable' | 'needs_review';
+    updatedAt: Date;
+  } | null;
+  confidence: null;
 }
 export interface CaptureView {
   id: string; sourceType: 'text'; sourceChannel: 'web'; rawText: string;

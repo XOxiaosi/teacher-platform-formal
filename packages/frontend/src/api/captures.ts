@@ -1,6 +1,15 @@
 import { apiRequest } from './client';
 
 export type CaptureVisibility = 'internal_only' | 'parent_shareable';
+export type CaptureProjectionVisibility = CaptureVisibility | 'needs_review';
+
+export interface ConfirmedCaptureRecord {
+  id: string;
+  studentId: string;
+  reviewStatus: 'candidate' | 'confirmed' | 'rejected' | 'superseded';
+  visibility: CaptureProjectionVisibility;
+  updatedAt: string;
+}
 
 export interface CaptureCandidate {
   id: string;
@@ -10,6 +19,8 @@ export interface CaptureCandidate {
   originalPayload?: { text: string };
   version?: number;
   confirmedRecordId?: string | null;
+  /** Server-authoritative formal record projection; null means no readable formal record. */
+  confirmedRecord: ConfirmedCaptureRecord | null;
   confidence: null;
   visibility?: CaptureVisibility;
 }

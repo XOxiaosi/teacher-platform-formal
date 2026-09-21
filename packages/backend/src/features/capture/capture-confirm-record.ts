@@ -64,7 +64,7 @@ export function createConfirmCaptureRecord(getClient: () => Promise<PrismaClient
         } });
         await requireChangelogWrite(defaultChangelogFactory(tx).recordChange({
           teacherId: input.teacherId, module: 'student-records', action: 'create', targetType: 'StudentRecord', targetId: record.id,
-          before: null, after: { category: record.category, reviewStatus: record.reviewStatus, sourceRecordId: source.id }, source: 'manual',
+          before: null, after: { category: record.category, reviewStatus: record.reviewStatus, sourceRecordId: source.id, studentId: record.studentId, visibility: record.visibility }, source: 'manual',
         }));
         return ok(view(candidate, record, input.scheduleId ?? null, false));
       });

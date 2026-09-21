@@ -9,7 +9,7 @@ import { ApiError } from '../../api/client';
 const api = vi.hoisted(() => ({ list: vi.fn(), get: vi.fn(), edit: vi.fn(), review: vi.fn(), confirm: vi.fn() }));
 vi.mock('../../api/captures', () => ({ listCaptures: api.list, getCapture: api.get, editCaptureCandidate: api.edit, reviewCaptureCandidate: api.review, confirmCaptureCandidate: api.confirm }));
 const students = [{ id: 'student-a', name: '小雨', grade: '五年级' }, { id: 'student-b', name: '小雨', grade: '初一' }];
-const candidate = (overrides: Partial<CaptureCandidate> = {}): CaptureCandidate => ({ id: 'candidate-1', candidateType: 'verbatim_note', payload: { text: '原始候选' }, originalPayload: { text: '原始候选' }, reviewStatus: 'pending', version: 1, confidence: null, ...overrides });
+const candidate = (overrides: Partial<CaptureCandidate> = {}): CaptureCandidate => ({ id: 'candidate-1', candidateType: 'verbatim_note', payload: { text: '原始候选' }, originalPayload: { text: '原始候选' }, reviewStatus: 'pending', version: 1, confidence: null, confirmedRecord: null, ...overrides });
 function material(id: string, item = candidate()): CaptureRecord {
   return { id, sourceType: 'text', sourceChannel: 'web', rawText: `材料 ${id}`, occurredAt: '2026-09-16T00:00:00Z', createdAt: '2026-09-16T00:00:00Z', task: { id: `task-${id}`, status: 'completed', processorVersion: 'manual-candidates-v1' }, candidate: item, candidates: [item] };
 }
@@ -149,7 +149,9 @@ describe('candidate drafts and confirmation recovery in synthetic sessions', () 
     await screen.findByText('响应丢失');
     const original = api.confirm.mock.calls[0];
     first.unmount();
-    render(<CandidateCard teacherId="teacher-a" captureId="one" item={candidate({ version: 2, reviewStatus: 'confirmed', confirmedRecordId: 'saved-once' })} students={students} onChange={vi.fn().mockResolvedValue(undefined)} />);
+    // The server still reports the candidate as pending, so the local
+    // ambiguous request may be replayed with the same idempotency key.
+    render(<CandidateCard teacherId="teacher-a" captureId="one" item={candidate({ reviewStatus: 'pending', confirmedRecord: null })} students={students} onChange={vi.fn().mockResolvedValue(undefined)} />);
     expect(screen.getByLabelText('归入学生')).toBeDisabled();
     expect(screen.getByLabelText('归入学生')).toHaveValue('student-a');
     expect(screen.getByLabelText('拟保存内容')).toBeDisabled();
@@ -206,5 +208,129 @@ describe('candidate drafts and confirmation recovery in synthetic sessions', () 
     fireEvent.click(await screen.findByRole('button', { name: /材料 one/ }));
     expect(await screen.findByLabelText('拟保存内容')).toHaveValue('原始候选');
     expect(readCaptureDraft('teacher-a', 'one', 'candidate-1')).toBeUndefined();
+  });
+
+  it('restores a confirmed server projection after the browser draft is gone', async () => {
+    const item = candidate({
+      reviewStatus: 'confirmed',
+      confirmedRecordId: 'record-server',
+      confirmedRecord: { id: 'record-server', studentId: 'student-b', reviewStatus: 'confirmed', visibility: 'parent_shareable', updatedAt: '2026-09-21T00:00:00Z' },
+    });
+    render(<CandidateCard teacherId="teacher-a" captureId="one" item={item} students={students} onChange={vi.fn()} />);
+    expect(await screen.findByText('已归入：小雨 · 初一；分享范围：允许用于家长表达。')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '基于这条记录整理家长反馈' })).toHaveAttribute('href', '#/feedback?studentId=student-b&recordId=record-server');
+  });
+
+  it('uses the server projection over a stale local student and sharing scope', async () => {
+    writeCaptureDraft('teacher-a', 'one', 'candidate-1', { generation: 'old', text: '原始候选', studentId: 'student-a', baseVersion: 1, visibility: 'parent_shareable', confirmedRecordId: 'old-record' });
+    const item = candidate({
+      reviewStatus: 'confirmed',
+      confirmedRecordId: 'record-server',
+      confirmedRecord: { id: 'record-server', studentId: 'student-b', reviewStatus: 'confirmed', visibility: 'internal_only', updatedAt: '2026-09-21T00:00:00Z' },
+    });
+    render(<CandidateCard teacherId="teacher-a" captureId="one" item={item} students={students} onChange={vi.fn()} />);
+    expect(await screen.findByText('已归入：小雨 · 初一；分享范围：仅教师可见。')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '基于这条记录整理家长反馈' })).not.toBeInTheDocument();
+    expect(readCaptureDraft('teacher-a', 'one', 'candidate-1')).toMatchObject({ studentId: 'student-b', visibility: 'internal_only', confirmedRecordId: 'record-server' });
+  });
+
+  it('does not fabricate student or sharing scope when the formal projection is unavailable', async () => {
+    writeCaptureDraft('teacher-a', 'one', 'candidate-1', { generation: 'old', text: '原始候选', studentId: 'student-a', baseVersion: 1, visibility: 'parent_shareable', confirmedRecordId: 'record-server' });
+    const item = candidate({ reviewStatus: 'confirmed', confirmedRecordId: 'record-server', confirmedRecord: null });
+    render(<CandidateCard teacherId="teacher-a" captureId="one" item={item} students={students} onChange={vi.fn()} />);
+    expect(await screen.findByText('正式记录当前不可读取，学生归属和分享范围暂不可确认。')).toBeInTheDocument();
+    expect(screen.queryByText(/小雨/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '基于这条记录整理家长反馈' })).not.toBeInTheDocument();
+  });
+
+  it('shows a candidate-level rejection without treating it as an unreadable formal record', () => {
+    const item = candidate({ reviewStatus: 'rejected', confirmedRecord: null });
+    const view = render(<CandidateCard teacherId="teacher-a" captureId="one" item={item} students={students} onChange={vi.fn()} />);
+    expect(screen.getByText('已拒绝', { selector: 'strong' })).toBeInTheDocument();
+    expect(screen.queryByText('已保存')).not.toBeInTheDocument();
+    expect(screen.queryByText('正式记录当前不可读取，学生归属和分享范围暂不可确认。')).not.toBeInTheDocument();
+    view.rerender(<CandidateCard teacherId="teacher-a" captureId="one" item={item} students={students} onChange={vi.fn()} />);
+    expect(screen.getByText('已拒绝', { selector: 'strong' })).toBeInTheDocument();
+    expect(screen.queryByText('正式记录当前不可读取，学生归属和分享范围暂不可确认。')).not.toBeInTheDocument();
+  });
+
+  it('fails closed when a confirmed server response omits the formal projection field', async () => {
+    writeCaptureDraft('teacher-a', 'one', 'candidate-1', { generation: 'old', text: '原始候选', studentId: 'student-a', baseVersion: 1, visibility: 'parent_shareable', confirmedRecordId: 'record-server' });
+    const incomplete: Partial<CaptureCandidate> = candidate({ reviewStatus: 'confirmed', confirmedRecordId: 'record-server' });
+    delete incomplete.confirmedRecord;
+    render(<CandidateCard teacherId="teacher-a" captureId="one" item={incomplete as CaptureCandidate} students={students} onChange={vi.fn()} />);
+    expect(await screen.findByText('正式记录当前不可读取，学生归属和分享范围暂不可确认。')).toBeInTheDocument();
+    expect(screen.queryByText(/小雨/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '基于这条记录整理家长反馈' })).not.toBeInTheDocument();
+  });
+
+  it('does not retry a stale pending confirmation after the server confirms the candidate', async () => {
+    writeCaptureDraft('teacher-a', 'one', 'candidate-1', {
+      generation: 'uncertain', text: '原始候选', studentId: 'student-a', baseVersion: 1,
+      visibility: 'parent_shareable', pendingConfirm: { clientRequestId: 'request-old', studentId: 'student-a', version: 1, visibility: 'parent_shareable' },
+    });
+    const item = candidate({
+      reviewStatus: 'confirmed', confirmedRecordId: 'record-server',
+      confirmedRecord: { id: 'record-server', studentId: 'student-a', reviewStatus: 'confirmed', visibility: 'parent_shareable', updatedAt: '2026-09-21T00:00:00Z' },
+    });
+    render(<CandidateCard teacherId="teacher-a" captureId="one" item={item} students={students} onChange={vi.fn()} />);
+    expect(screen.queryByRole('button', { name: '重试本次确认' })).not.toBeInTheDocument();
+    expect(readCaptureDraft('teacher-a', 'one', 'candidate-1')?.pendingConfirm).toBeUndefined();
+    expect(api.confirm).not.toHaveBeenCalled();
+  });
+
+  it('hides an old retry immediately when a newer pending candidate version arrives', () => {
+    writeCaptureDraft('teacher-a', 'one', 'candidate-1', {
+      generation: 'uncertain', text: '原始候选', studentId: 'student-a', baseVersion: 1,
+      visibility: 'parent_shareable', pendingConfirm: { clientRequestId: 'request-old', studentId: 'student-a', version: 1, visibility: 'parent_shareable' },
+    });
+    const item = candidate({ version: 2, reviewStatus: 'pending', confirmedRecord: null });
+    render(<CandidateCard teacherId="teacher-a" captureId="one" item={item} students={students} onChange={vi.fn()} />);
+    expect(screen.queryByRole('button', { name: '重试本次确认' })).not.toBeInTheDocument();
+    expect(api.confirm).not.toHaveBeenCalled();
+  });
+
+  it('explains that a needs-review projection cannot produce a parent feedback link', async () => {
+    const item = candidate({
+      reviewStatus: 'confirmed', confirmedRecordId: 'record-review',
+      confirmedRecord: { id: 'record-review', studentId: 'student-a', reviewStatus: 'candidate', visibility: 'needs_review', updatedAt: '2026-09-21T00:00:00Z' },
+    });
+    render(<CandidateCard teacherId="teacher-a" captureId="one" item={item} students={students} onChange={vi.fn()} />);
+    expect(await screen.findByText('已归入：小雨 · 五年级；分享范围：需要重新核对。')).toBeInTheDocument();
+    expect(screen.getByText('正式记录当前需要重新核对，暂不可用于家长反馈。')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '基于这条记录整理家长反馈' })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['rejected', '已拒绝'],
+    ['superseded', '已被替代'],
+  ] as const)('does not offer parent feedback for a %s formal record', async (reviewStatus, label) => {
+    const item = candidate({
+      reviewStatus: 'confirmed', confirmedRecordId: `record-${reviewStatus}`,
+      confirmedRecord: { id: `record-${reviewStatus}`, studentId: 'student-a', reviewStatus, visibility: 'parent_shareable', updatedAt: '2026-09-21T00:00:00Z' },
+    });
+    render(<CandidateCard teacherId="teacher-a" captureId="one" item={item} students={students} onChange={vi.fn()} />);
+    expect(await screen.findByText(`正式记录当前不可用于家长反馈（${label}）。`)).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '基于这条记录整理家长反馈' })).not.toBeInTheDocument();
+  });
+
+  it('immediately hides a receipt link when the latest rerender has an unavailable projection', async () => {
+    api.confirm.mockResolvedValue({ recordId: 'record-server', studentId: 'student-a', scheduleId: null, visibility: 'parent_shareable' });
+    const view = render(<CandidateCard teacherId="teacher-a" captureId="one" item={candidate()} students={students} onChange={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText('归入学生'), { target: { value: 'student-a' } });
+    fireEvent.change(screen.getByLabelText('分享范围'), { target: { value: 'parent_shareable' } });
+    fireEvent.click(screen.getByRole('button', { name: '确认归入档案' }));
+    await screen.findByRole('link', { name: '基于这条记录整理家长反馈' });
+    view.rerender(<CandidateCard teacherId="teacher-a" captureId="one" item={candidate({ version: 2, reviewStatus: 'confirmed', confirmedRecordId: 'record-server', confirmedRecord: null })} students={students} onChange={vi.fn()} />);
+    expect(screen.queryByRole('link', { name: '基于这条记录整理家长反馈' })).not.toBeInTheDocument();
+    expect(screen.getByText('正式记录当前不可读取，学生归属和分享范围暂不可确认。')).toBeInTheDocument();
+  });
+
+  it('immediately removes a parent feedback link when the projection becomes internal only', () => {
+    const view = render(<CandidateCard teacherId="teacher-a" captureId="one" item={candidate({ reviewStatus: 'confirmed', confirmedRecordId: 'record-server', confirmedRecord: { id: 'record-server', studentId: 'student-a', reviewStatus: 'confirmed', visibility: 'parent_shareable', updatedAt: '2026-09-21T00:00:00Z' } })} students={students} onChange={vi.fn()} />);
+    expect(screen.getByRole('link', { name: '基于这条记录整理家长反馈' })).toBeInTheDocument();
+    view.rerender(<CandidateCard teacherId="teacher-a" captureId="one" item={candidate({ reviewStatus: 'confirmed', confirmedRecordId: 'record-server', confirmedRecord: { id: 'record-server', studentId: 'student-a', reviewStatus: 'confirmed', visibility: 'internal_only', updatedAt: '2026-09-21T00:00:01Z' } })} students={students} onChange={vi.fn()} />);
+    expect(screen.queryByRole('link', { name: '基于这条记录整理家长反馈' })).not.toBeInTheDocument();
+    expect(screen.getByText('已归入：小雨 · 五年级；分享范围：仅教师可见。')).toBeInTheDocument();
   });
 });

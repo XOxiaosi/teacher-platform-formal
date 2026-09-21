@@ -8,7 +8,7 @@ const mock = vi.hoisted(() => ({ list: vi.fn(), get: vi.fn(), edit: vi.fn(), rev
 vi.mock('../../api/captures', () => ({ listCaptures: mock.list, getCapture: mock.get, editCaptureCandidate: mock.edit, reviewCaptureCandidate: mock.review, confirmCaptureCandidate: mock.confirm }));
 const students = [{ id: 's1', name: '小雨', grade: '五年级' }, { id: 's2', name: '小雨', grade: '初一' }];
 const record = (): CaptureRecord => {
-  const candidate = { id: 'c1', candidateType: 'verbatim_note' as const, payload: { text: '今天主动订正' }, originalPayload: { text: '今天主动订正' }, reviewStatus: 'pending' as const, version: 1, confidence: null };
+  const candidate = { id: 'c1', candidateType: 'verbatim_note' as const, payload: { text: '今天主动订正' }, originalPayload: { text: '今天主动订正' }, reviewStatus: 'pending' as const, version: 1, confidence: null, confirmedRecord: null };
   return { id: 'e1', rawText: '今天主动订正，家长提到睡眠不足', sourceType: 'text', sourceChannel: 'web', occurredAt: '2026-09-16T00:00:00Z', createdAt: '2026-09-16T00:00:00Z', task: { id: 't1', status: 'pending', processorVersion: 'manual-v1' }, candidate, candidates: [candidate, { ...candidate, id: 'c2', payload: { text: '家长提到睡眠不足' } }] };
 };
 beforeEach(() => { clearCaptureDrafts('teacher-a'); sessionStorage.clear(); vi.resetAllMocks(); mock.list.mockResolvedValue({ items: [record()], nextCursor: null }); mock.get.mockResolvedValue(record()); });
@@ -94,6 +94,37 @@ describe('persistent material inbox', () => {
     fireEvent.click(screen.getByRole('button', { name: '保存候选修改' }));
     await screen.findByRole('alert'); expect(screen.getByLabelText('拟保存内容')).toHaveValue('教师核对后的内容');
     expect(screen.getByRole('button', { name: '确认归入档案' })).toBeDisabled();
+  });
+  it('keeps the edited candidate version when the follow-up refresh fails', async () => {
+    const updated = record();
+    updated.candidate = { ...updated.candidate, version: 2, payload: { text: '服务端已保存的核对内容' } };
+    updated.candidates = [updated.candidate];
+    mock.edit.mockResolvedValue(updated);
+    const onChange = vi.fn().mockRejectedValue(new Error('材料刷新失败'));
+    render(<CandidateCard teacherId="teacher-a" captureId="e1" item={record().candidate} students={students} onChange={onChange} />);
+    fireEvent.change(screen.getByLabelText('拟保存内容'), { target: { value: '服务端已保存的核对内容' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存候选修改' }));
+    await screen.findByText(/操作已保存，最新材料加载失败/);
+    expect(screen.getByLabelText('拟保存内容')).toHaveValue('服务端已保存的核对内容');
+    fireEvent.change(screen.getByLabelText('归入学生'), { target: { value: 's1' } });
+    mock.confirm.mockResolvedValue({ recordId: 'r-edited', studentId: 's1', visibility: 'internal_only' });
+    fireEvent.click(screen.getByRole('button', { name: '确认归入档案' }));
+    await screen.findByText('已保存', { selector: 'strong' });
+    expect(mock.confirm).toHaveBeenCalledWith('e1', 'c1', expect.objectContaining({ version: 2 }));
+  });
+
+  it('keeps a rejected candidate state when the follow-up refresh fails', async () => {
+    const updated = record();
+    updated.candidate = { ...updated.candidate, version: 2, reviewStatus: 'rejected' };
+    updated.candidates = [updated.candidate];
+    mock.review.mockResolvedValue(updated);
+    const onChange = vi.fn().mockRejectedValue(new Error('材料刷新失败'));
+    render(<CandidateCard teacherId="teacher-a" captureId="e1" item={record().candidate} students={students} onChange={onChange} />);
+    fireEvent.click(screen.getByRole('button', { name: '拒绝' }));
+    await screen.findByText(/操作已保存，最新材料加载失败/);
+    expect(screen.getByText('已拒绝', { selector: 'strong' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '拒绝' })).not.toBeInTheDocument();
+    expect(mock.review).toHaveBeenCalledWith('e1', 'c1', { version: 1, action: 'reject' });
   });
   it('retries ambiguous confirmation with the identical request and locks changes', async () => {
     mock.confirm.mockRejectedValueOnce(new Error('响应中断')).mockResolvedValueOnce({ recordId: 'r1', studentId: 's1', visibility: 'internal_only' });

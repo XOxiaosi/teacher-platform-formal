@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { err, notFound, ok, validationError, versionConflict } from '@teacher-platform/contracts';
 import { createDatabaseTrustedClock } from '../../shared/trusted-clock/index.js';
 import { createFieldCipherFromEnv, decryptFieldValue, encryptFieldValue, encryptJsonFieldValue } from '../../shared/field-encryption/index.js';
-import { captureView, captureInclude, lockCaptureEvent, invalidateCaptureSources, captureWriteClock, createCandidateOperations, matchesCandidateInput } from './capture-candidates.js';
+import { captureView, captureInclude, lockCaptureEvent, invalidateCaptureSources, captureWriteClock, createCandidateOperations, matchesCandidateInput, loadConfirmedRecords } from './capture-candidates.js';
 import { createConfirmCaptureRecord } from './capture-confirm-record.js';
 import type { CaptureService, CreateCaptureServiceOptions, DeletionReceiptView } from './types.js';
 
@@ -129,7 +129,8 @@ export function createCaptureService(options: CreateCaptureServiceOptions): Capt
       const existing = await prisma.captureEvent.findUnique({ where: { teacherId_clientRequestId: { teacherId: input.teacherId, clientRequestId: input.clientRequestId } }, include: { ...captureInclude, deletionReceipt: true } });
       if (existing) {
         if (existing.redactedAtTs || existing.deletionReceipt || (decryptFieldValue(cipher, existing.rawText ?? '') !== input.text || !matchesCandidateInput(existing, input.candidates, cipher))) return err(versionConflict());
-        return ok({ capture: captureView(existing, cipher), replayed: true });
+        const records = await loadConfirmedRecords(prisma, input.teacherId, [existing]);
+        return ok({ capture: captureView(existing, cipher, records), replayed: true });
       }
       const clock = await now(prisma); if (!clock.ok) return clock;
       try {
@@ -142,19 +143,26 @@ export function createCaptureService(options: CreateCaptureServiceOptions): Capt
           }
           return tx.captureEvent.findUniqueOrThrow({ where: { id: event.id }, include: captureInclude });
         });
-        return ok({ capture: captureView(created, cipher), replayed: false });
+        const records = await loadConfirmedRecords(prisma, input.teacherId, [created]);
+        return ok({ capture: captureView(created, cipher, records), replayed: false });
       } catch (caught) {
         if (caught instanceof Prisma.PrismaClientKnownRequestError && caught.code === 'P2002') {
           const raced = await prisma.captureEvent.findUnique({ where: { teacherId_clientRequestId: { teacherId: input.teacherId, clientRequestId: input.clientRequestId } }, include: { ...captureInclude, deletionReceipt: true } });
-          if (raced && !raced.redactedAtTs && !raced.deletionReceipt && decryptFieldValue(cipher, raced.rawText ?? '') === input.text && matchesCandidateInput(raced, input.candidates, cipher)) return ok({ capture: captureView(raced, cipher), replayed: true });
+          if (raced && !raced.redactedAtTs && !raced.deletionReceipt && decryptFieldValue(cipher, raced.rawText ?? '') === input.text && matchesCandidateInput(raced, input.candidates, cipher)) {
+            const records = await loadConfirmedRecords(prisma, input.teacherId, [raced]);
+            return ok({ capture: captureView(raced, cipher, records), replayed: true });
+          }
           return err(versionConflict());
         }
         throw caught;
       }
     },
     async get(input) {
-      const event = await ownedActive(await getClient(), input.teacherId, input.eventId);
-      return event ? ok(captureView(event, cipher)) : err(notFound('原始记录不存在'));
+      const prisma = await getClient();
+      const event = await ownedActive(prisma, input.teacherId, input.eventId);
+      if (!event) return err(notFound('原始记录不存在'));
+      const records = await loadConfirmedRecords(prisma, input.teacherId, [event]);
+      return ok(captureView(event, cipher, records));
     },
     async requestDeletion(input) {
       if (!validRequestId(input.clientRequestId)) return err(validationError('clientRequestId 格式不合法', 'clientRequestId'));

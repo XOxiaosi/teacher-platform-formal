@@ -1,10 +1,12 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, type Prisma } from '@prisma/client';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createCaptureService } from '../../../src/features/capture/index.js';
 import { createStudentSourceRecordService } from '../../../src/features/student-records/index.js';
+import { createChangelogService } from '../../../src/shared/changelog/index.js';
 import {
   createFieldCipher,
   FIELD_ENCRYPTION_MISSING_KEY_WRITE_MESSAGE,
+  encryptJsonFieldValue,
   loadEncryptionKey,
 } from '../../../src/shared/field-encryption/index.js';
 
@@ -177,6 +179,155 @@ describe('T-015 capture service persistence', () => {
     expect(await prisma.studentRecord.findUniqueOrThrow({ where: { id: shareable.ok ? shareable.value.recordId : '' } })).toMatchObject({ visibility: 'parent_shareable' });
   });
 
+  it('确认后重建服务读取时恢复学生、状态、分享范围和更新时间，后续修改会反映到候选投影', async () => {
+    const student = await prisma.student.create({ data: { teacherId: TEACHERS[0], name: '投影恢复学生', grade: '初二' } });
+    const service = createCaptureService({ prisma, cipher });
+    const created = await service.createText({ teacherId: TEACHERS[0], clientRequestId: 'capture-projection-0001', text: '投影恢复课堂记录' });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const confirmed = await service.confirmRecord({
+      teacherId: TEACHERS[0], eventId: created.value.capture.id, clientRequestId: 'confirm-projection-0001',
+      studentId: student.id, visibility: 'parent_shareable',
+    });
+    expect(confirmed.ok).toBe(true);
+    if (!confirmed.ok) return;
+
+    const restarted = new PrismaClient();
+    try {
+      const restored = await createCaptureService({ prisma: restarted, cipher }).get({ teacherId: TEACHERS[0], eventId: created.value.capture.id });
+      expect(restored).toMatchObject({ ok: true, value: { candidate: {
+        confirmedRecordId: confirmed.value.recordId,
+        confirmedRecord: { id: confirmed.value.recordId, studentId: student.id, reviewStatus: 'confirmed', visibility: 'parent_shareable' },
+      } } });
+      const before = restored.ok ? restored.value.candidate.confirmedRecord?.updatedAt : undefined;
+      const updated = await prisma.studentRecord.update({ where: { id: confirmed.value.recordId }, data: { visibility: 'internal_only', reviewStatus: 'superseded' } });
+      const listed = await createCaptureService({ prisma: restarted, cipher }).list({ teacherId: TEACHERS[0] });
+      expect(listed).toMatchObject({ ok: true, value: { items: [{ candidate: { confirmedRecord: {
+        id: confirmed.value.recordId, studentId: student.id, reviewStatus: 'superseded', visibility: 'internal_only',
+      } } }] } });
+      if (listed.ok) expect(listed.value.items[0]?.candidate.confirmedRecord?.updatedAt.getTime()).toBe(updated.updatedAtTs.getTime());
+      expect(before).toBeInstanceOf(Date);
+    } finally {
+      await restarted.$disconnect();
+    }
+  });
+
+  it('历史单候选记录缺少 captureCandidateId 时仍可按事件恢复投影', async () => {
+    const student = await prisma.student.create({ data: { teacherId: TEACHERS[0], name: '历史投影学生', grade: '初一' } });
+    const service = createCaptureService({ prisma, cipher });
+    const created = await service.createText({ teacherId: TEACHERS[0], clientRequestId: 'capture-projection-legacy-0001', text: '历史单候选投影' });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const confirmed = await service.confirmRecord({
+      teacherId: TEACHERS[0], eventId: created.value.capture.id, clientRequestId: 'confirm-projection-legacy-0001',
+      studentId: student.id, visibility: 'parent_shareable',
+    });
+    expect(confirmed.ok).toBe(true);
+    if (!confirmed.ok) return;
+
+    await prisma.studentRecord.update({
+      where: { id: confirmed.value.recordId },
+      data: { structuredData: encryptJsonFieldValue(cipher, { captureEventId: created.value.capture.id }) as Prisma.InputJsonValue },
+    });
+
+    expect(await service.get({ teacherId: TEACHERS[0], eventId: created.value.capture.id })).toMatchObject({
+      ok: true,
+      value: { candidate: { confirmedRecord: {
+        id: confirmed.value.recordId, studentId: student.id, reviewStatus: 'confirmed', visibility: 'parent_shareable',
+      } } },
+    });
+  });
+
+  it('多候选事件缺少 captureCandidateId 时不套用单候选兼容', async () => {
+    const student = await prisma.student.create({ data: { teacherId: TEACHERS[0], name: '多候选投影学生', grade: '初一' } });
+    const service = createCaptureService({ prisma, cipher });
+    const created = await service.createText({
+      teacherId: TEACHERS[0], clientRequestId: 'capture-projection-multi-0001', text: '多候选投影',
+      candidates: [{ text: '候选一' }, { text: '候选二' }],
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const firstCandidate = created.value.capture.candidates[0];
+    expect(firstCandidate).toBeDefined();
+    if (!firstCandidate) return;
+    const confirmed = await service.confirmRecord({
+      teacherId: TEACHERS[0], eventId: created.value.capture.id, candidateId: firstCandidate.id,
+      version: firstCandidate.version, clientRequestId: 'confirm-projection-multi-0001', studentId: student.id,
+      visibility: 'parent_shareable',
+    });
+    expect(confirmed.ok).toBe(true);
+    if (!confirmed.ok) return;
+
+    await prisma.studentRecord.update({
+      where: { id: confirmed.value.recordId },
+      data: { structuredData: encryptJsonFieldValue(cipher, { captureEventId: created.value.capture.id }) as Prisma.InputJsonValue },
+    });
+    await prisma.captureCandidate.updateMany({
+      where: { eventId: created.value.capture.id },
+      data: { confirmedRecordId: confirmed.value.recordId },
+    });
+
+    const restored = await service.get({ teacherId: TEACHERS[0], eventId: created.value.capture.id });
+    expect(restored.ok).toBe(true);
+    if (!restored.ok) return;
+    expect(restored.value.candidates).toHaveLength(2);
+    expect(restored.value.candidates.every(candidate => candidate.confirmedRecord === null)).toBe(true);
+  });
+
+  it('未确认、丢失和跨教师损坏的 confirmedRecord 引用安全返回 null，且创建审计包含学生与分享范围', async () => {
+    const studentA = await prisma.student.create({ data: { teacherId: TEACHERS[0], name: '投影安全学生 A', grade: '初一' } });
+    const studentB = await prisma.student.create({ data: { teacherId: TEACHERS[1], name: '投影安全学生 B', grade: '初一' } });
+    const serviceA = createCaptureService({ prisma, cipher });
+    const serviceB = createCaptureService({ prisma, cipher });
+    const pending = await serviceA.createText({ teacherId: TEACHERS[0], clientRequestId: 'capture-projection-0002', text: '尚未确认' });
+    expect(pending).toMatchObject({ ok: true, value: { capture: { candidate: { confirmedRecord: null } } } });
+
+    const otherCapture = await serviceB.createText({ teacherId: TEACHERS[1], clientRequestId: 'capture-projection-0003', text: '另一教师记录' });
+    expect(otherCapture.ok).toBe(true);
+    if (!otherCapture.ok || !pending.ok) return;
+    const otherConfirmed = await serviceB.confirmRecord({ teacherId: TEACHERS[1], eventId: otherCapture.value.capture.id, clientRequestId: 'confirm-projection-0002', studentId: studentB.id });
+    expect(otherConfirmed.ok).toBe(true);
+    if (!otherConfirmed.ok) return;
+    const candidateId = pending.value.capture.candidate.id;
+    await prisma.captureCandidate.update({ where: { id: candidateId }, data: { confirmedRecordId: otherConfirmed.value.recordId } });
+    expect(await serviceA.get({ teacherId: TEACHERS[0], eventId: pending.value.capture.id })).toMatchObject({ ok: true, value: { candidate: { confirmedRecordId: otherConfirmed.value.recordId, confirmedRecord: null } } });
+    await prisma.captureCandidate.update({ where: { id: candidateId }, data: { confirmedRecordId: 'missing-record-reference' } });
+    expect(await serviceA.get({ teacherId: TEACHERS[0], eventId: pending.value.capture.id })).toMatchObject({ ok: true, value: { candidate: { confirmedRecord: null } } });
+
+    const own = await serviceA.createText({ teacherId: TEACHERS[0], clientRequestId: 'capture-projection-0004', text: '需要审计的记录' });
+    expect(own.ok).toBe(true);
+    if (!own.ok) return;
+    const confirmed = await serviceA.confirmRecord({ teacherId: TEACHERS[0], eventId: own.value.capture.id, clientRequestId: 'confirm-projection-0003', studentId: studentA.id, visibility: 'parent_shareable' });
+    expect(confirmed.ok).toBe(true);
+    if (!confirmed.ok) return;
+    await prisma.captureCandidate.update({ where: { id: candidateId }, data: { confirmedRecordId: confirmed.value.recordId } });
+    expect(await serviceA.get({ teacherId: TEACHERS[0], eventId: pending.value.capture.id })).toMatchObject({
+      ok: true,
+      value: { candidate: { confirmedRecordId: confirmed.value.recordId, confirmedRecord: null } },
+    });
+    const audit = await createChangelogService(prisma, cipher).queryChangeLogs({
+      teacherId: TEACHERS[0], targetType: 'StudentRecord', targetId: confirmed.value.recordId, action: 'create',
+    });
+    expect(audit.ok).toBe(true);
+    if (!audit.ok) return;
+    expect(audit.value.items).toHaveLength(1);
+    expect(audit.value.items[0]?.after).toMatchObject({ studentId: studentA.id, visibility: 'parent_shareable' });
+    expect(audit.value.items[0]?.diff).toEqual(expect.arrayContaining([
+      { field: 'studentId', oldValue: null, newValue: studentA.id },
+      { field: 'visibility', oldValue: null, newValue: 'parent_shareable' },
+    ]));
+    await prisma.$executeRaw`UPDATE "StudentRecord" SET "visibility" = ${'invalid_projection_visibility'} WHERE "id" = ${confirmed.value.recordId}`;
+    expect(await serviceA.get({ teacherId: TEACHERS[0], eventId: own.value.capture.id })).toMatchObject({
+      ok: true,
+      value: { candidate: { confirmedRecordId: confirmed.value.recordId, confirmedRecord: null } },
+    });
+    await prisma.$executeRaw`UPDATE "StudentRecord" SET "visibility" = ${'parent_shareable'}, "reviewStatus" = ${'invalid_projection_review_status'} WHERE "id" = ${confirmed.value.recordId}`;
+    expect(await serviceA.get({ teacherId: TEACHERS[0], eventId: own.value.capture.id })).toMatchObject({
+      ok: true,
+      value: { candidate: { confirmedRecordId: confirmed.value.recordId, confirmedRecord: null } },
+    });
+  });
+
   it('删除 claim 后进程中断，租约过期时由重启服务恢复并可完成重试', async () => {
     const created = await createCaptureService({ prisma, cipher }).createText({
       teacherId: TEACHERS[0], clientRequestId: 'capture-delete-crash-0001', text: '崩溃恢复后删除',
@@ -335,6 +486,7 @@ function createServiceWithoutEnvironmentKey() {
 
 async function cleanup() {
   const teacherId = { in: TEACHERS };
+  await prisma.changeLog.deleteMany({ where: { teacherId } });
   await prisma.studentRecord.deleteMany({ where: { teacherId } });
   await prisma.studentSourceRecord.deleteMany({ where: { teacherId } });
   await prisma.student.deleteMany({ where: { teacherId } });

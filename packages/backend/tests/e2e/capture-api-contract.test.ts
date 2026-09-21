@@ -9,7 +9,7 @@ const CAPTURE = {
   occurredAt: new Date('2030-01-01T00:00:00.000Z'), createdAt: new Date('2030-01-01T00:00:00.000Z'),
   confirmedRecordId: null,
   task: { id: 'task-1', status: 'completed', processorVersion: 'text-verbatim-v1' },
-  candidate: { id: 'candidate-1', candidateType: 'verbatim_note' as const, payload: { text: '课前小测' }, reviewStatus: 'pending' as const, confidence: null, confirmedRecordId: null, version: 1, originalPayload: { text: '课前小测' } },
+  candidate: { id: 'candidate-1', candidateType: 'verbatim_note' as const, payload: { text: '课前小测' }, reviewStatus: 'pending' as const, confidence: null, confirmedRecordId: null, confirmedRecord: null, version: 1, originalPayload: { text: '课前小测' } },
 };
 const captureView = { ...CAPTURE, candidates: [CAPTURE.candidate] };
 function app(capture: CaptureService) {
