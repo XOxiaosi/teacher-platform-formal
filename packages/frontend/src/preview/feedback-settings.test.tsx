@@ -23,6 +23,12 @@ function Harness({ empty = true, generator = false }: { empty?: boolean; generat
   return <><FeedbackPage actions={actions} />{dialog && <div role="dialog">{dialog}</div>}</>;
 }
 
+function EvidenceHarness({ loadSnapshot }: { loadSnapshot: () => Promise<unknown> }) {
+  const [dialog, setDialog] = useState<ReactNode>(null);
+  const actions: PreviewActions = { data: createDemoData(), setData: vi.fn(), ui: {}, setUi: vi.fn(), open: (_title, body) => setDialog(body), toast: vi.fn(), close: () => setDialog(null), complete: vi.fn(), saveSchedule: vi.fn(), cancelSchedule: vi.fn(), saveRule: vi.fn(), replaceRuleFrom: vi.fn(), setRuleEnabled: vi.fn(), addPayment: vi.fn(), viewFeedbackSnapshot: loadSnapshot as PreviewActions['viewFeedbackSnapshot'] };
+  return <><FeedbackPage actions={actions} />{dialog && <div role="dialog">{dialog}</div>}</>;
+}
+
 describe('feedback settings', () => {
   it('offers an empty-state entry and saves a trimmed feedback for a selected student', () => {
     render(<Harness />);
@@ -62,5 +68,18 @@ describe('feedback settings', () => {
     fireEvent.click(screen.getByRole('button', { name: '根据教学记录生成反馈' }));
     await screen.findByLabelText('反馈生成依据');
     expect(generateDraft).toHaveBeenCalledWith({ studentId: 's2', recordIds: ['record-1'] });
+  });
+
+  it('opens the saved evidence snapshot so the teacher can review the source', async () => {
+    const loadSnapshot = vi.fn().mockResolvedValue({
+      feedbackId: 'f1', windowStart: '2026-09-01T00:00:00Z', windowEnd: '2026-09-02T00:00:00Z', assembledAt: '2026-09-02T08:00:00Z',
+      evidence: [{ id: 'record-1', type: 'record' as const, occurredAt: '2026-09-01T08:00:00Z', category: 'lesson_observation', summary: '主动验算', examName: null, subject: '数学', score: null, fullScore: null, previousScore: null }],
+    });
+    render(<EvidenceHarness loadSnapshot={loadSnapshot} />);
+    fireEvent.click(screen.getByRole('button', { name: '查看依据' }));
+    expect(await screen.findByRole('list', { name: '反馈依据列表' })).toBeInTheDocument();
+    expect(screen.getByText('主动验算')).toBeInTheDocument();
+    expect(screen.getByText(/科目：数学/)).toBeInTheDocument();
+    expect(loadSnapshot).toHaveBeenCalledTimes(1);
   });
 });

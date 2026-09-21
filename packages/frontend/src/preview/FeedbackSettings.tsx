@@ -1,5 +1,5 @@
-import { FormEvent, useState } from 'react';
-import { PreviewActions, studentName, type FeedbackSaveInput, type GenerateFeedbackDraftResult } from './PreviewApp';
+import { FormEvent, useEffect, useState } from 'react';
+import { PreviewActions, studentName, type FeedbackEvidenceItem, type FeedbackSaveInput, type FeedbackSnapshot, type GenerateFeedbackDraftResult } from './PreviewApp';
 import { Feedback, today } from './data';
 import { usePreviewState } from './ui-state';
 import './feedback.css';
@@ -34,7 +34,31 @@ export function FeedbackPage({ actions }: { actions: PreviewActions }) {
       actions.toast('未能复制，请选中草稿文字手动复制。', 'warn');
     }
   };
-  return <section className="page preview-page"><header className="page-header"><div><h1>家长反馈</h1><p>整理反馈草稿，编辑完成后复制使用。</p></div><Button onClick={create}>新建反馈</Button></header><div className="feedback-list">{actions.data.feedbacks.length ? actions.data.feedbacks.map((feedback) => <Card className="white-card" key={feedback.id}><CardContent><div className="feedback-meta"><div><h2>{feedback.title}</h2><p>{studentName(actions.data, feedback.studentId)} · {feedback.status || '草稿'} · <time dateTime={feedback.updatedAt}>{formatDate(feedback.updatedAt)}</time></p></div><Badge variant="secondary">{feedback.status || '草稿'}</Badge></div><p className="feedback-body">{feedback.content}</p><div className="button-row">{feedback.status !== '已发送' && <Button variant="outline" size="sm" onClick={() => edit(feedback)}>编辑草稿</Button>}<Button variant="outline" size="sm" onClick={() => copy(feedback)}>复制草稿</Button></div></CardContent></Card>) : <Card className="white-card feedback-empty"><CardContent><h2>还没有反馈草稿</h2><p>选择一名学生，开始整理一份反馈。</p><Button onClick={create}>新建反馈</Button></CardContent></Card>}</div></section>;
+  const viewEvidence = (feedback: Feedback) => {
+    if (!actions.viewFeedbackSnapshot) return;
+    actions.open('反馈依据', <FeedbackEvidencePanel feedback={feedback} loadSnapshot={() => actions.viewFeedbackSnapshot!(feedback.id)} />);
+  };
+  return <section className="page preview-page"><header className="page-header"><div><h1>家长反馈</h1><p>整理反馈草稿，编辑完成后复制使用。</p></div><Button onClick={create}>新建反馈</Button></header><div className="feedback-list">{actions.data.feedbacks.length ? actions.data.feedbacks.map((feedback) => <Card className="white-card" key={feedback.id}><CardContent><div className="feedback-meta"><div><h2>{feedback.title}</h2><p>{studentName(actions.data, feedback.studentId)} · {feedback.status || '草稿'} · <time dateTime={feedback.updatedAt}>{formatDate(feedback.updatedAt)}</time></p></div><Badge variant="secondary">{feedback.status || '草稿'}</Badge></div><p className="feedback-body">{feedback.content}</p><div className="button-row">{actions.viewFeedbackSnapshot && <Button variant="outline" size="sm" onClick={() => viewEvidence(feedback)}>查看依据</Button>}{feedback.status !== '已发送' && <Button variant="outline" size="sm" onClick={() => edit(feedback)}>编辑草稿</Button>}<Button variant="outline" size="sm" onClick={() => copy(feedback)}>复制草稿</Button></div></CardContent></Card>) : <Card className="white-card feedback-empty"><CardContent><h2>还没有反馈草稿</h2><p>选择一名学生，开始整理一份反馈。</p><Button onClick={create}>新建反馈</Button></CardContent></Card>}</div></section>;
+}
+
+function FeedbackEvidencePanel({ feedback, loadSnapshot }: { feedback: Feedback; loadSnapshot: () => Promise<FeedbackSnapshot> }) {
+  const [snapshot, setSnapshot] = useState<FeedbackSnapshot | null>(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let active = true;
+    void loadSnapshot().then((result) => { if (active) setSnapshot(result); }).catch((failure: unknown) => {
+      if (active) setError(failure instanceof Error ? failure.message : '依据加载失败，请稍后重试。');
+    });
+    return () => { active = false; };
+  }, [loadSnapshot]);
+  if (error) return <p className="form-error" role="alert">{error}</p>;
+  if (!snapshot) return <p role="status">正在加载反馈依据…</p>;
+  return <div className="feedback-evidence-panel"><p className="form-hint">{feedback.title} · 组装于 {formatDate(snapshot.assembledAt)}{snapshot.windowStart && snapshot.windowEnd ? ` · 范围 ${formatDate(snapshot.windowStart)} 至 ${formatDate(snapshot.windowEnd)}` : ''}</p>{snapshot.evidence.length ? <ul aria-label="反馈依据列表">{snapshot.evidence.map((item) => <EvidenceItem key={`${item.id}-${item.sourceVersion || ''}`} item={item} />)}</ul> : <p>这份反馈没有保存可回看的依据快照。</p>}</div>;
+}
+
+function EvidenceItem({ item }: { item: FeedbackEvidenceItem }) {
+  const sourceLabel = item.type === 'assessment' ? '测评' : item.type === 'lesson' ? '课程' : '教学记录';
+  return <li><div><Badge variant="outline">{sourceLabel}</Badge><time dateTime={item.occurredAt}>{formatDate(item.occurredAt)}</time>{item.originalDeleted && <Badge variant="secondary">原始材料已删除</Badge>}</div><p>{item.summary || '未保存摘要'}</p>{item.subject && <small>科目：{item.subject}</small>}</li>;
 }
 
 function FeedbackForm({ feedback, actions, initialStudentId, sourceRecordId }: { feedback?: Feedback; actions: PreviewActions; initialStudentId?: string; sourceRecordId?: string }) {

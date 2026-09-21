@@ -51,6 +51,13 @@ export type FeedbackSaveInput = {
   windowStart?: string;
   windowEnd?: string;
 };
+export type FeedbackSnapshot = {
+  feedbackId: string;
+  windowStart: string | null;
+  windowEnd: string | null;
+  assembledAt: string;
+  evidence: FeedbackEvidenceItem[];
+};
 export type PreviewActions = {
   connected?: boolean;
   saveStudent?: (name: string, grade: string, id?: string) => Promise<void>;
@@ -59,6 +66,7 @@ export type PreviewActions = {
   toggleMemo?: (id: string, done: boolean) => Promise<void>;
   generateFeedbackDraft?: (input: GenerateFeedbackDraftRequest) => Promise<GenerateFeedbackDraftResult>;
   saveFeedback?: (feedback: FeedbackSaveInput) => Promise<void>;
+  viewFeedbackSnapshot?: (feedbackId: string) => Promise<FeedbackSnapshot>;
   savePreferences?: (changes: { studioName?: string; modelChoice?: string; wechatChannel?: string }) => Promise<void>;
   ui?: Record<string, unknown>; setUi?: React.Dispatch<React.SetStateAction<Record<string, unknown>>>;
   data: DemoData; setData: React.Dispatch<React.SetStateAction<DemoData>>; open: (title: string, body: ReactNode) => void; toast: (text: string, kind?: 'warn' | 'ok') => void;
