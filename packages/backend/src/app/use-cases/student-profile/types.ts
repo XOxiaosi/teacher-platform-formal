@@ -12,6 +12,8 @@ export interface StudentProfileInput {
 export interface LessonBalance {
   purchased: number;
   attended: number;
+  /** 退款、赠课、手动调整等账本流水的净课时变化。 */
+  adjustments: number;
   remaining: number;
 }
 

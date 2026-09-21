@@ -410,7 +410,7 @@ describe('API 核心教师工作流端到端', () => {
     expect(profileResponse.status).toBe(200);
     expect(profileResponse.body.ok).toBe(true);
     expect(profileResponse.body.data.student.id).toBe(studentId);
-    expect(profileResponse.body.data.lessonBalance).toEqual({ purchased: 10, attended: 1, remaining: 9 });
+    expect(profileResponse.body.data.lessonBalance).toEqual({ purchased: 10, attended: 1, adjustments: 0, remaining: 9 });
 
     const reviewResponse = await api('POST', '/api/v1/daily-review/assemble', {
       date: '2030-05-02',
