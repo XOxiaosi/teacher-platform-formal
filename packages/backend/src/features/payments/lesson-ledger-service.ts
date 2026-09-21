@@ -39,6 +39,13 @@ export function createLessonLedgerService(
   return {
     async listEntries(input: { teacherId: string; studentId?: string; from?: Date; to?: Date }) {
       const { prisma } = await client();
+      if (input.studentId) {
+        const student = await prisma.student.findFirst({
+          where: { id: input.studentId, teacherId: input.teacherId },
+          select: { id: true },
+        });
+        if (!student) return err(notFound('学生不存在'));
+      }
       const rows = await prisma.lessonLedgerEntry.findMany({
         where: { teacherId: input.teacherId, ...(input.studentId ? { studentId: input.studentId } : {}), ...(input.from || input.to ? { createdAtTs: { ...(input.from ? { gte: input.from } : {}), ...(input.to ? { lte: input.to } : {}) } } : {}) },
         orderBy: { createdAtTs: 'desc' },

@@ -26,4 +26,11 @@ describe('student detail record panel slot', () => {
     view.rerender(<StudentPages actions={actions()} studentId="s1" recordPanel={renderPanel} />);
     expect(screen.getByText('正式记录 s1')).toBeInTheDocument(); expect(screen.queryByText('正式记录 s2')).not.toBeInTheDocument();
   });
+  it('uses the connected ledger slot instead of preview completion records', () => {
+    const renderLedger = vi.fn((studentId: string) => <section>权威课时流水 {studentId}</section>);
+    render(<StudentPages actions={actions()} studentId="s1" ledgerPanel={renderLedger} />);
+    expect(screen.getByText('权威课时流水 s1')).toBeInTheDocument();
+    expect(screen.queryByText(/完成课时记录/)).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '历史完成' })).toBeInTheDocument();
+  });
 });

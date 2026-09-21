@@ -33,5 +33,17 @@ export function createPaymentRouter(dependencies: PaymentRouteDependencies): Rou
     sendResult(res, result, 201);
   });
 
+  router.get('/lesson-ledger/entries', async (req, res) => {
+    const teacher = getTeacherId(req);
+    if (!teacher.ok) return sendTeacherError(res, teacher.error);
+    const result = await dependencies.ledger.listEntries({
+      teacherId: teacher.value,
+      studentId: typeof req.query.studentId === 'string' ? req.query.studentId : undefined,
+      from: parseDate(req.query.from),
+      to: parseDate(req.query.to),
+    });
+    sendResult(res, result);
+  });
+
   return router;
 }

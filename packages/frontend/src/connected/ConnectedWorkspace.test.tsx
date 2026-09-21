@@ -3,17 +3,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConnectedWorkspace } from './ConnectedWorkspace';
 import { createDemoData } from '../preview/data';
 
-const mock = vi.hoisted(() => ({ availability: vi.fn(), load: vi.fn(), command: vi.fn(), schedule: vi.fn(), payment: vi.fn(), update: vi.fn(), logout: vi.fn(), records: vi.fn(), generate: vi.fn(), createFeedback: vi.fn(), updateFeedback: vi.fn(), feedbackSnapshot: vi.fn(), createDraftTask: vi.fn(), listDraftTasks: vi.fn(), getDraftTask: vi.fn(), retryDraftTask: vi.fn(), updateDraftTask: vi.fn() }));
+const mock = vi.hoisted(() => ({ availability: vi.fn(), load: vi.fn(), command: vi.fn(), schedule: vi.fn(), payment: vi.fn(), balance: vi.fn(), ledger: vi.fn(), update: vi.fn(), logout: vi.fn(), records: vi.fn(), generate: vi.fn(), createFeedback: vi.fn(), updateFeedback: vi.fn(), feedbackSnapshot: vi.fn(), createDraftTask: vi.fn(), listDraftTasks: vi.fn(), getDraftTask: vi.fn(), retryDraftTask: vi.fn(), updateDraftTask: vi.fn() }));
 vi.mock('../app/teacher-context', () => ({ useAuth: () => ({ teacherId: 'teacher-a', displayName: '验收老师', email: 'a@example.test', logout: mock.logout }) }));
 vi.mock('./workspace-api', () => ({ loadWorkspace: mock.load, workspaceCommand: mock.command, schedulingCommand: mock.schedule }));
-vi.mock('../api/payments', () => ({ createPayment: mock.payment }));
-vi.mock('../api/students', () => ({ updateStudentProfile: mock.update, listStudentRecords: mock.records, reviewStudentRecord: vi.fn(), getStudentRecordSource: vi.fn() }));
+vi.mock('../api/payments', () => ({ createPayment: mock.payment, listLessonLedgerEntries: mock.ledger }));
+vi.mock('../api/students', () => ({ updateStudentProfile: mock.update, getStudentBalance: mock.balance, listStudentRecords: mock.records, reviewStudentRecord: vi.fn(), getStudentRecordSource: vi.fn() }));
 vi.mock('../api/feedback', () => ({ generateFeedbackDraft: mock.generate, createFeedback: mock.createFeedback, getFeedbackSnapshot: mock.feedbackSnapshot, updateFeedbackContent: mock.updateFeedback, createFeedbackDraftTask: mock.createDraftTask, listFeedbackDraftTasks: mock.listDraftTasks, getFeedbackDraftTask: mock.getDraftTask, retryFeedbackDraftTask: mock.retryDraftTask, updateFeedbackDraftTask: mock.updateDraftTask }));
 vi.mock('../api/teaching-tasks', () => ({ getTeachingRuntimeAvailability: mock.availability }));
 vi.mock('../connected/assistant', () => ({ AssistantWorkspace: ({ teacherId }: { teacherId: string }) => <section aria-label="正式教学助手入口"><h1>教学助手</h1><p>当前账号：{teacherId}</p></section> }));
 
 const snapshot = () => ({ data: createDemoData(), studentVersions: { s1: 'v1', s2: 'v2' }, feedbackVersions: {}, memoVersions: { m1: 'm1-v1' }, preferenceVersion: null });
-beforeEach(() => { vi.clearAllMocks(); mock.availability.mockResolvedValue({ runtimeAvailability: 'unavailable' }); location.hash = '#/students'; mock.load.mockResolvedValue(snapshot()); mock.command.mockResolvedValue({}); mock.schedule.mockResolvedValue({}); mock.listDraftTasks.mockResolvedValue({ items: [] }); });
+beforeEach(() => { vi.clearAllMocks(); mock.availability.mockResolvedValue({ runtimeAvailability: 'unavailable' }); location.hash = '#/students'; mock.load.mockResolvedValue(snapshot()); mock.command.mockResolvedValue({}); mock.schedule.mockResolvedValue({}); mock.balance.mockResolvedValue({ purchased: 8, attended: 1, adjustments: 2, remaining: 9 }); mock.ledger.mockResolvedValue([]); mock.listDraftTasks.mockResolvedValue({ items: [] }); });
 
 describe('connected workspace server-backed writes', () => {
   it('connects feedback generation to an explicit save with evidence and request receipt', async () => {
@@ -49,6 +49,32 @@ describe('connected workspace server-backed writes', () => {
     fireEvent.keyDown(screen.getByRole('button', { name: '账号菜单' }), { key: 'Enter' });
     fireEvent.click(await screen.findByRole('menuitem', { name: '刷新资料' }));
     await waitFor(() => expect(mock.records.mock.calls.length).toBeGreaterThan(before));
+  });
+  it('mounts the authoritative balance and ledger only on the formal student detail', async () => {
+    location.hash = '#/students/s1';
+    mock.records.mockResolvedValue({ items: [], total: 0 });
+    mock.balance.mockResolvedValue({ purchased: 8, attended: 1, adjustments: 2, remaining: 9 });
+    mock.ledger.mockResolvedValue([{
+      id: 'ledger-gift-1', teacherId: 'teacher-a', studentId: 's1', entryType: 'gift',
+      lessonDelta: 2, amount: null, reason: '续课赠送', paymentId: null, lessonId: null,
+      adjustmentConfirmationId: 'confirmation-1', clientRequestId: 'gift-1', createdAt: '2026-09-20T01:00:00.000Z',
+    }]);
+    render(<ConnectedWorkspace />);
+    const ledger = await screen.findByRole('region', { name: '学生课时账户' });
+    expect(ledger).toHaveTextContent('已购课时8');
+    expect(ledger).toHaveTextContent('调整课时+2');
+    expect(ledger).toHaveTextContent('当前剩余9课时');
+    expect(ledger).toHaveTextContent('赠课');
+    expect(ledger).toHaveTextContent('续课赠送');
+    expect(mock.balance).toHaveBeenCalledWith('teacher-a', 's1');
+    expect(mock.ledger).toHaveBeenCalledWith('teacher-a', { studentId: 's1' });
+    expect(screen.queryByText(/完成课时记录/)).not.toBeInTheDocument();
+
+    const before = mock.ledger.mock.calls.length;
+    mock.load.mockResolvedValue(snapshot());
+    fireEvent.keyDown(screen.getByRole('button', { name: '账号菜单' }), { key: 'Enter' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: '刷新资料' }));
+    await waitFor(() => expect(mock.ledger.mock.calls.length).toBeGreaterThan(before));
   });
   it.each([
     ['available', '教学 AI 已启用'], ['unavailable', '服务暂不可用'], ['test_only', '真实模型未启用'],

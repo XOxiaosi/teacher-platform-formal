@@ -166,8 +166,8 @@ describe('P3 余额与课时流水认证只读 HTTP 合成闭环', () => {
       .set('Cookie', cookieB);
     expect(crossBalance.status).toBe(404);
     expect(crossBalance.body).toEqual({ ok: false, error: { code: 'NOT_FOUND', message: '学生不存在' } });
-    expect(crossEntries.status).toBe(200);
-    expect(crossEntries.body).toEqual({ ok: true, data: [] });
+    expect(crossEntries.status).toBe(404);
+    expect(crossEntries.body).toEqual({ ok: false, error: { code: 'NOT_FOUND', message: '学生不存在' } });
 
     const repeatedReads = await Promise.all(Array.from({ length: 3 }, () => Promise.all([
       request(app).get(`/api/v1/students/${studentA.id}/balance`).set('Cookie', cookieA),

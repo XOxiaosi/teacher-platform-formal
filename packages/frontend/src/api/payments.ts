@@ -5,6 +5,7 @@ import type {
   ListResult,
   PaymentChanges,
   PaymentData,
+  LessonLedgerEntryData,
 } from './types';
 
 export interface CreatePaymentRequest {
@@ -13,6 +14,11 @@ export interface CreatePaymentRequest {
   lessonCount: number;
   paidAt: string;
   note?: string;
+}
+
+export function listLessonLedgerEntries(teacherId: string, params: { studentId?: string } = {}): Promise<LessonLedgerEntryData[]> {
+  const query = params.studentId ? `?studentId=${encodeURIComponent(params.studentId)}` : '';
+  return apiRequest(`/lesson-ledger/entries${query}`, { teacherId });
 }
 
 export function listPayments(teacherId: string): Promise<ListResult<PaymentData>> {
