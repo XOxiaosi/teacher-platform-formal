@@ -1,38 +1,44 @@
 import { randomBytes } from 'node:crypto';
 import request from 'supertest';
 import { afterAll, describe, expect, it } from 'vitest';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { ok } from '@teacher-platform/contracts';
 import { createApp } from '../../src/index.js';
 import { createCoreRouteDependencies } from '../../src/app/composition/core-route-dependencies.js';
 import { createAssembleParentFeedbackContextUseCase } from '../../src/app/use-cases/assemble-parent-feedback-context/assemble-parent-feedback-context-use-case.js';
 import { createGenerateFeedbackDraftUseCase } from '../../src/app/use-cases/generate-feedback-draft/generate-feedback-draft-use-case.js';
-import { createFieldCipherFromEnv, encryptFieldValue } from '../../src/shared/field-encryption/index.js';
+import { createFieldCipherFromEnv, encryptFieldValue, encryptJsonFieldValue } from '../../src/shared/field-encryption/index.js';
 import type { AiClient, ChatMessage, ChatToolDefinition } from '../../src/shared/ai-client/types.js';
 import { acceptInvitation } from '../helpers/invitations.js';
 
 const prisma = new PrismaClient();
 const cipher = createFieldCipherFromEnv();
-const baseDependencies = createCoreRouteDependencies(prisma, { localSafeMode: true });
-const context = createAssembleParentFeedbackContextUseCase({ prisma, cipher });
-const generator = createGenerateFeedbackDraftUseCase({
-  prisma,
-  cipher,
-  context,
-  aiClient: {
-    run: async () => ok({}),
-    chat: async (_messages: ChatMessage[], _tools: ChatToolDefinition[]) => ok({
-      content: '标题：本次课堂的主动验算\n内容：本次课小雨独立完成三道计算题，并主动检查了每一步。接下来继续练习验算。\n所以这样写：用具体课堂行为让家长看见可延续的进展。',
-    }),
-  } as unknown as AiClient,
-});
-const app = createApp(prisma, {
-  localSafeMode: true,
-  coreDependencies: {
-    ...baseDependencies,
-    feedback: { ...baseDependencies.feedback, generateFeedbackDraft: generator },
-  },
-});
+
+/** 新服务上下文必须重新装配依赖；不能仅复用原 app 对象模拟重启。 */
+function createTestApp(client: PrismaClient) {
+  const baseDependencies = createCoreRouteDependencies(client, { localSafeMode: true });
+  const context = createAssembleParentFeedbackContextUseCase({ prisma: client, cipher });
+  const generator = createGenerateFeedbackDraftUseCase({
+    prisma: client,
+    cipher,
+    context,
+    aiClient: {
+      run: async () => ok({}),
+      chat: async (_messages: ChatMessage[], _tools: ChatToolDefinition[]) => ok({
+        content: '标题：本次课堂的主动验算\n内容：本次课小雨独立完成三道计算题，并主动检查了每一步。接下来继续练习验算。\n所以这样写：用具体课堂行为让家长看见可延续的进展。',
+      }),
+    } as unknown as AiClient,
+  });
+  return createApp(client, {
+    localSafeMode: true,
+    coreDependencies: {
+      ...baseDependencies,
+      feedback: { ...baseDependencies.feedback, generateFeedbackDraft: generator },
+    },
+  });
+}
+
+const app = createTestApp(prisma);
 
 const teacherIds: string[] = [];
 const studentIds: string[] = [];
@@ -234,6 +240,38 @@ describe('A06 反馈正式认证 HTTP 合成闭环', () => {
     expect(await prisma.studentRecord.findUniqueOrThrow({ where: { id: recordId } }))
       .toMatchObject({ reviewStatus: 'confirmed', visibility: 'parent_shareable' });
 
+    // 新 PrismaClient + 新 createApp 模拟服务重启；认证 cookie 来自持久 session，不依赖原 app 内存。
+    const restartedPrisma = new PrismaClient();
+    try {
+      const restartedApp = createTestApp(restartedPrisma);
+      const restored = await request(restartedApp)
+        .get(`/api/v1/captures/${captureId}`)
+        .set('Cookie', cookie);
+      expect(restored.status).toBe(200);
+      expect(restored.body.data.candidate.confirmedRecord).toMatchObject({
+        id: recordId,
+        studentId,
+        reviewStatus: 'confirmed',
+        visibility: 'parent_shareable',
+        updatedAt: expect.any(String),
+      });
+
+      const listed = await request(restartedApp)
+        .get('/api/v1/captures')
+        .set('Cookie', cookie);
+      expect(listed.status).toBe(200);
+      const listedCapture = listed.body.data.items.find((item: { id: string }) => item.id === captureId);
+      expect(listedCapture?.candidate.confirmedRecord).toMatchObject({
+        id: recordId,
+        studentId,
+        reviewStatus: 'confirmed',
+        visibility: 'parent_shareable',
+        updatedAt: expect.any(String),
+      });
+    } finally {
+      await restartedPrisma.$disconnect();
+    }
+
     const generated = await request(app)
       .post('/api/v1/feedback/generate-draft')
       .set('Cookie', cookie)
@@ -267,5 +305,72 @@ describe('A06 反馈正式认证 HTTP 合成闭环', () => {
     expect(snapshot.body.data.evidence).toEqual([
       expect.objectContaining({ id: recordId, summary: expect.stringContaining('主动检查') }),
     ]);
+
+    // 记录由服务端变更后，重新装配的 HTTP 上下文必须立刻反映正式状态，且停止作为家长反馈依据。
+    const serverUpdated = await prisma.studentRecord.update({
+      where: { id: recordId },
+      data: { reviewStatus: 'superseded', visibility: 'internal_only' },
+    });
+    const stateChangedPrisma = new PrismaClient();
+    try {
+      const stateChangedApp = createTestApp(stateChangedPrisma);
+      const stateChanged = await request(stateChangedApp)
+        .get(`/api/v1/captures/${captureId}`)
+        .set('Cookie', cookie);
+      expect(stateChanged.status).toBe(200);
+      expect(stateChanged.body.data.candidate.confirmedRecord).toMatchObject({
+        id: recordId,
+        studentId,
+        reviewStatus: 'superseded',
+        visibility: 'internal_only',
+        updatedAt: serverUpdated.updatedAtTs.toISOString(),
+      });
+
+      const stateChangedList = await request(stateChangedApp)
+        .get('/api/v1/captures')
+        .set('Cookie', cookie);
+      expect(stateChangedList.status).toBe(200);
+      const stateChangedListedCapture = stateChangedList.body.data.items.find((item: { id: string }) => item.id === captureId);
+      expect(stateChangedListedCapture?.candidate.confirmedRecord).toMatchObject({
+        id: recordId,
+        studentId,
+        reviewStatus: 'superseded',
+        visibility: 'internal_only',
+        updatedAt: serverUpdated.updatedAtTs.toISOString(),
+      });
+
+      const blocked = await request(stateChangedApp)
+        .post('/api/v1/feedback/generate-draft')
+        .set('Cookie', cookie)
+        .send({ studentId, recordIds: [recordId], focus: 'highlight' });
+      expect(blocked.status).toBe(404);
+      expect(blocked.body.error).toMatchObject({ code: 'NOT_FOUND' });
+    } finally {
+      await stateChangedPrisma.$disconnect();
+    }
+
+    // 即使记录恢复为可分享状态，损坏的 capture source 绑定也不能被投影为已确认正式记录。
+    await prisma.studentRecord.update({
+      where: { id: recordId },
+      data: {
+        reviewStatus: 'confirmed',
+        visibility: 'parent_shareable',
+        structuredData: encryptJsonFieldValue(cipher, {
+          captureEventId: captureId,
+          captureCandidateId: 'mismatched-candidate',
+        }) as Prisma.InputJsonValue,
+      },
+    });
+    const corruptedSourcePrisma = new PrismaClient();
+    try {
+      const corruptedSourceApp = createTestApp(corruptedSourcePrisma);
+      const corruptedSource = await request(corruptedSourceApp)
+        .get(`/api/v1/captures/${captureId}`)
+        .set('Cookie', cookie);
+      expect(corruptedSource.status).toBe(200);
+      expect(corruptedSource.body.data.candidate.confirmedRecord).toBeNull();
+    } finally {
+      await corruptedSourcePrisma.$disconnect();
+    }
   });
 });

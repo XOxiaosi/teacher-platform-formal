@@ -1,6 +1,6 @@
 # A06 / P2：反馈正式入口与合成业务任务验收证据
 
-日期：2026-09-16（洛杉矶）
+初始日期：2026-09-16；最近复核：2026-09-21（洛杉矶）
 
 本记录把 P2 首个完整示例的本地合成证据集中到同一处：
 “整理小雨今天的上课记录，核对课时，再写给家长的反馈”。合成资料、mock AI 和本地 Vite 页面均不代表真实模型、真实教师资料或正式发送。
@@ -15,6 +15,7 @@
 | 保存可重放且不重复归档/写入 | `packages/backend/tests/e2e/a05-feedback-draft-save-workflow.test.ts` | 通过；同一请求编号返回原回执，数据库仅一条反馈 |
 | 反馈与发送分离 | `packages/backend/tests/e2e/a05-feedback-draft-save-workflow.test.ts`、`a06-auth-http-browser.log` | 通过；保存/核对后 `sentAt=null`，浏览器复制只提示教师自行发送 |
 | 离页后仍能继续编辑未保存草稿 | `packages/frontend/src/prototype-v009/App.test.tsx`、`a06-browser-feedback.log` | 通过本地原型回归和 375×844 浏览器任务；草稿保存在当前浏览器会话 |
+| 捕获确认结果可在新服务上下文回看 | `packages/backend/tests/e2e/a06-feedback-http-workflow.test.ts` | 通过；新 `PrismaClient` 与新 Express 应用复用数据库会话，详情和列表均恢复正式记录投影；服务端状态变化立即生效，损坏来源关闭投影 |
 
 ## 正式入口契约补充
 
@@ -37,6 +38,10 @@
 
 首次在新增路由契约之后运行完整 `npm run check` 时，后端 322 个文件中 321 个通过、2782 个测试中 2781 个通过；唯一失败是 `tests/e2e/teaching-tasks.routes.test.ts` 的一次 `socket hang up`。随后用同一隔离 PostgreSQL 17 harness 单独重跑该文件，5/5 通过，原始日志为 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/teaching-tasks-rerun-11.log`。第二次完整 Gate 已退出 0，最终日志为 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/check-12-a06-final.log`：后端 322/2782、前端 47/296、管理端 13/84 全部通过，运维 149/151 通过且 2 项 Windows 专属跳过。加入认证 HTTP 合成闭环后再次执行的 Gate 为 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/check-13-a06-auth-http.log`，后端 323/2783、前端 47/296、管理端 13/84 全部通过，运维仍为 149/151 通过且 2 项 Windows 专属跳过。加入认证浏览器窄视口证据后，代码冻结的最终 Gate 为 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/check-14-a06-browser-final.log`，后端 323/2783、前端 47/296、管理端 13/84 全部通过，运维 149/151 通过且 2 项 Windows 专属跳过。
 
+2026-09-21 跨服务上下文复核完成后再次运行根 `npm run check`，命令退出 0：治理 25、后端 329 文件/2857 测试、前端 56 文件/388 测试、管理端 13 文件/84 测试全部通过；运维 152 项中 150 通过，2 项仅 Windows 可执行而按平台跳过。类型、lint、41 个迁移和生产构建均通过，短生命周期 PostgreSQL 17 已正常关闭并清理。
+
 ## 认证 HTTP 合成闭环
 
-`packages/backend/tests/e2e/a06-feedback-http-workflow.test.ts` 在隔离 PostgreSQL 17 harness 下 1/1 通过（`/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/a06-feedback-http-workflow.log`）。用例通过真实邀请认证 cookie 进入正式 Express 应用，依次调用生成草稿、明确保存、同请求编号重放和依据快照；生成后 `ParentFeedback` 为 0，保存后只产生一条 `draft` 且 `sentAt=null`。测试通过 `CreateAppOptions.coreDependencies` 注入合成 mock AI，未启用外部供应商。
+`packages/backend/tests/e2e/a06-feedback-http-workflow.test.ts` 在隔离 PostgreSQL 17 harness 下现为 2/2 通过。用例通过合成邀请认证 cookie 进入正式 Express 应用，依次调用生成草稿、明确保存、同请求编号重放和依据快照；生成后 `ParentFeedback` 为 0，保存后只产生一条 `draft` 且 `sentAt=null`。测试通过 `CreateAppOptions.coreDependencies` 注入合成 mock AI，未启用外部供应商。2026-09-16 的初始 1/1 日志仍保存在 `/Users/xiaosi/Developer/artifacts/teacher-platform-formal/V009-next-20260916/a06-feedback-http-workflow.log`。
+
+2026-09-21 的复核在新的 `PrismaClient` 与新的 `createApp` 上下文中复用数据库持久会话，正式调用 `GET /captures/:eventId` 与 `GET /captures`，两处都恢复 `id`、`studentId`、`reviewStatus`、`visibility` 和 `updatedAt`。正式记录从 `confirmed + parent_shareable` 变为 `superseded + internal_only` 后，两处读取立即反映新状态，指定该记录生成反馈返回 `404 NOT_FOUND`；随后人为损坏捕获来源绑定，详情仍返回 200，但 `confirmedRecord` 严格为 `null`。确认重放、反馈生成、保存重放和依据快照的原有断言全部保留。本轮仅使用短生命周期 PostgreSQL 17、合成教师/学生及 mock AI；41 个迁移执行完成，临时集群已清理。
