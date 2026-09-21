@@ -116,6 +116,11 @@ export function CandidateCard({ teacherId, item, captureId, students, onChange }
       </div>
     </>}
     {(current.confirmedRecordId || draft.confirmedRecordId) && <p>已保存正式记录，可在学生档案中回看。</p>}
+    {(draft.confirmedRecordId && draft.studentId) && <p className="button-row">
+      <a className="button secondary" href={`#/feedback?studentId=${encodeURIComponent(draft.studentId)}&recordId=${encodeURIComponent(draft.confirmedRecordId)}`}>
+        基于这条记录整理家长反馈
+      </a>
+    </p>}
     <p className="assistant-hint">未保存的核对输入暂存在当前浏览器会话中，退出账号后清除。</p>
     {error && <p role="alert">{error}</p>}
   </article>;

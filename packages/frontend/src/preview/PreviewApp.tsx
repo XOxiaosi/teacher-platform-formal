@@ -25,6 +25,7 @@ export type FeedbackEvidenceItem = {
 export type GenerateFeedbackDraftRequest = {
   studentId: string;
   lessonIds?: string[];
+  recordIds?: string[];
   tone?: 'formal' | 'warm' | 'concise';
   classSize?: '1v1' | 'small' | 'large';
   parentType?: 'normal' | 'scores' | 'sensitive';

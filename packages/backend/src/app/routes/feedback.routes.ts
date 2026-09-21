@@ -112,6 +112,7 @@ export function createFeedbackRouter(dependencies: FeedbackGenerateRouteDependen
       teacherId: teacher.value,
       studentId: parsed.value.studentId,
       lessonIds: parsed.value.lessonIds,
+      recordIds: parsed.value.recordIds,
       tone: parsed.value.tone,
       classSize: parsed.value.classSize,
       parentType: parsed.value.parentType,
@@ -269,6 +270,7 @@ function parseBody(body: unknown): Result<
   {
     studentId: string;
     lessonIds?: string[];
+    recordIds?: string[];
     tone?: FeedbackDraftTone;
     classSize?: FeedbackClassSize;
     parentType?: FeedbackParentType;
@@ -287,6 +289,17 @@ function parseBody(body: unknown): Result<
   if (lessonIds !== undefined) {
     if (!Array.isArray(lessonIds) || lessonIds.some((id) => typeof id !== 'string')) {
       return { ok: false, error: validationError('lessonIds 必须是字符串数组', 'lessonIds') };
+    }
+  }
+
+  const recordIds = record.recordIds;
+  if (recordIds !== undefined) {
+    if (!Array.isArray(recordIds) || recordIds.length === 0 || recordIds.some((id) => typeof id !== 'string' || id.trim() === '')
+      || new Set(recordIds).size !== recordIds.length) {
+      return { ok: false, error: validationError('recordIds 必须是非空且不重复的字符串数组', 'recordIds') };
+    }
+    if (lessonIds !== undefined) {
+      return { ok: false, error: validationError('recordIds 不能与 lessonIds 同时使用', 'recordIds') };
     }
   }
 
@@ -323,6 +336,7 @@ function parseBody(body: unknown): Result<
     value: {
       studentId: studentId.trim(),
       lessonIds: lessonIds as string[] | undefined,
+      recordIds: recordIds as string[] | undefined,
       tone: tone as FeedbackDraftTone | undefined,
       classSize: classSize as FeedbackClassSize | undefined,
       parentType: parentType as FeedbackParentType | undefined,

@@ -19,6 +19,7 @@
 | 交付门禁 | 通过 |
 | 验证概况 | UI-005 根 npm run check 最终退出 0：治理 25、后端 2834、前端 368、管理端 84、ops 149；Windows 专属 2 项按平台跳过。类型、lint、生产构建、独立审查与桌面/375窄屏合成实测通过。 |
 | 下一步 | 用户审阅 UI-005 新增入口与交互；真实 DeepSeek 配置、微信授权收发及反馈入库另行接入验收。 |
+| 当前执行子任务 | A05 记录到反馈闭环：已确认材料直达家长反馈，指定记录作为生成依据；本轮聚焦实现已通过，待根门禁确认。 |
 | 长任务目标及结束条件 | 保留已认可视觉，完成 UI-005 前端入口与合成流程，相关交互和完整工程门禁通过，可连续审阅；真实服务另行验收。 |
 | 当前可执行任务 | 本轮前端设计已完成，无剩余必需本地实现；A/P 全量产品任务仍按既有依赖与授权推进，不由本轮设计完成替代。 |
 | 被阻塞任务及解除条件 | UI-005 本地设计无阻塞；真实教师资料、真实模型复测、设备/渠道与发布沿用既有边界，B01/B02 不变。 |
@@ -119,6 +120,15 @@ D06 为范围约束；D07 已明确完整微信私聊，不重复列为待用户
 意见见 [交互修改意见](evidence/product/INTERACTION-CHANGE-PROPOSALS-20260919.md)，依赖设计见 [下一步实施方案](evidence/product/WEB-NEXT-PLAN-20260919.md)。两者为静态依据，任务动态状态只在本日志维护。
 
 ## 工作记录
+
+### A05-CAPTURE-FEEDBACK-01｜2026-09-20｜已确认材料直达家长反馈
+
+- 用户授权：在既有 P0–P2 计划上继续实现，先闭环“核对一条材料 → 整理家长反馈”；不触碰真实 DeepSeek、微信授权、发送或部署。
+- 改动：捕获候选确认成功后提供“基于这条记录整理家长反馈”入口，携带教师范围内的学生与正式记录 ID；反馈表单自动预选学生，并在生成请求中传递 `recordIds`。后端只接受当前教师名下 `confirmed + parent_shareable` 的指定正式记录，拒绝空数组、重复记录以及和 `lessonIds` 混用，保持学生与租户隔离。
+- 改动文件：`packages/frontend/src/connected/captures/CandidateCard.tsx`、`CaptureInbox.test.tsx`、`packages/frontend/src/preview/FeedbackSettings.tsx`、`feedback-settings.test.tsx`、`packages/frontend/src/api/feedback.ts`、`PreviewApp.tsx`、`packages/backend/src/app/routes/feedback.routes.ts`、`generate-feedback-draft/*`、`assemble-parent-feedback-context/*` 及生成路由测试。
+- 聚焦验证：前端捕获/反馈测试 2 文件 12/12；后端生成路由测试直接运行 15/15；前端 `tsc --noEmit` 退出 0；后端 `tsc` 退出 0。第一次直接调用后端隔离运行器因当前 shell 未提供显式 `DATABASE_URL` 按安全门禁停止；随后根 `npm run check` 通过其自带隔离 PostgreSQL，全量回归 327/2835、前端 56/369、管理端 13/84、ops 151（149 通过、2 按平台跳过），构建通过。
+- 完成边界：已把“指定已确认记录”送入正式生成接口，保存仍需教师明确提交；反馈发送、微信入站、真实模型调用和历史反馈状态迁移不在本条范围。
+- Git：`c022d86`（`feat(A05): [xiaosi] 打通核对记录到家长反馈`）；只暂存本轮 13 个归属文件，工作区其他既有修改保留。
 
 ### WEB-ASSISTANT-ROLE-04｜2026-09-17｜历史状态纠正
 

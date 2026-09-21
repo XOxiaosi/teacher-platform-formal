@@ -16,6 +16,12 @@ export function createAssembleParentFeedbackContextUseCase(
       const prisma = await getClient();
       const { teacherId, studentId } = input;
       if (!await prisma.student.findFirst({ where: { id: studentId, teacherId }, select: { id: true } })) return err(notFound('学生不存在'));
+      if (input.recordIds !== undefined && (input.recordIds.length === 0 || new Set(input.recordIds).size !== input.recordIds.length)) {
+        return err(validationError('recordIds 必须是非空且不重复的正式记录列表', 'recordIds'));
+      }
+      if (input.recordIds !== undefined && input.lessonIds !== undefined) {
+        return err(validationError('recordIds 不能与 lessonIds 同时使用', 'recordIds'));
+      }
       const clock = await createDatabaseTrustedClock(prisma).now();
       if (!clock.ok) return clock;
       const windowEnd = clock.value;
@@ -40,10 +46,12 @@ export function createAssembleParentFeedbackContextUseCase(
       // older records. They never import unrelated records from the date window.
       const candidates = await prisma.studentRecord.findMany({ where: {
         teacherId, studentId, reviewStatus: 'confirmed', visibility: 'parent_shareable',
-        ...(selectedLessons ? {} : { occurredAtTs: { gte: maxLookback, lte: windowEnd } }),
+        ...(input.recordIds ? { id: { in: input.recordIds } } : {}),
+        ...(selectedLessons || input.recordIds ? {} : { occurredAtTs: { gte: maxLookback, lte: windowEnd } }),
       }, orderBy: [{ occurredAtTs: 'desc' }, { id: 'asc' }],
       include: feedbackRecordInclude });
-      const selected = selectedLessons ? candidates.filter(record => {
+      if (input.recordIds && candidates.length !== input.recordIds.length) return err(notFound('正式记录不存在'));
+      const selected = input.recordIds ? candidates : selectedLessons ? candidates.filter(record => {
         const data = decryptJsonFieldValue(cipher, record.structuredData) as { lessonId?: string; scheduleId?: string } | null;
         if (!data) return false;
         if (data.lessonId) return selectedLessons.has(data.lessonId)

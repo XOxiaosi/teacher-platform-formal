@@ -17,6 +17,7 @@ export interface GenerateFeedbackDraftInput {
   teacherId: string;
   studentId: string;
   lessonIds?: string[];
+  recordIds?: string[];
   tone?: FeedbackDraftTone;
   classSize?: FeedbackClassSize;
   parentType?: FeedbackParentType;

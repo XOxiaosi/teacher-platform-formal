@@ -30,6 +30,7 @@ describe('POST /feedback/generate-draft', () => {
       teacherId: 'teacher-1',
       studentId: 'student-1',
       lessonIds: undefined,
+      recordIds: undefined,
       tone: 'warm',
       classSize: undefined,
       parentType: undefined,
@@ -92,6 +93,21 @@ describe('POST /feedback/generate-draft', () => {
     expect(dependencies.generateFeedbackDraft.execute).not.toHaveBeenCalled();
   });
 
+  it('recordIds 只携带已核对的指定记录，并与 lessonIds 互斥', async () => {
+    const dependencies = createDependencies();
+    dependencies.generateFeedbackDraft.execute = vi.fn(async () => ok({
+      studentId: 'student-1', lessonIds: [], title: 'x', content: 'y', rationale: 'z', source: 'ai', evidence: routeEvidence,
+      windowStart: '2026-01-01T00:00:00.000Z', windowEnd: '2026-01-31T00:00:00.000Z',
+    }));
+    const success = await invokeRoute({ dependencies, teacherId: 'teacher-1', body: { studentId: 'student-1', recordIds: ['record-1'] } });
+    expect(success.statusCode).toBe(201);
+    expect(dependencies.generateFeedbackDraft.execute).toHaveBeenCalledWith(expect.objectContaining({ recordIds: ['record-1'] }));
+
+    const invalid = await invokeRoute({ dependencies, teacherId: 'teacher-1', body: { studentId: 'student-1', recordIds: ['record-1'], lessonIds: ['lesson-1'] } });
+    expect(invalid.statusCode).toBe(400);
+    expect(invalid.responseBody).toMatchObject({ ok: false, error: { code: 'VALIDATION_ERROR', field: 'recordIds' } });
+  });
+
   it('tone 非白名单返回 VALIDATION_ERROR', async () => {
     const dependencies = createDependencies();
 
@@ -122,6 +138,7 @@ describe('POST /feedback/generate-draft', () => {
       teacherId: 'teacher-1',
       studentId: 'missing-student',
       lessonIds: undefined,
+      recordIds: undefined,
       tone: undefined,
       classSize: undefined,
       parentType: undefined,

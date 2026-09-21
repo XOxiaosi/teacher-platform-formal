@@ -25,6 +25,8 @@ export interface AssembleParentFeedbackContextInput {
   teacherId: string;
   studentId: string;
   lessonIds?: string[];
+  /** Restrict evidence to the exact confirmed records that started this feedback draft. */
+  recordIds?: string[];
 }
 
 export interface AssembleParentFeedbackContextResult {

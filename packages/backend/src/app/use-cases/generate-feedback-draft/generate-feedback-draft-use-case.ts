@@ -52,6 +52,7 @@ export function createGenerateFeedbackDraftUseCase(
         teacherId: input.teacherId,
         studentId: input.studentId,
         lessonIds: input.lessonIds,
+        recordIds: input.recordIds,
       });
       if (!assembled.ok) return assembled;
 

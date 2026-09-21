@@ -26,6 +26,7 @@ describe('persistent material inbox', () => {
     await waitFor(() => expect(onRecordsChanged).toHaveBeenCalledTimes(1));
     expect(mock.list).toHaveBeenCalledTimes(2);
     expect(first.getByText('已保存', { selector: 'strong' })).toBeInTheDocument();
+    expect(first.getByRole('link', { name: '基于这条记录整理家长反馈' })).toHaveAttribute('href', '#/feedback?studentId=s1&recordId=r1');
   });
   it('does not notify parent records when candidate confirmation fails', async () => {
     const onRecordsChanged = vi.fn().mockResolvedValue(undefined);
