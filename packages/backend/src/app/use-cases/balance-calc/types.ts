@@ -9,6 +9,8 @@ export interface BalanceCalcInput {
 export interface LessonBalance {
   purchased: number;
   attended: number;
+  /** Net lesson change from gifts, refunds, and manual adjustments. */
+  adjustments: number;
   remaining: number;
 }
 

@@ -403,7 +403,7 @@ describe('API 核心教师工作流端到端', () => {
     const balanceResponse = await api('GET', `/api/v1/students/${studentId}/balance`);
 
     expect(balanceResponse.status).toBe(200);
-    expect(balanceResponse.body).toEqual({ ok: true, data: { purchased: 10, attended: 1, remaining: 9 } });
+    expect(balanceResponse.body).toEqual({ ok: true, data: { purchased: 10, attended: 1, adjustments: 0, remaining: 9 } });
 
     const profileResponse = await api('GET', `/api/v1/students/${studentId}/profile`);
 

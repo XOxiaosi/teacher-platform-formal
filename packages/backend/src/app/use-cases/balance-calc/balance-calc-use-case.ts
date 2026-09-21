@@ -1,7 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
-import { err, notFound, ok } from '@teacher-platform/contracts';
-import { createLessonService } from '../../../features/lessons/index.js';
-import { createPaymentService } from '../../../features/payments/index.js';
+import { ok } from '@teacher-platform/contracts';
+import { createLessonLedgerService } from '../../../features/payments/index.js';
 import type { BalanceCalcInput, BalanceCalcUseCase } from './types.js';
 
 /**
@@ -32,28 +31,14 @@ export function createBalanceCalcUseCase(
   return {
     async calculateBalance(input: BalanceCalcInput) {
       const prisma = await getClient();
-      const lessons = createLessonService(prisma);
-      const payments = createPaymentService(prisma);
-
-      const student = await prisma.student.findFirst({
-        where: { id: input.studentId, teacherId: input.teacherId },
-        select: { id: true },
-      });
-      if (!student) return err(notFound('学生不存在'));
-
-      const purchased = await payments.sumLessonCount({ studentId: input.studentId });
-      if (!purchased.ok) return purchased;
-
-      const attended = await lessons.countByStudent({
-        studentId: input.studentId,
-        status: 'attended',
-      });
-      if (!attended.ok) return attended;
-
+      // T-017：权威余额来自不可变课时账本；内部兼容尚未关联账本的历史 Payment。
+      const balance = await createLessonLedgerService(prisma).calculateBalance(input);
+      if (!balance.ok) return balance;
       return ok({
-        purchased: purchased.value,
-        attended: attended.value,
-        remaining: purchased.value - attended.value,
+        purchased: balance.value.purchased,
+        attended: balance.value.attended,
+        adjustments: balance.value.adjustments,
+        remaining: balance.value.remaining,
       });
     },
   };

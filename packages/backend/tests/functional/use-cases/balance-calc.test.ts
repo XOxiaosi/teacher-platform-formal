@@ -56,6 +56,7 @@ describe('balanceCalcUseCase.calculateBalance', () => {
     if (!result.ok) return;
     expect(result.value.purchased).toBe(28);
     expect(result.value.attended).toBe(2);
+    expect(result.value.adjustments).toBe(0);
     expect(result.value.remaining).toBe(26);
   });
 
@@ -67,7 +68,7 @@ describe('balanceCalcUseCase.calculateBalance', () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value).toEqual({ purchased: 0, attended: 0, remaining: 0 });
+    expect(result.value).toEqual({ purchased: 0, attended: 0, adjustments: 0, remaining: 0 });
   });
 
   it('学生不存在时返回 NOT_FOUND', async () => {

@@ -112,7 +112,7 @@ describe('核心教师工作流端到端', () => {
     const balance = await balanceCalc.calculateBalance({ teacherId: TEACHER_ID, studentId: createdStudent.value.id });
     expect(balance.ok).toBe(true);
     if (!balance.ok) return;
-    expect(balance.value).toEqual({ purchased: 10, attended: 1, remaining: 9 });
+    expect(balance.value).toEqual({ purchased: 10, attended: 1, adjustments: 0, remaining: 9 });
 
     const review = await dailyReviewAssemble.assembleDailyReview({
       teacherId: TEACHER_ID,
