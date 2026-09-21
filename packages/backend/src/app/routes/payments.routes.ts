@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import type { PaymentRouteDependencies } from '../composition/types.js';
 import { validationError } from '@teacher-platform/contracts';
-import { getTeacherId, parseDate, parseNumber, sendResult, sendTeacherError } from './api-helpers.js';
+import { getTeacherId, parseDate, sendResult, sendTeacherError } from './api-helpers.js';
 
 const ISO_INSTANT_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?(Z|[+-]\d{2}:\d{2})$/;
+const ISO_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 function parseIsoInstant(value: unknown): Date | undefined {
   if (typeof value !== 'string') return undefined;
@@ -34,19 +35,72 @@ function parseIsoInstant(value: unknown): Date | undefined {
   return Number.isNaN(parsed.getTime()) ? undefined : parsed;
 }
 
+function parsePositiveIntegerQuery(value: unknown): number | undefined {
+  if (typeof value !== 'string' || !/^[1-9]\d*$/.test(value)) return undefined;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) ? parsed : undefined;
+}
+
+function parsePaymentQueryDate(value: unknown): Date | undefined {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim();
+  const match = ISO_DATE_PATTERN.exec(normalized);
+  if (!match) return parseIsoInstant(normalized);
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const daysInMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (month < 1 || month > 12 || day < 1 || day > daysInMonth[month - 1]) return undefined;
+  return new Date(`${normalized}T00:00:00.000Z`);
+}
+
 export function createPaymentRouter(dependencies: PaymentRouteDependencies): Router {
   const router = Router();
 
   router.get('/payments', async (req, res) => {
     const teacher = getTeacherId(req);
     if (!teacher.ok) return sendTeacherError(res, teacher.error);
+    const studentIdRaw = req.query.studentId;
+    if (
+      studentIdRaw !== undefined
+      && (typeof studentIdRaw !== 'string' || !studentIdRaw.trim())
+    ) {
+      return sendTeacherError(
+        res,
+        validationError('studentId 必须是非空字符串', 'studentId'),
+      );
+    }
+    const studentId = typeof studentIdRaw === 'string' ? studentIdRaw.trim() : undefined;
+
+    const paidAtFromRaw = req.query.paidAtFrom;
+    const paidAtToRaw = req.query.paidAtTo;
+    const paidAtFrom = parsePaymentQueryDate(paidAtFromRaw);
+    const paidAtTo = parsePaymentQueryDate(paidAtToRaw);
+    const pageRaw = req.query.page;
+    const pageSizeRaw = req.query.pageSize;
+    const page = parsePositiveIntegerQuery(pageRaw);
+    const pageSize = parsePositiveIntegerQuery(pageSizeRaw);
+    if (
+      (paidAtFromRaw !== undefined && !paidAtFrom)
+      || (paidAtToRaw !== undefined && !paidAtTo)
+      || (paidAtFrom && paidAtTo && paidAtFrom > paidAtTo)
+      || (pageRaw !== undefined && page === undefined)
+      || (pageSizeRaw !== undefined && pageSize === undefined)
+    ) {
+      return sendTeacherError(
+        res,
+        validationError('缴费查询参数不合法', 'query'),
+      );
+    }
     const result = await dependencies.payments.listPayments({
       teacherId: teacher.value,
-      studentId: typeof req.query.studentId === 'string' ? req.query.studentId : undefined,
-      paidAtFrom: parseDate(req.query.paidAtFrom),
-      paidAtTo: parseDate(req.query.paidAtTo),
-      page: parseNumber(req.query.page),
-      pageSize: parseNumber(req.query.pageSize),
+      studentId,
+      paidAtFrom,
+      paidAtTo,
+      page,
+      pageSize,
     });
     sendResult(res, result);
   });
