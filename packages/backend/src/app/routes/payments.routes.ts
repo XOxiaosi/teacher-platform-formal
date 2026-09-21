@@ -68,6 +68,17 @@ export function createPaymentRouter(dependencies: PaymentRouteDependencies): Rou
   router.get('/lesson-ledger/entries', async (req, res) => {
     const teacher = getTeacherId(req);
     if (!teacher.ok) return sendTeacherError(res, teacher.error);
+    const studentIdRaw = req.query.studentId;
+    if (
+      studentIdRaw !== undefined
+      && (typeof studentIdRaw !== 'string' || !studentIdRaw.trim())
+    ) {
+      return sendTeacherError(
+        res,
+        validationError('studentId 必须是非空字符串', 'studentId'),
+      );
+    }
+    const studentId = typeof studentIdRaw === 'string' ? studentIdRaw.trim() : undefined;
     const fromRaw = req.query.from;
     const toRaw = req.query.to;
     const from = parseIsoInstant(fromRaw);
@@ -84,7 +95,7 @@ export function createPaymentRouter(dependencies: PaymentRouteDependencies): Rou
     }
     const result = await dependencies.ledger.listEntries({
       teacherId: teacher.value,
-      studentId: typeof req.query.studentId === 'string' ? req.query.studentId : undefined,
+      studentId,
       from,
       to,
     });

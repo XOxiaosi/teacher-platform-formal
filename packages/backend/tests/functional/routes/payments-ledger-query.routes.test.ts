@@ -103,3 +103,45 @@ describe('GET /lesson-ledger/entries date query validation', () => {
     });
   });
 });
+
+describe('GET /lesson-ledger/entries studentId query validation', () => {
+  it.each([
+    ['without studentId', {}, undefined],
+    ['with one studentId', { studentId: 'student-1' }, 'student-1'],
+    ['with surrounding whitespace', { studentId: '  student-1  ' }, 'student-1'],
+  ])('accepts %s and forwards the canonical studentId', async (_name, query, studentId) => {
+    const result = await invokeLedgerEntries(query);
+
+    expect(result.statusCode).toBe(200);
+    expect(result.responseBody).toEqual({ ok: true, data: [] });
+    expect(result.listEntries).toHaveBeenCalledTimes(1);
+    expect(result.listEntries).toHaveBeenCalledWith({
+      teacherId: 'teacher-1',
+      studentId,
+      from: undefined,
+      to: undefined,
+    });
+  });
+
+  it.each([
+    ['empty string', { studentId: '' }],
+    ['whitespace only', { studentId: '   ' }],
+    ['repeated values', { studentId: ['student-1', 'student-2'] }],
+    ['number', { studentId: 1 }],
+    ['object', { studentId: { id: 'student-1' } }],
+    ['null', { studentId: null }],
+  ])('rejects %s before querying the ledger', async (_name, query) => {
+    const result = await invokeLedgerEntries(query);
+
+    expect(result.statusCode).toBe(400);
+    expect(result.responseBody).toEqual({
+      ok: false,
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'studentId 必须是非空字符串',
+        field: 'studentId',
+      },
+    });
+    expect(result.listEntries).not.toHaveBeenCalled();
+  });
+});
