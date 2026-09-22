@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
 import express from 'express';
 import request from 'supertest';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PrismaClient } from '@prisma/client';
 import {
   createAdminAuthService,
@@ -28,6 +28,7 @@ import {
 } from '../../../../ops/lib/pg-utils.mjs';
 import type { DatabaseClientPool } from '../../../src/shared/database-pool/index.js';
 import type { Logger } from '../../../src/shared/logger/index.js';
+import { seedInvitation } from '../../helpers/invitations.js';
 
 /**
  * 后台管理动作（P7 渠道线 A5）单测：
@@ -85,6 +86,8 @@ function createAdminApp(overrides: {
       pool: overrides.pool ?? createRealPool(),
       logger: overrides.logger,
       backupRoot: overrides.backupRoot,
+      // 旧备份/恢复专项：T-014 默认封闭，这里显式只为专项测试开启。
+      legacyOperationsEnabled: true,
     }),
   );
   // 教师认证路由：验证「停用后登录 401」真实链路
@@ -97,15 +100,6 @@ function createRealPool(): DatabaseClientPool {
     baseUrl: `postgres://${baseUrl.username}:${baseUrl.password}@${baseUrl.hostname}:${baseUrl.port || '5432'}`,
     registerProcessHooks: false,
   });
-}
-
-function mockLogger(): Logger {
-  return {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  } as unknown as Logger;
 }
 
 async function seedTeacher(email: string, databaseName: string) {
@@ -186,50 +180,16 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-describe('admin actions: 教师创建与状态', () => {
-  it('创建教师 201 + 审计；重复 email 409 + 审计失败；弱密码 400', async () => {
-    const logger = mockLogger();
-    const app = createAdminApp({ logger });
+describe('admin actions: 邀请制账号与状态', () => {
+  it('旧建号端点不可用，管理员不能代设教师密码', async () => {
+    const app = createAdminApp();
     const agent = await loginAgent(app);
-
     const res = await agent.post('/api/v1/admin/teachers').send({
       email: `create-${suffix}@example.com`,
       password: 'teacher-pass-123',
       displayName: '创建测试教师',
     });
-    expect(res.status).toBe(201);
-    const teacher = res.body.data.teacher;
-    expect(teacher.email).toBe(`create-${suffix}@example.com`);
-    expect(teacher.status).toBe('active');
-    expect(teacher).not.toHaveProperty('passwordHash');
-    seedEmails.push(teacher.email);
-
-    // 审计：teacher.create
-    const infos = logger.info as ReturnType<typeof vi.fn>;
-    const createAudit = infos.mock.calls.find((call: unknown[]) => call[0] === 'admin action' && call[1]?.action === 'teacher.create');
-    expect(createAudit).toBeDefined();
-    expect(createAudit[1]).toMatchObject({ actor: ADMIN_EMAIL, action: 'teacher.create', objectType: 'teacher', objectId: teacher.id });
-
-    // 重复 email → 409 ALREADY_CONSUMED
-    const dup = await agent.post('/api/v1/admin/teachers').send({
-      email: `create-${suffix}@example.com`,
-      password: 'teacher-pass-123',
-      displayName: '重复',
-    });
-    expect(dup.status).toBe(409);
-    expect(dup.body.error.code).toBe('ALREADY_CONSUMED');
-    const failAudit = infos.mock.calls.find((call: unknown[]) => call[0] === 'admin action' && call[1]?.action === 'teacher.create.failed');
-    expect(failAudit).toBeDefined();
-    expect(failAudit[1].error.code).toBe('ALREADY_CONSUMED');
-
-    // 弱密码 → 400
-    const weak = await agent.post('/api/v1/admin/teachers').send({
-      email: `weak-${suffix}@example.com`,
-      password: 'short',
-      displayName: '弱密码',
-    });
-    expect(weak.status).toBe(400);
-    expect(weak.body.error.field).toBe('password');
+    expect(res.status).toBe(404);
   });
 
   it('状态翻转：disabled 后教师登录 401（真实 auth 链路），active 恢复', async () => {
@@ -237,7 +197,8 @@ describe('admin actions: 教师创建与状态', () => {
     const agent = await loginAgent(app);
     const email = `flip-${suffix}@example.com`;
     const password = 'flip-pass-123';
-    const created = await agent.post('/api/v1/admin/teachers').send({ email, password, displayName: '翻转测试' });
+    const invitation = await seedInvitation(prisma, { email });
+    const created = await request(app).post('/api/v1/auth/invitations/accept').send({ token: invitation.token, password, displayName: '翻转测试' });
     expect(created.status).toBe(201);
     const teacherId = created.body.data.teacher.id;
     seedEmails.push(email);
@@ -435,30 +396,13 @@ describe('admin actions: restore 演练（真实 db-restore 子进程）', () =>
   }, 240_000);
 });
 
-describe('admin actions: provision 后台任务（?provision=1）', () => {
-  let provisionedDb: string | undefined;
-
-  afterAll(async () => {
-    // R4 纪律：provision 建库必须有对应 drop（断言失败路径也清理）
-    if (provisionedDb) await dropIsolatedDb(provisionedDb);
-  });
-
-  it('创建 + 建库：202 jobId → 轮询 succeeded → teacher_db_* 库存在', async () => {
+describe('admin actions: provision 后台任务', () => {
+  it('T-014 不在 Web 请求中建库，旧 endpoint 不可用', async () => {
     const app = createAdminApp();
     const agent = await loginAgent(app);
     const res = await agent
       .post('/api/v1/admin/teachers?provision=1')
       .send({ email: `prov-${suffix}@example.com`, password: 'prov-pass-123', displayName: '建库测试' });
-    expect(res.status).toBe(201);
-    const teacher = res.body.data.teacher;
-    const job = res.body.data.job;
-    expect(teacher.databaseName).toMatch(/^teacher_db_/);
-    expect(job.jobId).toMatch(/^adminjob_/);
-    seedEmails.push(teacher.email);
-    provisionedDb = teacher.databaseName;
-
-    const terminal = await pollJob(agent, job.jobId);
-    expect(terminal.status, JSON.stringify(terminal)).toBe('succeeded');
-    expect(databaseExists(teacher.databaseName)).toBe(true);
-  }, 240_000);
+    expect(res.status).toBe(404);
+  });
 });

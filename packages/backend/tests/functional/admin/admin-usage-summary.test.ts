@@ -16,6 +16,7 @@ import { createSlidingWindowLimiter } from '../../../src/app/middleware/rate-lim
 import type { DatabaseClientPool } from '../../../src/shared/database-pool/index.js';
 import { loadDatabaseUrl } from '../../../../ops/lib/pg-utils.mjs';
 import { createDatabaseClientPool } from '../../../src/shared/database-pool/index.js';
+import { seedInvitation } from '../../helpers/invitations.js';
 
 /**
  * 平台级用量总览（P8 第六批 t28，设计 p7-admin-panel-design.md §6）单测：
@@ -246,11 +247,12 @@ describe('GET /api/v1/admin/usage/summary 路由', () => {
 
     const email = `teacher-usage-${randomBytes(4).toString('hex')}@example.com`;
     const teacherAgent = request.agent(app);
-    const register = await teacherAgent
-      .post('/api/v1/auth/register')
-      .send({ email, password: 'password123', displayName: '用量鉴权教师' });
-    expect(register.status).toBe(201);
-    const teacherId = register.body.data.teacher.id;
+    const invitation = await seedInvitation(prisma, { email });
+    const accepted = await teacherAgent
+      .post('/api/v1/auth/invitations/accept')
+      .send({ token: invitation.token, password: 'password123', displayName: '用量鉴权教师' });
+    expect(accepted.status).toBe(201);
+    const teacherId = accepted.body.data.teacher.id;
     createdTeacherIds.push(teacherId);
 
     const res = await teacherAgent

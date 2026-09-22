@@ -313,8 +313,8 @@ describe('db-routing e2e：双隔离教师库', () => {
         payment: paymentEdit.status,
         memo: memoEdit.status,
         feedback: feedbackEdit.status,
-      }).toEqual({ payment: 200, memo: 200, feedback: 200 });
-      expect([paymentEdit.body.ok, memoEdit.body.ok, feedbackEdit.body.ok]).toEqual([true, true, true]);
+      }).toEqual({ payment: 404, memo: 200, feedback: 200 });
+      expect([paymentEdit.body.ok, memoEdit.body.ok, feedbackEdit.body.ok]).toEqual([undefined, true, true]);
 
       expect((await teacherPrisma.student.findUniqueOrThrow({ where: { id: student.id } })).name)
         .toBe('编辑路由新学生');
@@ -324,8 +324,9 @@ describe('db-routing e2e：双隔离教师库', () => {
       expect(storedLesson.progress).not.toBe('编辑路由新进度');
       expect(cipher.decrypt(storedLesson.progress!)).toBe('编辑路由新进度');
       const storedPayment = await teacherPrisma.payment.findUniqueOrThrow({ where: { id: payment.id } });
-      expect(storedPayment.note).not.toBe('编辑路由新缴费备注');
-      expect(cipher.decrypt(storedPayment.note!)).toBe('编辑路由新缴费备注');
+      // T-017 closes the direct Payment PATCH route. Historical payments are
+      // left untouched; balance changes use immutable ledger adjustments.
+      expect(storedPayment.note).toBeNull();
       expect((await teacherPrisma.memo.findUniqueOrThrow({ where: { id: memo.id } })).title)
         .toBe('编辑路由新备忘');
       const storedFeedback = await teacherPrisma.parentFeedback.findUniqueOrThrow({
@@ -333,7 +334,7 @@ describe('db-routing e2e：双隔离教师库', () => {
       });
       expect(storedFeedback.content).not.toBe('编辑路由新反馈内容');
       expect(cipher.decrypt(storedFeedback.content)).toBe('编辑路由新反馈内容');
-      expect(await teacherPrisma.changeLog.count({ where: { teacherId: teacherAId } })).toBe(7);
+      expect(await teacherPrisma.changeLog.count({ where: { teacherId: teacherAId } })).toBe(6);
 
       expect({
         sharedStudents: await prisma.student.count({ where: { id: student.id } }),

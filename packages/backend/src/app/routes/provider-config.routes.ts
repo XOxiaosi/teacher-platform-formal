@@ -33,12 +33,40 @@ function readBoolean(body: unknown, key: string): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
 }
 
+function serializeConnectionResult(result: {
+  ok: boolean;
+  providerName?: string;
+  model?: string;
+  providerError?: { kind: string; status: number; retryable: boolean; message: string };
+}) {
+  if (!result.providerError) return result;
+  const { providerError, ...rest } = result;
+  return {
+    ...rest,
+    providerError: {
+      kind: providerError.kind,
+      status: providerError.status,
+      retryable: providerError.retryable,
+      message: providerError.message,
+    },
+  };
+}
+
 export function createProviderConfigRouter(
   service: ProviderConfigService,
   authService: AuthService,
 ): Router {
   const router = Router();
   const requireAuth = createRequireAuth(authService);
+
+  // GET /api/v1/provider-configs/capabilities — must precede /:id routes.
+  router.get('/provider-configs/capabilities', requireAuth, (req: AuthenticatedRequest, res) => {
+    if (!req.teacherId) {
+      sendError(res, validationError('缺少身份信息', 'teacherId'));
+      return;
+    }
+    res.status(200).json({ ok: true, data: service.capabilities() });
+  });
 
   // GET /api/v1/provider-configs — 列表（含 apiKeyMasked + isPrimary，无明文/密文）
   router.get('/provider-configs', requireAuth, async (req: AuthenticatedRequest, res) => {
@@ -121,7 +149,7 @@ export function createProviderConfigRouter(
       sendError(res, result.error);
       return;
     }
-    res.status(200).json({ ok: true, data: result.value });
+    res.status(200).json({ ok: true, data: serializeConnectionResult(result.value) });
   });
 
   return router;

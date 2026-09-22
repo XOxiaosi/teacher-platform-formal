@@ -1,4 +1,4 @@
-import type { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 import type { CommonError, Result } from '@teacher-platform/contracts';
 import { createLessonService } from '../../../features/lessons/index.js';
 import { createScheduleService } from '../../../features/scheduling/index.js';
@@ -7,6 +7,7 @@ import {
   runWithAutomaticChangelogSuppressed,
   type ChangelogFactory,
 } from '../../../shared/changelog/index.js';
+import type { FieldCipher } from '../../../shared/field-encryption/index.js';
 import { createScheduleCompleteUseCaseWithServices } from './schedule-complete-use-case.js';
 import type {
   ScheduleCompletePrismaClient,
@@ -22,6 +23,7 @@ class TransactionRollback<T> extends Error {
 export interface ScheduleCompleteUseCaseOptions {
   getClient: () => Promise<ScheduleCompletePrismaClient>;
   changelogFactory?: ChangelogFactory;
+  cipher?: FieldCipher;
 }
 
 function isScheduleCompleteOptions(
@@ -41,13 +43,14 @@ export function createScheduleCompleteUseCase(
   const changelogFactory = isScheduleCompleteOptions(prismaOrOptions)
     ? (prismaOrOptions.changelogFactory ?? defaultChangelogFactory)
     : defaultChangelogFactory;
+  const cipher = isScheduleCompleteOptions(prismaOrOptions) ? prismaOrOptions.cipher : undefined;
 
   const services: ScheduleCompleteServices = {
     async transaction(fn) {
       const prisma = await getClient();
       const execute = async (tx: Prisma.TransactionClient) => {
         const result = await fn({
-          scheduling: createScheduleService(tx),
+          scheduling: createScheduleService({ getClient: async () => tx, cipher }),
           lessons: createLessonService(tx),
           changelog: changelogFactory(tx),
         });

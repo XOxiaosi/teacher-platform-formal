@@ -51,6 +51,8 @@ function createAdminApp(overrides: { pool?: DatabaseClientPool } = {}) {
         baseUrl: `postgres://${baseUrl.username}:${baseUrl.password}@${baseUrl.hostname}:${baseUrl.port || '5432'}`,
         registerProcessHooks: false,
       }),
+      // 旧反馈全文看板专项：T-014 默认封闭，这里显式只为专项测试开启。
+      legacyOperationsEnabled: true,
     }),
   );
   return app;

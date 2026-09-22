@@ -309,15 +309,13 @@ function isLiteralIpHost(host: string): boolean {
 }
 
 /**
- * 完整端点守卫（L1/L2 共用）：
- * 1. 语法层 S1–S8；2. hostname 静态禁词；3. 字面 IP → 静态禁段/白名单判定；
- * 4. hostname → 运行时 DNS 逐 IP 判定（任一命中禁段且不在白名单 → 拒绝；DNS 抛错 fail-closed）。
+ * 只做不会触发网络 I/O 的端点校验：语法、保留 hostname 和字面 IP 禁段。
+ * 本机安全模式允许保存经此校验的 hostname，但绝不把静态通过当作可连接保证。
  */
-export async function assertEndpointAllowed(
+export function assertEndpointStaticallyAllowed(
   value: unknown,
   allowedCidrs: AllowedCidr[],
-  deps: { dnsLookup?: DnsLookup } = {},
-): Promise<EndpointGuardResult> {
+): EndpointGuardResult {
   const parsed = parseEndpointUrl(value);
   if (!parsed.ok) return parsed;
   const url = parsed.url;
@@ -332,7 +330,30 @@ export async function assertEndpointAllowed(
     if (isForbiddenAddress(bare) && !isAllowedAddress(bare, allowedCidrs)) {
       return { ok: false, reason: '内网/保留地址不可访问' };
     }
-    return { ok: true, normalizedUrl: url.toString() };
+  }
+  return { ok: true, normalizedUrl: url.toString() };
+}
+
+/**
+ * 完整端点守卫（L1/L2 共用）：
+ * 1. 语法层 S1–S8；2. hostname 静态禁词；3. 字面 IP → 静态禁段/白名单判定；
+ * 4. hostname → 运行时 DNS 逐 IP 判定（任一命中禁段且不在白名单 → 拒绝；DNS 抛错 fail-closed）。
+ */
+export async function assertEndpointAllowed(
+  value: unknown,
+  allowedCidrs: AllowedCidr[],
+  deps: { dnsLookup?: DnsLookup } = {},
+): Promise<EndpointGuardResult> {
+  const staticGuard = assertEndpointStaticallyAllowed(value, allowedCidrs);
+  if (!staticGuard.ok) return staticGuard;
+  const parsed = parseEndpointUrl(value);
+  // assertEndpointStaticallyAllowed has already checked this input.
+  if (!parsed.ok) return parsed;
+  const url = parsed.url;
+  const host = url.hostname;
+
+  if (isLiteralIpHost(host)) {
+    return staticGuard;
   }
 
   // hostname → 运行时 DNS（fail-closed）

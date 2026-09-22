@@ -117,6 +117,19 @@ describe('admin auth: 登录', () => {
     expect(res.body.error.message).toBe('邮箱或密码错误');
   });
 
+  it('非管理员邮箱使用等时占位密码也不得签发管理员会话', async () => {
+    const app = createAdminApp();
+    const res = await request(app)
+      .post('/api/v1/admin/auth/login')
+      .send({ email: 'nobody@example.com', password: 'timing-equalization-dummy' });
+    expect(res.status).toBe(401);
+    expect(res.body).toMatchObject({
+      ok: false,
+      error: { code: 'PERMISSION_DENIED', message: '邮箱或密码错误' },
+    });
+    expect(res.headers['set-cookie']).toBeUndefined();
+  });
+
   it('body 缺字段 → 400 VALIDATION_ERROR', async () => {
     const app = createAdminApp();
     const res = await request(app)

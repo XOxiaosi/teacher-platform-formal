@@ -1,6 +1,7 @@
 export {
   createProviderConfigService,
   type ProviderConfigCreateInput,
+  type ProviderConfigCapabilities,
   type ProviderConfigDto,
   type ProviderConfigService,
   type ProviderConfigUpdateInput,

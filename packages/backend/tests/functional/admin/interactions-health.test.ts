@@ -66,6 +66,8 @@ function createAdminApp(overrides: {
       registryPrisma: overrides.registryPrisma ?? prisma,
       pool: overrides.pool ?? createRealPool(),
       aggregationTimeoutMs: overrides.aggregationTimeoutMs,
+      // 旧互动业务统计专项：T-014 默认封闭，这里显式只为专项测试开启。
+      legacyOperationsEnabled: true,
     }),
   );
   return app;

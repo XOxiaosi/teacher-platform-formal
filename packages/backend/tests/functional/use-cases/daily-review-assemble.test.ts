@@ -245,21 +245,21 @@ describe('dailyReviewAssembleUseCase.assembleDailyReview', () => {
 
   it('Lesson 来源超过 500 条时返回 INTERNAL_ERROR，且 DailyReview 零写入', async () => {
     const student = await createStudent('容量学生');
-    const schedule = await prisma.schedule.create({
-      data: {
-        teacherId: TEACHER_ID,
-        studentId: student.id,
-        type: 'lesson',
-        title: '容量课次日程',
-        scheduledStartTs: new Date('2030-05-01T16:00:00.000Z'),
-        scheduledEndTs: new Date('2030-05-01T17:00:00.000Z'),
-      },
-    });
+    const schedules = Array.from({ length: 501 }, (_, index) => ({
+      id: `daily-review-capacity-${index}`,
+      teacherId: TEACHER_ID,
+      studentId: student.id,
+      type: 'lesson',
+      title: '容量课次日程',
+      scheduledStartTs: new Date('2030-05-01T16:00:00.000Z'),
+      scheduledEndTs: new Date('2030-05-01T17:00:00.000Z'),
+    }));
+    await prisma.schedule.createMany({ data: schedules });
     await prisma.lesson.createMany({
       data: Array.from({ length: 501 }, (_, index) => ({
         teacherId: TEACHER_ID,
         studentId: student.id,
-        scheduleId: schedule.id,
+        scheduleId: schedules[index].id,
         dateTs: new Date(Date.parse('2030-05-01T16:00:00.000Z') + index),
       })),
     });

@@ -1,6 +1,5 @@
 import { Router } from 'express';
-import type { Response } from 'express';
-import { randomBytes } from 'node:crypto';
+import type { RequestHandler, Response } from 'express';
 import type { PrismaClient } from '@prisma/client';
 import { notFound, permissionDenied, validationError, type CommonError } from '@teacher-platform/contracts';
 import type { AdminAuthService } from './admin-auth-service.js';
@@ -14,7 +13,8 @@ import type { RateLimiter } from '../../shared/rate-limit/index.js';
 import { findTeacherListItem, getTeacherOverview, listTeachers, type OverviewError } from './teacher-overview.js';
 import { getInteractionStats } from './interactions.js';
 import { getAdminHealth, defaultBackupRoot } from './admin-health.js';
-import { createTeacher, isSafeRestoreTarget, resolveLatestDumpForDatabase, setTeacherStatus } from './admin-actions.js';
+import { isSafeRestoreTarget, resolveLatestDumpForDatabase } from './admin-actions.js';
+import { registerAdminIdentityRoutes } from './admin-identity.routes.js';
 import { createAdminJobStore, runSpawnJob } from './admin-jobs.js';
 import { recordAdminActionDb, type AdminAuditInput } from './audit.js';
 import { getFeedbackSummary } from './feedback-summary.js';
@@ -95,7 +95,7 @@ export interface AdminRouterOptions {
   /** 锁定配置（测试可注入小阈值；缺省读 env LOGIN_FAIL_LIMIT/LOGIN_LOCKOUT_MS/LOGIN_EMAIL_GLOBAL_LIMIT） */
   loginLockoutConfig?: LoginLockoutConfig;
   /** 共享库 client（TeacherRegistry 读 + 健康检查 $queryRaw，教师总览/看板 + A6 审计表/反馈聚合 + 平台用量） */
-  registryPrisma: Pick<PrismaClient, 'teacherRegistry' | '$queryRaw' | 'adminAuditLog' | 'userRequirement' | 'providerUsage'>;
+  registryPrisma: Pick<PrismaClient, 'teacherRegistry' | 'teacherInvitation' | 'sessionStore' | '$transaction' | '$queryRaw' | 'adminAuditLog' | 'userRequirement' | 'providerUsage'>;
   /** 教师库连接池（详情懒加载聚合；列表不触达） */
   pool: DatabaseClientPool;
   /** 单库聚合超时（ms），默认 5000 */
@@ -104,6 +104,8 @@ export interface AdminRouterOptions {
   logger?: Logger;
   /** 备份根目录（测试注入；缺省 env BACKUP_ROOT > 平台默认） */
   backupRoot?: string;
+  /** T-014 默认不暴露任何可进入教师业务内容/导出/恢复的旧管理能力；仅旧专项测试显式开启。 */
+  legacyOperationsEnabled?: boolean;
 }
 
 /** 库未就绪 503（与 db-routing 语义一致：DATABASE_NOT_READY）。 */
@@ -133,6 +135,13 @@ export function createAdminRouter(options: AdminRouterOptions): Router {
   const backupRoot = options.backupRoot ?? defaultBackupRoot();
   const jobs = createAdminJobStore();
   const spawnCwd = process.cwd(); // 运行于 monorepo 树内（npm -w 自动上溯到仓库根）
+  const legacyUnavailable: RequestHandler = (_req, res, next) => {
+    if (!options.legacyOperationsEnabled) {
+      res.status(404).json({ ok: false, error: notFound('资源不存在') });
+      return;
+    }
+    next();
+  };
 
   /**
    * A6 审计旁路：结构化日志 + AdminAuditLog 表落库（await 但失败吞掉，不阻断主动作）。
@@ -141,6 +150,8 @@ export function createAdminRouter(options: AdminRouterOptions): Router {
   const audit = async (req: AdminRequest, input: AdminAuditInput): Promise<void> => {
     await recordAdminActionDb(options.registryPrisma, logger, { ...input, ip: req.ip });
   };
+
+  registerAdminIdentityRoutes({ router, requireAdmin, registryPrisma: options.registryPrisma, audit });
 
   // POST /api/v1/admin/auth/login → 200 + Set-Cookie adminToken（5 次失败锁定 15 分钟，键含 IP 维度）
   router.post('/auth/login', loginLockout ?? ((_req, _res, next) => next()), async (req, res) => {
@@ -209,8 +220,8 @@ export function createAdminRouter(options: AdminRouterOptions): Router {
     res.status(200).json({ ok: true, data: result.value });
   });
 
-  // GET /api/v1/admin/teachers/:id → 详情 + 懒加载聚合（5s 超时 degraded；库未就绪 503）
-  router.get('/teachers/:id', requireAdmin, async (req, res) => {
+  // T-014：教师详情会连业务库，默认不可达；T-022 后按最小权限重新开放。
+  router.get('/teachers/:id', legacyUnavailable, requireAdmin, async (req, res) => {
     const result = await getTeacherOverview(options.registryPrisma, options.pool, {
       teacherId: String(req.params.id),
       timeoutMs: options.aggregationTimeoutMs,
@@ -227,7 +238,7 @@ export function createAdminRouter(options: AdminRouterOptions): Router {
   });
 
   // GET /api/v1/admin/interactions?teacherId=&from=&to= → AgentExecution 统计（单教师库，5s 超时 degraded）
-  router.get('/interactions', requireAdmin, async (req, res) => {
+  router.get('/interactions', legacyUnavailable, requireAdmin, async (req, res) => {
     const teacherId = typeof req.query.teacherId === 'string' ? req.query.teacherId : undefined;
     if (!teacherId || teacherId.trim() === '') {
       sendAdminError(res, validationError('缺少 teacherId', 'teacherId'));
@@ -271,7 +282,7 @@ export function createAdminRouter(options: AdminRouterOptions): Router {
   });
 
   // GET /api/v1/admin/feedback/summary?limit= → 反馈看板聚合（UserRequirement 共享库，只读）
-  router.get('/feedback/summary', requireAdmin, async (req, res) => {
+  router.get('/feedback/summary', legacyUnavailable, requireAdmin, async (req, res) => {
     const limit = typeof req.query.limit === 'string' && req.query.limit !== ''
       ? Number(req.query.limit)
       : undefined;
@@ -289,7 +300,7 @@ export function createAdminRouter(options: AdminRouterOptions): Router {
 
   // GET /api/v1/admin/feedback?page=&pageSize=&status=&category=&priority= → 看板列表
   // （分页 + 三过滤；admin 全量可见，无 owner 隔离；orderBy occurredAtTs 降序）
-  router.get('/feedback', requireAdmin, async (req, res) => {
+  router.get('/feedback', legacyUnavailable, requireAdmin, async (req, res) => {
     const result = await listFeedbackBoard(options.registryPrisma, {
       page: req.query.page,
       pageSize: req.query.pageSize,
@@ -305,7 +316,7 @@ export function createAdminRouter(options: AdminRouterOptions): Router {
   });
 
   // GET /api/v1/admin/feedback/:id → 看板详情（全字段；404 防探测）
-  router.get('/feedback/:id', requireAdmin, async (req, res) => {
+  router.get('/feedback/:id', legacyUnavailable, requireAdmin, async (req, res) => {
     const result = await getFeedbackBoardDetail(options.registryPrisma, String(req.params.id));
     if (!result.ok) {
       sendOverviewError(res, result.error);
@@ -317,7 +328,7 @@ export function createAdminRouter(options: AdminRouterOptions): Router {
   // PATCH /api/v1/admin/feedback/:id → 管理动作：评估/排期/关联（updateRequirement 状态流转）
   // 请求体 {expectedUpdatedAt, changes:{status?,priority?,category?,linkedDesignDoc?,linkedTaskId?,linkedCommitSha?,...}}
   // 乐观锁 expectedUpdatedAt（复用 edit 模式）；写路径审计 feedback.*（triage/schedule/complete/link/...）
-  router.patch('/feedback/:id', requireAdmin, async (req: AdminRequest, res) => {
+  router.patch('/feedback/:id', legacyUnavailable, requireAdmin, async (req: AdminRequest, res) => {
     const actor = req.admin?.email ?? 'unknown';
     const requirementId = String(req.params.id);
     const expectedUpdatedAt = readStringBody(req.body, 'expectedUpdatedAt');
@@ -391,72 +402,8 @@ export function createAdminRouter(options: AdminRouterOptions): Router {
 
   // ---- 管理动作（A5；全部 requireAdmin + 审计；写/备份/恢复类后端强制 ?confirm=1）----
 
-  // POST /api/v1/admin/teachers → 创建教师（email 唯一 + scrypt；可选 ?provision=1 → db-provision 后台任务）
-  router.post('/teachers', requireAdmin, async (req: AdminRequest, res) => {
-    const actor = req.admin?.email ?? 'unknown';
-    const email = readStringBody(req.body, 'email');
-    const password = readStringBody(req.body, 'password');
-    const displayName = readStringBody(req.body, 'displayName');
-    if (email === undefined || password === undefined || displayName === undefined) {
-      await audit(req, { actor, action: 'teacher.create', objectType: 'teacher', error: validationError('缺少字段', 'body') });
-      sendAdminError(res, validationError('请求体必须包含 email/password/displayName', 'body'));
-      return;
-    }
-    const provision = req.query.provision === '1';
-    // provision 时生成 teacher_db_* 安全库名（ops assertSafeTeacherDatabaseName 白名单形态），
-    // db-provision 后台建库 + migrate deploy
-    const provisionDbName = provision ? `teacher_db_${randomBytes(4).toString('hex')}` : undefined;
-    const result = await createTeacher(options.registryPrisma, {
-      email,
-      password,
-      displayName,
-      databaseName: provisionDbName,
-    });
-    if (!result.ok) {
-      await audit(req, { actor, action: 'teacher.create', objectType: 'teacher', error: result.error });
-      sendAdminError(res, result.error);
-      return;
-    }
-    await audit(req, { actor, action: 'teacher.create', objectType: 'teacher', objectId: result.value.id });
-    if (provision && provisionDbName) {
-      const jobId = jobs.create('provision');
-      void runSpawnJob(jobs, jobId, {
-        command: 'npm',
-        args: ['-w', '@teacher-platform/ops', 'run', 'db-provision', '--', '--database-name', provisionDbName],
-        cwd: spawnCwd,
-      });
-      res.status(201).json({ ok: true, data: { teacher: result.value, job: { jobId } } });
-      return;
-    }
-    res.status(201).json({ ok: true, data: { teacher: result.value } });
-  });
-
-  // PATCH /api/v1/admin/teachers/:id/status → 软停用/启用（仅 status 翻转；停用后登录 401 由 auth-service 锁定）
-  router.patch('/teachers/:id/status', requireAdmin, async (req: AdminRequest, res) => {
-    const actor = req.admin?.email ?? 'unknown';
-    const status = readStringBody(req.body, 'status');
-    if (status !== 'active' && status !== 'disabled') {
-      await audit(req, { actor, action: 'teacher.status', objectType: 'teacher', objectId: String(req.params.id), error: validationError('status 只能是 active|disabled', 'status') });
-      sendAdminError(res, validationError('status 只能是 active|disabled', 'status'));
-      return;
-    }
-    const result = await setTeacherStatus(options.registryPrisma, String(req.params.id), status);
-    if (!result.ok) {
-      await audit(req, { actor, action: status === 'disabled' ? 'teacher.disable' : 'teacher.enable', objectType: 'teacher', objectId: String(req.params.id), error: result.error });
-      sendAdminError(res, result.error);
-      return;
-    }
-    await audit(req, {
-      actor,
-      action: status === 'disabled' ? 'teacher.disable' : 'teacher.enable',
-      objectType: 'teacher',
-      objectId: result.value.id,
-    });
-    res.status(200).json({ ok: true, data: { teacher: result.value } });
-  });
-
   // POST /api/v1/admin/backup?confirm=1 → 后台 db-backup（全量或按教师）；/backup/status?jobId= 轮询
-  router.post('/backup', requireAdmin, async (req: AdminRequest, res) => {
+  router.post('/backup', legacyUnavailable, requireAdmin, async (req: AdminRequest, res) => {
     const actor = req.admin?.email ?? 'unknown';
     if (req.query.confirm !== '1') {
       await audit(req, { actor, action: 'backup.run', objectType: 'backup', error: validationError('缺少确认', 'confirm') });
@@ -484,7 +431,7 @@ export function createAdminRouter(options: AdminRouterOptions): Router {
   });
 
   // GET /api/v1/admin/backup/status?jobId= → 轮询终态 {status, result?, error?}；jobId 不存在 → 404（QA5 契约）
-  router.get('/backup/status', requireAdmin, async (req, res) => {
+  router.get('/backup/status', legacyUnavailable, requireAdmin, async (req, res) => {
     const jobId = typeof req.query.jobId === 'string' ? req.query.jobId : undefined;
     if (!jobId || jobId.trim() === '') {
       sendAdminError(res, validationError('缺少 jobId', 'jobId'));
@@ -502,7 +449,7 @@ export function createAdminRouter(options: AdminRouterOptions): Router {
   });
 
   // POST /api/v1/admin/restore?confirm=1 → 演练恢复（目标必须匹配 teacher_db_*_restore_* / teacher_platform_restore_*）
-  router.post('/restore', requireAdmin, async (req: AdminRequest, res) => {
+  router.post('/restore', legacyUnavailable, requireAdmin, async (req: AdminRequest, res) => {
     const actor = req.admin?.email ?? 'unknown';
     if (req.query.confirm !== '1') {
       await audit(req, { actor, action: 'restore.run', objectType: 'backup', error: validationError('缺少确认', 'confirm') });

@@ -28,6 +28,11 @@ export interface GetOwnedLessonInput {
   lessonId: string;
 }
 
+export interface ListLessonsForScheduleInput {
+  teacherId: string;
+  scheduleId: string;
+}
+
 export interface UpdateLessonInput {
   lessonId: string;
   progress?: string;
@@ -91,6 +96,7 @@ export interface LessonService {
   createLesson(input: CreateLessonInput): Promise<Result<LessonData, CommonError>>;
   getLesson(lessonId: string): Promise<Result<LessonData, CommonError>>;
   getOwnedLesson(input: GetOwnedLessonInput): Promise<Result<LessonData, CommonError>>;
+  listLessonsForSchedule(input: ListLessonsForScheduleInput): Promise<Result<LessonData[], CommonError>>;
   listLessons(input: ListLessonsInput): Promise<Result<{ items: LessonData[]; total: number }, CommonError>>;
   listLessonsInWindow(input: ListLessonsInWindowInput): Promise<Result<{ items: LessonData[]; total: number }, CommonError>>;
   updateLesson(input: UpdateLessonInput): Promise<Result<LessonData, CommonError>>;

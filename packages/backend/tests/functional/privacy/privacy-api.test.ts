@@ -9,6 +9,7 @@ import { PrismaClient } from '@prisma/client';import { createAuthRouter } from '
 import { createAuthService } from '../../../src/features/auth/index.js';
 import { createPrivacyRouter } from '../../../src/app/routes/privacy.routes.js';
 import { createDatabaseTrustedClock } from '../../../src/shared/trusted-clock/index.js';
+import { acceptInvitation } from '../../helpers/invitations.js';
 import { createSlidingWindowLimiter } from '../../../src/app/middleware/rate-limit.js';
 import type { Logger } from '../../../src/shared/logger/index.js';
 import {
@@ -83,9 +84,11 @@ function buildApp(options: {
 
 /** 注册教师（隔离库会话）→ 返回 {cookie, teacherId}。 */
 async function registerAndCookie(app: ReturnType<typeof buildApp>, email: string): Promise<{ cookie: string; teacherId: string }> {
-  const res = await request(app)
-    .post('/api/v1/auth/register')
-    .send({ email, password: PASSWORD, displayName: '隐私测试' });
+  const { response: res } = await acceptInvitation(app, prisma, {
+    email,
+    password: PASSWORD,
+    displayName: '隐私测试',
+  });
   expect(res.status).toBe(201);
   return {
     cookie: res.headers['set-cookie'][0].split(';')[0],

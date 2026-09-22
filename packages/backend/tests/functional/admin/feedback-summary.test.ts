@@ -49,6 +49,8 @@ function createAdminApp(overrides: { pool?: DatabaseClientPool } = {}) {
       loginLimiter: createSlidingWindowLimiter(),
       registryPrisma: prisma,
       pool: overrides.pool ?? inertPool,
+      // 旧反馈汇总专项：T-014 默认封闭，这里显式只为专项测试开启。
+      legacyOperationsEnabled: true,
     }),
   );
   return app;

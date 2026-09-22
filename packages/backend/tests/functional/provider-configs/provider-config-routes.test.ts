@@ -9,6 +9,7 @@ import { createProviderConfigService } from '../../../src/features/provider-conf
 import { createAuthService } from '../../../src/features/auth/index.js';
 import { createDatabaseTrustedClock } from '../../../src/shared/trusted-clock/index.js';
 import type { DnsLookup } from '../../../src/shared/ssrf/endpoint-guard.js';
+import { acceptInvitation } from '../../helpers/invitations.js';
 
 const prisma = new PrismaClient();
 process.env.PROVIDER_KEY_ENCRYPTION_KEY = 'b'.repeat(64);
@@ -32,15 +33,18 @@ afterAll(async () => {
   await prisma.providerConfig.deleteMany({ where: { teacherId: { in: createdTeacherIds } } });
   await prisma.sessionStore.deleteMany({ where: { teacherId: { in: createdTeacherIds } } });
   await prisma.teacherRegistry.deleteMany({ where: { id: { in: createdTeacherIds } } });
+  await prisma.teacherInvitation.deleteMany({ where: { email: { startsWith: 'pc-route-' } } });
   await prisma.$disconnect();
   delete process.env.PROVIDER_KEY_ENCRYPTION_KEY;
 });
 
 async function registerTeacher(): Promise<{ cookie: string; teacherId: string }> {
   const email = `pc-route-${randomBytes(6).toString('hex')}@example.com`;
-  const res = await request(app)
-    .post('/api/v1/auth/register')
-    .send({ email, password: 'password123', displayName: '路由测试' });
+  const { response: res } = await acceptInvitation(app, prisma, {
+    email,
+    password: 'password123',
+    displayName: '路由测试',
+  });
   if (res.status !== 201) throw new Error(`register failed: ${res.status}`);
   const teacherId = res.body.data.teacher.id;
   createdTeacherIds.push(teacherId);
@@ -92,14 +96,16 @@ describe('provider-config 路由', () => {
     expect(updated.status).toBe(200);
     expect(updated.body.data.model).toBe('deepseek-v3');
 
-    // test endpoint：成功响应含 providerName/model（契约 §2.2）
+    // test endpoint：未显式注入探针时必须明确 not_run，不能伪造成功。
     const test = await request(app)
       .post(`/api/v1/provider-configs/${configId}/test`)
       .set('Cookie', cookie);
     expect(test.status).toBe(200);
-    expect(test.body.data.ok).toBe(true);
+    expect(test.body.data.ok).toBe(false);
     expect(test.body.data.providerName).toBe('deepseek');
     expect(test.body.data.model).toBe('deepseek-v3');
+    expect(test.body.data.providerError).toMatchObject({ kind: 'unknown', status: 0, retryable: false });
+    expect(test.body.data.providerError.message).toContain('未发起网络请求');
 
     // delete
     const removed = await request(app)
@@ -111,6 +117,21 @@ describe('provider-config 路由', () => {
     // 删除后列表空
     const after = await request(app).get('/api/v1/provider-configs').set('Cookie', cookie);
     expect(after.body.data).toHaveLength(0);
+  });
+
+  it('capabilities 在 /:id 前匹配，明确非本机模式的 DNS 守卫与禁用探测', async () => {
+    const { cookie } = await registerTeacher();
+    const res = await request(app).get('/api/v1/provider-configs/capabilities').set('Cookie', cookie);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      ok: true,
+      data: {
+        configurationEnabled: true,
+        runtimeEnabled: true,
+        connectionTestEnabled: false,
+        endpointValidation: 'dns-guarded',
+      },
+    });
   });
 
   it('owner 隔离：A 的配置 B 通过 HTTP 改/删 → 404', async () => {

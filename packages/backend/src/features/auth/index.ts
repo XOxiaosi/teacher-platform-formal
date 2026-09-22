@@ -1,5 +1,5 @@
 /**
- * P7 认证领域服务：注册 / 登录 / 登出 / me / session 校验
+ * P7/T-014 认证领域服务：邀请接受 / 登录 / 登出 / me / session 校验
  *
  * - 密码哈希：node:crypto scrypt + 随机盐 + timingSafeEqual 比对（不引入 bcrypt 等新依赖）。
  * - session：token = randomBytes(32).toString('base64url')，只把 sha256(token) 落库；
@@ -63,7 +63,6 @@ export interface AuthTeacherData {
   email: string;
   displayName: string;
   status: 'active' | 'disabled';
-  databaseName: string;
   createdAtTs: Date;
   updatedAtTs: Date;
 }
@@ -76,8 +75,8 @@ export interface AuthSessionData {
 }
 
 export interface AuthService {
-  register(input: {
-    email: string;
+  acceptInvitation(input: {
+    token: string;
     password: string;
     displayName: string;
   }): Promise<Result<AuthSessionData, CommonError>>;
@@ -102,17 +101,15 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
     passwordHash: string;
     displayName: string;
     status: string;
-    databaseName: string;
     createdAtTs: Date;
     updatedAtTs: Date;
   }): AuthTeacherData {
-    // 公开信息：刻意不暴露 passwordHash
+    // 教师公开信息：刻意不暴露 passwordHash / databaseName（后者是内部路由实现细节）。
     return {
       id: record.id,
       email: record.email,
       displayName: record.displayName,
       status: record.status === 'disabled' ? 'disabled' : 'active',
-      databaseName: record.databaseName,
       createdAtTs: record.createdAtTs,
       updatedAtTs: record.updatedAtTs,
     };
@@ -138,10 +135,9 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
   }
 
   return {
-    async register(input) {
-      const email = input.email.trim().toLowerCase();
-      if (!EMAIL_PATTERN.test(email)) {
-        return err(validationError('邮箱格式不正确', 'email'));
+    async acceptInvitation(input) {
+      if (typeof input.token !== 'string' || input.token.length < 20) {
+        return err(permissionDenied('邀请无效、已失效或已被使用'));
       }
       if (typeof input.password !== 'string' || input.password.length < MIN_PASSWORD_LENGTH) {
         return err(validationError(`密码长度至少 ${MIN_PASSWORD_LENGTH} 位`, 'password'));
@@ -151,27 +147,54 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
       }
 
       try {
-        const teacher = await prisma.teacherRegistry.create({
-          data: {
-            email,
-            passwordHash: hashPassword(input.password),
-            displayName: input.displayName.trim(),
-            databaseName: DEFAULT_DATABASE_NAME,
-          },
+        const nowResult = await clock.now();
+        if (!nowResult.ok) return err(nowResult.error);
+        const now = nowResult.value;
+        if (!(now instanceof Date) || Number.isNaN(now.getTime())) {
+          return err(internalError('TrustedClock 返回无效时间'));
+        }
+        // updateMany 是一次性消费的竞争闸门；与建号/签发 session 同处事务，任一失败均回滚消费。
+        const result = await (prisma as PrismaClient).$transaction(async (tx) => {
+          const consumed = await tx.teacherInvitation.updateMany({
+            where: {
+              tokenHash: hashToken(input.token),
+              status: 'pending',
+              expiresAtTs: { gt: now },
+            },
+            data: { status: 'accepted', acceptedAtTs: now },
+          });
+          if (consumed.count !== 1) return null;
+          const invitation = await tx.teacherInvitation.findUnique({
+            where: { tokenHash: hashToken(input.token) },
+            select: { email: true },
+          });
+          // 理论上由 updateMany 成功保证存在；保守处理使 token 失败语义不泄露细节。
+          if (!invitation) return null;
+          const teacher = await tx.teacherRegistry.create({
+            data: {
+              email: invitation.email,
+              passwordHash: hashPassword(input.password),
+              displayName: input.displayName.trim(),
+              databaseName: DEFAULT_DATABASE_NAME,
+            },
+          });
+          const session = await issueSession(tx, teacher.id);
+          if (!session.ok) throw new Error(`SESSION_ISSUE_FAILED:${session.error.message}`);
+          return { teacher, session: session.value };
         });
-        const session = await issueSession(prisma, teacher.id);
-        if (!session.ok) return err(session.error);
+        if (!result) return err(permissionDenied('邀请无效、已失效或已被使用'));
         return ok({
-          teacher: toTeacherData(teacher),
-          token: session.value.token,
-          expiresAtTs: session.value.expiresAtTs,
+          teacher: toTeacherData(result.teacher),
+          token: result.session.token,
+          expiresAtTs: result.session.expiresAtTs,
         });
       } catch (e) {
         if (isUniqueViolation(e)) {
-          return err(validationError('该邮箱已注册', 'email'));
+          // 接受端不区分邮箱已注册、token 已消费/过期或撤销，避免邀请/账号状态枚举。
+          return err(permissionDenied('邀请无效、已失效或已被使用'));
         }
         const message = e instanceof Error ? e.message : String(e);
-        return err(internalError(`注册失败：${message}`));
+        return err(internalError(`接受邀请失败：${message}`));
       }
     },
 
@@ -216,12 +239,16 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
     async getMe(teacherId) {
       const teacher = await prisma.teacherRegistry.findUnique({ where: { id: teacherId } });
       if (!teacher) return err(notFound('教师不存在'));
+      if (teacher.status !== 'active') return err(permissionDenied('账号未激活或已停用'));
       return ok(toTeacherData(teacher));
     },
 
     async validateToken(token) {
       const tokenHash = hashToken(token);
-      const session = await prisma.sessionStore.findUnique({ where: { tokenHash } });
+      const session = await prisma.sessionStore.findUnique({
+        where: { tokenHash },
+        include: { teacher: { select: { status: true } } },
+      });
       if (!session) {
         return err(permissionDenied('会话无效或已过期'));
       }
@@ -232,7 +259,12 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
         return err(internalError('TrustedClock 返回无效时间'));
       }
       if (session.expiresAtTs.getTime() <= now.getTime()) {
+        await prisma.sessionStore.deleteMany({ where: { tokenHash } });
         return err(permissionDenied('会话已过期'));
+      }
+      if (session.teacher.status !== 'active') {
+        await prisma.sessionStore.deleteMany({ where: { tokenHash } });
+        return err(permissionDenied('会话无效或已过期'));
       }
       return ok({ teacherId: session.teacherId });
     },

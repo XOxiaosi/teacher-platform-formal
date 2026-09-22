@@ -37,11 +37,14 @@ export {
   type TeacherDbHealthEntry,
 } from './admin-health.js';
 export {
-  createTeacher,
+  createTeacherInvitation,
   isSafeRestoreTarget,
+  listTeacherInvitations,
   resolveLatestDumpForDatabase,
+  revokeTeacherInvitation,
   setTeacherStatus,
-  type CreateTeacherInput,
+  type CreateTeacherInvitationInput,
+  type TeacherInvitationData,
 } from './admin-actions.js';
 export {
   createAdminJobStore,

@@ -4,11 +4,12 @@ import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { PrismaClient } from '@prisma/client';
 import { createApp } from '../../src/index.js';
 import { createSlidingWindowLimiter } from '../../src/app/middleware/rate-limit.js';
+import { seedInvitation } from '../helpers/invitations.js';
 
 /**
- * 注册限流（P17 契约 t3/t4，reports/security/register-rate-limit-fix-contract.md §5 测试矩阵 M1–M5）：
- * - M1 限额内注册成功（默认 20/1h，env 默认值语义 M6 合并）
- * - M2 超限 429：精确信封 {ok:false,error:{code:'RATE_LIMITED',message:'注册请求过于频繁，请稍后重试',field:'rate'}} + Retry-After≥1 + 无 Set-Cookie
+ * 邀请接受限流（P17 契约 t3/t4，reports/security/register-rate-limit-fix-contract.md §5 测试矩阵 M1–M5）：
+ * - M1 限额内邀请接受成功（默认 20/1h，env 默认值语义 M6 合并）
+ * - M2 超限 429：精确信封 {ok:false,error:{code:'RATE_LIMITED',message:'邀请接受请求过于频繁，请稍后重试',field:'rate'}} + Retry-After≥1 + 无 Set-Cookie
  * - M3 失败请求（400 校验失败）也计数（中间件在 handler 前）
  * - M4 键隔离：register:ip:* 与 login:* 互不影响（注册 429 后 login 仍 401）
  * - M5 429 请求不落库（TeacherRegistry/SessionStore 零写入）
@@ -23,6 +24,8 @@ const createdTeacherIds: string[] = [];
 afterAll(async () => {
   await prisma.sessionStore.deleteMany({ where: { teacherId: { in: createdTeacherIds } } });
   await prisma.teacherRegistry.deleteMany({ where: { id: { in: createdTeacherIds } } });
+  await prisma.teacherInvitation.deleteMany({ where: { email: { startsWith: 'reg-rate' } } });
+  await prisma.teacherInvitation.deleteMany({ where: { email: { startsWith: 'm5-' } } });
   await prisma.$disconnect();
 });
 
@@ -34,11 +37,12 @@ function trackTeacher(data: { id: string }): void {
   createdTeacherIds.push(data.id);
 }
 
-/** 注册请求（中间件在 handler 前计数：成功/失败均计）。 */
-function register(app: ReturnType<typeof createApp>, email: string, displayName = '限流测试') {
+/** 邀请接受请求（中间件在 handler 前计数：成功/失败均计）。 */
+async function accept(app: ReturnType<typeof createApp>, email: string, displayName = '限流测试') {
+  const invitation = await seedInvitation(prisma, { email });
   return request(app)
-    .post('/api/v1/auth/register')
-    .send({ email, password: 'password123', displayName });
+    .post('/api/v1/auth/invitations/accept')
+    .send({ token: invitation.token, password: 'password123', displayName });
 }
 
 // 小阈值注入：createApp 时 createAuthRouter 构建 register 中间件，parseRegisterRateLimitEnv
@@ -66,11 +70,11 @@ afterAll(() => {
   else process.env[REGISTER_WINDOW_KEY] = originalWindow;
 });
 
-describe('register 限流：限额内（默认 20/1h，env 默认值语义 M6 合并）', () => {
-  it('M1 连发 3 次不同邮箱注册 → 全部 201 + Set-Cookie（回归保护，与 auth-flow 同形态）', async () => {
+describe('邀请接受限流：限额内（默认 20/1h，env 默认值语义 M6 合并）', () => {
+  it('M1 连发 3 次不同邀请 → 全部 201 + Set-Cookie', async () => {
     const app = createApp(prisma, { rateLimiter: createSlidingWindowLimiter() });
     for (let i = 0; i < 3; i += 1) {
-      const res = await register(app, uniqueEmail());
+      const res = await accept(app, uniqueEmail());
       expect(res.status).toBe(201);
       expect(res.body.ok).toBe(true);
       const setCookie = res.headers['set-cookie'] as unknown as string[] | undefined;
@@ -81,43 +85,44 @@ describe('register 限流：限额内（默认 20/1h，env 默认值语义 M6 �
   });
 });
 
-describe('register 限流：超限 429（注入 max=2, windowMs=3600000）', () => {
-  it('M2 第 3 次注册（新邮箱）→ 429 + 精确信封 + Retry-After≥1 + 无 Set-Cookie', async () => {
+describe('邀请接受限流：超限 429（注入 max=2, windowMs=3600000）', () => {
+  it('M2 第 3 次接受邀请 → 429 + 精确信封 + Retry-After≥1 + 无 Set-Cookie', async () => {
     setRegisterEnv(2, 3600000);
     const app = createApp(prisma, { rateLimiter: createSlidingWindowLimiter() });
 
-    const first = await register(app, uniqueEmail());
+    const first = await accept(app, uniqueEmail());
     expect(first.status).toBe(201);
     trackTeacher(first.body.data.teacher);
 
-    const second = await register(app, uniqueEmail());
+    const second = await accept(app, uniqueEmail());
     expect(second.status).toBe(201);
     trackTeacher(second.body.data.teacher);
 
-    const third = await register(app, uniqueEmail());
+    const third = await accept(app, uniqueEmail());
     expect(third.status).toBe(429);
     expect(third.body).toEqual({
       ok: false,
-      error: { code: 'RATE_LIMITED', message: '注册请求过于频繁，请稍后重试', field: 'rate' },
+      error: { code: 'RATE_LIMITED', message: '邀请接受请求过于频繁，请稍后重试', field: 'rate' },
     });
     expect(Number(third.headers['retry-after'])).toBeGreaterThanOrEqual(1);
     expect(third.headers['set-cookie']).toBeUndefined();
   });
 
-  it('M3 失败请求也计数：max=1 先发缺字段请求（400）→ 再发合法注册 → 429（中间件在 handler 前）', async () => {
+  it('M3 失败请求也计数：max=1 先发缺字段请求（400）→ 再发合法请求 → 429', async () => {
     setRegisterEnv(1, 3600000);
     const app = createApp(prisma, { rateLimiter: createSlidingWindowLimiter() });
 
+    const invalidInvitation = await seedInvitation(prisma, { email: uniqueEmail() });
     const invalid = await request(app)
-      .post('/api/v1/auth/register')
-      .send({ email: uniqueEmail(), password: 'password123' }); // 缺 displayName → 400
+      .post('/api/v1/auth/invitations/accept')
+      .send({ token: invalidInvitation.token, password: 'password123' }); // 缺 displayName → 400
     expect(invalid.status).toBe(400);
 
-    const valid = await register(app, uniqueEmail());
+    const valid = await accept(app, uniqueEmail());
     expect(valid.status).toBe(429);
     expect(valid.body).toEqual({
       ok: false,
-      error: { code: 'RATE_LIMITED', message: '注册请求过于频繁，请稍后重试', field: 'rate' },
+      error: { code: 'RATE_LIMITED', message: '邀请接受请求过于频繁，请稍后重试', field: 'rate' },
     });
   });
 
@@ -125,11 +130,11 @@ describe('register 限流：超限 429（注入 max=2, windowMs=3600000）', () 
     setRegisterEnv(1, 3600000);
     const app = createApp(prisma, { rateLimiter: createSlidingWindowLimiter() });
 
-    const first = await register(app, uniqueEmail());
+    const first = await accept(app, uniqueEmail());
     expect(first.status).toBe(201);
     trackTeacher(first.body.data.teacher);
 
-    const second = await register(app, uniqueEmail());
+    const second = await accept(app, uniqueEmail());
     expect(second.status).toBe(429);
 
     const login = await request(app)
@@ -144,10 +149,10 @@ describe('register 限流：超限 429（注入 max=2, windowMs=3600000）', () 
     const app = createApp(prisma, { rateLimiter: createSlidingWindowLimiter() });
     const emails = [uniqueEmail('m5-a'), uniqueEmail('m5-b'), uniqueEmail('m5-c')];
 
-    const first = await register(app, emails[0], 'A');
+    const first = await accept(app, emails[0], 'A');
     expect(first.status).toBe(201);
     trackTeacher(first.body.data.teacher);
-    const second = await register(app, emails[1], 'B');
+    const second = await accept(app, emails[1], 'B');
     expect(second.status).toBe(201);
     trackTeacher(second.body.data.teacher);
 
@@ -157,7 +162,7 @@ describe('register 限流：超限 429（注入 max=2, windowMs=3600000）', () 
     expect(teachersBefore).toBe(2);
     expect(sessionsBefore).toBe(2);
 
-    const third = await register(app, emails[2], 'C');
+    const third = await accept(app, emails[2], 'C');
     expect(third.status).toBe(429);
 
     // 429 请求被中间件拦截：不写 TeacherRegistry/SessionStore

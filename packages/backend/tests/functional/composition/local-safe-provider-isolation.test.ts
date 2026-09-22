@@ -68,7 +68,7 @@ describe.sequential('L0 local-safe provider isolation', () => {
     }
   });
 
-  it('完整 createApp 装配不读取 provider 配置，不挂 admin/provider/usage 路由', async () => {
+  it('完整 createApp 装配不读取 provider 配置；不挂 runtime/usage，但装配静态配置管理', async () => {
     const providerFindMany = vi.fn(async () => {
       throw new Error('local-safe must not read provider configuration');
     });
@@ -85,9 +85,14 @@ describe.sequential('L0 local-safe provider isolation', () => {
     const app = createApp(prisma, { localSafeMode: true });
 
     expect(dependencies.provider).toBeUndefined();
+    expect(dependencies.providerConfig?.providerConfigService.capabilities()).toEqual({
+      configurationEnabled: true,
+      runtimeEnabled: false,
+      connectionTestEnabled: false,
+      endpointValidation: 'static',
+    });
     // x-teacher-id 让请求越过 coreGuard：若任一路由仍被挂载，会得到其自身鉴权/业务响应而非 404。
     expect((await request(app).get('/api/v1/admin/teachers').set('x-teacher-id', 'teacher-safe')).status).toBe(404);
-    expect((await request(app).get('/api/v1/provider-configs').set('x-teacher-id', 'teacher-safe')).status).toBe(404);
     expect((await request(app).get('/api/v1/usage/summary').set('x-teacher-id', 'teacher-safe')).status).toBe(404);
     expect(providerFindMany).not.toHaveBeenCalled();
     expect(fetchSpy).not.toHaveBeenCalled();

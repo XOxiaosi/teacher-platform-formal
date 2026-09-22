@@ -8,7 +8,10 @@ import {
   sendTeacherError,
 } from './api-helpers.js';
 
-export function createEditRouter(dependencies: EditRouteDependencies): Router {
+export function createEditRouter(
+  dependencies: EditRouteDependencies,
+  options: { legacyPaymentEditEnabled?: boolean } = {},
+): Router {
   const router = Router();
 
   router.patch('/students/:studentId/profile', async (req, res) => {
@@ -47,17 +50,21 @@ export function createEditRouter(dependencies: EditRouteDependencies): Router {
     ));
   });
 
-  router.patch('/payments/:paymentId', async (req, res) => {
-    await handleEdit(req, res, 'changes', async (teacherId, body) => (
-      dependencies.updatePayment.updatePayment({
-        teacherId,
-        paymentId: req.params.paymentId,
-        expectedUpdatedAt: body.expectedUpdatedAt,
-        source: 'manual-web',
-        changes: body.changes,
-      })
-    ));
-  });
+  // Direct unit callers may opt into the legacy adapter; formal core routing
+  // passes false explicitly so payment edits stay closed by default.
+  if (options.legacyPaymentEditEnabled !== false) {
+    router.patch('/payments/:paymentId', async (req, res) => {
+      await handleEdit(req, res, 'changes', async (teacherId, body) => (
+        dependencies.updatePayment.updatePayment({
+          teacherId,
+          paymentId: req.params.paymentId,
+          expectedUpdatedAt: body.expectedUpdatedAt,
+          source: 'manual-web',
+          changes: body.changes,
+        })
+      ));
+    });
+  }
 
   router.patch('/memos/:memoId', async (req, res) => {
     await handleEdit(req, res, 'changes', async (teacherId, body) => (

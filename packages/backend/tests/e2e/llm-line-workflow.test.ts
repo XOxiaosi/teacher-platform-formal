@@ -1,10 +1,12 @@
 import { randomBytes } from 'node:crypto';
+import { promises as dnsPromises } from 'node:dns';
 import request from 'supertest';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { PrismaClient } from '@prisma/client';
 import { createApp } from '../../src/index.js';
 import { createAuthService } from '../../src/features/auth/index.js';
 import { createDatabaseTrustedClock } from '../../src/shared/trusted-clock/index.js';
+import { seedInvitation } from '../helpers/invitations.js';
 
 /**
  * L6（t79）：LLM 渠道线 e2e 隔离验收。
@@ -25,6 +27,13 @@ const prisma = new PrismaClient();
 // ProviderConfig apiKey 加密需要 32 字节 hex 密钥（安全红线：缺省拒绝明文落库）——
 // 对齐 backend4 functional 测试模式（provider-config-routes/service.test.ts 同款），测试后清理
 process.env.PROVIDER_KEY_ENCRYPTION_KEY = 'd'.repeat(64);
+// 隔离测试不依赖真实 DNS：endpoint guard 仍执行完整校验，但 resolver
+// 稳定返回明确 allowlist 内的公网 TEST-NET 地址。
+const previousAllowedProviderIps = process.env.PROVIDER_BASEURL_ALLOWED_IPS;
+process.env.PROVIDER_BASEURL_ALLOWED_IPS = '93.184.216.34/32';
+const dnsLookupMock = vi.spyOn(dnsPromises, 'lookup').mockImplementation(async () => ([
+  { address: '93.184.216.34', family: 4 },
+]));
 const authService = createAuthService({
   prisma,
   clock: createDatabaseTrustedClock(prisma),
@@ -42,9 +51,10 @@ function unique(prefix: string): string {
 }
 
 async function registerTeacher(agent: ReturnType<typeof request.agent>, email: string, displayName: string): Promise<string> {
+  const invitation = await seedInvitation(prisma, { email });
   const res = await agent
-    .post('/api/v1/auth/register')
-    .send({ email, password: 'password123', displayName });
+    .post('/api/v1/auth/invitations/accept')
+    .send({ token: invitation.token, password: 'password123', displayName });
   expect(res.status).toBe(201);
   createdTeacherIds.push(res.body.data.teacher.id);
   return res.body.data.teacher.id;
@@ -62,8 +72,12 @@ afterAll(async () => {
   await prisma.providerConfig.deleteMany({ where: { teacherId: { in: createdTeacherIds } } });
   await prisma.sessionStore.deleteMany({ where: { teacherId: { in: createdTeacherIds } } });
   await prisma.teacherRegistry.deleteMany({ where: { id: { in: createdTeacherIds } } });
+  await prisma.teacherInvitation.deleteMany({ where: { email: { contains: 'llm-' } } });
   await prisma.$disconnect();
   delete process.env.PROVIDER_KEY_ENCRYPTION_KEY;
+  if (previousAllowedProviderIps === undefined) delete process.env.PROVIDER_BASEURL_ALLOWED_IPS;
+  else process.env.PROVIDER_BASEURL_ALLOWED_IPS = previousAllowedProviderIps;
+  dnsLookupMock.mockRestore();
 });
 
 describe('LLM 渠道线 e2e（共享库双教师隔离）', () => {

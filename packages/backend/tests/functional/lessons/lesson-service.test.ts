@@ -179,15 +179,30 @@ describe('lessonService.listLessonsInWindow', () => {
     return { student, schedule };
   }
 
+  async function createCapacitySchedules(studentId: string, count: number, prefix: string) {
+    const rows = Array.from({ length: count }, (_, index) => ({
+      id: `${prefix}-schedule-${index}`,
+      teacherId: TEACHER_ID,
+      studentId,
+      type: 'lesson',
+      title: '窗口容量日程',
+      scheduledStartTs: windowStart,
+      scheduledEndTs: new Date(windowStart.getTime() + 60 * 60 * 1000),
+    }));
+    await prisma.schedule.createMany({ data: rows });
+    return rows.map((row) => row.id);
+  }
+
   it('按 date 半开窗口查询并隔离 teacher', async () => {
     const owned = await createLessonOwnerFixture();
     const other = await createLessonOwnerFixture(OTHER_TEACHER_ID);
+    const additionalScheduleIds = await createCapacitySchedules(owned.student.id, 3, 'window-boundary');
     await prisma.lesson.createMany({
       data: [
         { id: 'lesson-before', teacherId: TEACHER_ID, studentId: owned.student.id, scheduleId: owned.schedule.id, dateTs: new Date('2030-05-01T15:59:59.999Z') },
-        { id: 'lesson-start', teacherId: TEACHER_ID, studentId: owned.student.id, scheduleId: owned.schedule.id, dateTs: windowStart },
-        { id: 'lesson-inside', teacherId: TEACHER_ID, studentId: owned.student.id, scheduleId: owned.schedule.id, dateTs: new Date('2030-05-02T15:59:59.999Z') },
-        { id: 'lesson-end', teacherId: TEACHER_ID, studentId: owned.student.id, scheduleId: owned.schedule.id, dateTs: windowEndExclusive },
+        { id: 'lesson-start', teacherId: TEACHER_ID, studentId: owned.student.id, scheduleId: additionalScheduleIds[0], dateTs: windowStart },
+        { id: 'lesson-inside', teacherId: TEACHER_ID, studentId: owned.student.id, scheduleId: additionalScheduleIds[1], dateTs: new Date('2030-05-02T15:59:59.999Z') },
+        { id: 'lesson-end', teacherId: TEACHER_ID, studentId: owned.student.id, scheduleId: additionalScheduleIds[2], dateTs: windowEndExclusive },
         { id: 'lesson-other', teacherId: OTHER_TEACHER_ID, studentId: other.student.id, scheduleId: other.schedule.id, dateTs: windowStart },
       ],
     });
@@ -206,12 +221,13 @@ describe('lessonService.listLessonsInWindow', () => {
 
   it.each([101, 500])('完整返回 %i 条并按 date、id 升序', async (count) => {
     const owned = await createLessonOwnerFixture();
+    const scheduleIds = await createCapacitySchedules(owned.student.id, count - 1, `window-capacity-${count}`);
     await prisma.lesson.createMany({
       data: Array.from({ length: count }, (_, index) => ({
         id: `capacity-lesson-${String(count - index).padStart(3, '0')}`,
         teacherId: TEACHER_ID,
         studentId: owned.student.id,
-        scheduleId: owned.schedule.id,
+        scheduleId: index === 0 ? owned.schedule.id : scheduleIds[index - 1],
         dateTs: windowStart,
       })),
     });
@@ -233,11 +249,12 @@ describe('lessonService.listLessonsInWindow', () => {
 
   it('501 条返回 INTERNAL_ERROR，不静默截断', async () => {
     const owned = await createLessonOwnerFixture();
+    const scheduleIds = await createCapacitySchedules(owned.student.id, 500, 'window-overflow');
     await prisma.lesson.createMany({
       data: Array.from({ length: 501 }, (_, index) => ({
         teacherId: TEACHER_ID,
         studentId: owned.student.id,
-        scheduleId: owned.schedule.id,
+        scheduleId: index === 0 ? owned.schedule.id : scheduleIds[index - 1],
         dateTs: new Date(windowStart.getTime() + index),
       })),
     });

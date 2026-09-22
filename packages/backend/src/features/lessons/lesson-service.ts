@@ -51,6 +51,14 @@ export function createLessonService(
   return {
     async createLesson(input: CreateLessonInput) {
       const { prisma, trustedClock } = await resolve();
+      // Lesson must never bridge a foreign student or schedule, including in the
+      // shared-database compatibility mode.
+      const [student, schedule] = await Promise.all([
+        prisma.student.findFirst({ where: { id: input.studentId, teacherId: input.teacherId }, select: { id: true } }),
+        prisma.schedule.findFirst({ where: { id: input.scheduleId, teacherId: input.teacherId }, include: { participants: { where: { studentId: input.studentId, teacherId: input.teacherId }, select: { id: true } } } }),
+      ]);
+      if (!student || !schedule) return err(notFound('学生或日程不存在'));
+      if (schedule.participants.length === 0 && schedule.studentId !== input.studentId) return err(notFound('学生或日程不存在'));
       const now = await trustedClock.now();
       if (!now.ok) return now;
       if (!(now.value instanceof Date) || Number.isNaN(now.value.getTime())) {
@@ -92,6 +100,19 @@ export function createLessonService(
         return ok(toLessonData(lesson, cipher));
       } catch (e) {
         return err(internalError(`查询课次失败：${e instanceof Error ? e.message : String(e)}`));
+      }
+    },
+
+    async listLessonsForSchedule(input) {
+      const { prisma } = await resolve();
+      const rows = await prisma.lesson.findMany({
+        where: { teacherId: input.teacherId, scheduleId: input.scheduleId },
+        orderBy: [{ studentId: 'asc' }, { id: 'asc' }],
+      });
+      try {
+        return ok(rows.map((row) => toLessonData(row, cipher)));
+      } catch (caught) {
+        return err(internalError(`查询课次失败：${caught instanceof Error ? caught.message : String(caught)}`));
       }
     },
 

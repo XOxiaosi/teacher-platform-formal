@@ -34,6 +34,8 @@ function failingAuditAt(failureAt: number): ChangelogFactory {
 
 async function cleanup() {
   await prisma.changeLog.deleteMany({ where: { teacherId: TEACHER_ID } });
+  await prisma.scheduleCompletionSnapshot.deleteMany({ where: { teacherId: TEACHER_ID } });
+  await prisma.lessonLedgerEntry.deleteMany({ where: { teacherId: TEACHER_ID } });
   await prisma.lesson.deleteMany({ where: { teacherId: TEACHER_ID } });
   await prisma.schedule.deleteMany({ where: { teacherId: TEACHER_ID } });
   await prisma.student.deleteMany({ where: { teacherId: TEACHER_ID } });
@@ -82,7 +84,7 @@ beforeEach(cleanup);
 afterEach(cleanup);
 
 describe('schedule-complete explicit audit atomicity', () => {
-  it('raw tenant client 成功后显式写入 Schedule update 与 Lesson create 两条日志', async () => {
+  it('raw tenant client 成功后只写入日程与课次审计，不写扣课流水或完成快照', async () => {
     const { schedule } = await createFixture();
     const useCase = createScheduleCompleteUseCase(prisma);
 
@@ -101,9 +103,9 @@ describe('schedule-complete explicit audit atomicity', () => {
     expect(scheduleLog?.before?.status).toBe('planned');
     expect(scheduleLog?.after?.status).toBe('completed');
     expect(Object.keys(scheduleLog?.after ?? {}).sort()).toEqual([
-      'confidence', 'createdAtTs', 'id', 'parentId', 'pendingFields', 'scheduledEndTs',
-      'scheduledStartTs', 'sourceInput', 'status', 'studentId', 'teacherId', 'title',
-      'type', 'updatedAtTs',
+      'classFormat', 'confidence', 'createdAtTs', 'id', 'location', 'operationalNote',
+      'parentId', 'participantIds', 'pendingFields', 'scheduledEndTs', 'scheduledStartTs',
+      'sourceInput', 'status', 'studentId', 'teacherId', 'type', 'updatedAtTs',
     ]);
     expect(lessonLog).toMatchObject({
       action: 'create',
@@ -115,6 +117,8 @@ describe('schedule-complete explicit audit atomicity', () => {
       'createdAtTs', 'dateTs', 'homework', 'id', 'progress', 'scheduleId', 'sourceNoteId',
       'status', 'studentId', 'studentState', 'teacherId', 'teacherNote', 'updatedAtTs',
     ]);
+    expect(await prisma.lessonLedgerEntry.count({ where: { teacherId: TEACHER_ID } })).toBe(0);
+    expect(await prisma.scheduleCompletionSnapshot.count({ where: { teacherId: TEACHER_ID } })).toBe(0);
   });
 
   it('extended client 下 suppression 保证成功时合计恰好两条日志', async () => {

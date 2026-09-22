@@ -108,7 +108,7 @@ describe('ProviderUsage 采集接线（P16 P1：onUsage → record，两处 crea
     createdTeacherIds.push(teacherId);
 
     // 配置 mock provider（本地 OpenAI 兼容；首条自动 isPrimary + status=active）
-    const created = await deps.provider.providerConfigService.create(teacherId, {
+    const created = await deps.providerConfig!.providerConfigService.create(teacherId, {
       providerKind: 'openai',
       providerName: 'mock-vendor',
       baseUrl: `http://127.0.0.1:${mockPort}`,

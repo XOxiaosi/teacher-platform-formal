@@ -6,6 +6,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { PrismaClient } from '@prisma/client';
 import { createApp } from '../../src/index.js';
 import { computeWechatSignature } from '../../src/features/wechat/index.js';
+import { acceptInvitation } from '../helpers/invitations.js';
 
 /**
  * P8 t20 装配接线 smoke：
@@ -52,6 +53,7 @@ afterAll(async () => {
   await prisma.channelMessage.deleteMany({});
   await prisma.sessionStore.deleteMany({ where: { teacherId: { in: createdTeacherIds } } });
   await prisma.teacherRegistry.deleteMany({ where: { id: { in: createdTeacherIds } } });
+  await prisma.teacherInvitation.deleteMany({ where: { email: { startsWith: 'smoke-disabled-' } } });
   await prisma.$disconnect();
 });
 
@@ -90,9 +92,11 @@ describe('装配：未启用（env 缺省）零破坏', () => {
 
     // 注册教师拿 session cookie（wechat 未启用不影响认证路由）
     const email = `smoke-disabled-${randomBytes(6).toString('hex')}@example.com`;
-    const reg = await request(app)
-      .post('/api/v1/auth/register')
-      .send({ email, password: 'password123', displayName: 'smoke' });
+    const { response: reg } = await acceptInvitation(app, prisma, {
+      email,
+      password: 'password123',
+      displayName: 'smoke',
+    });
     expect(reg.status).toBe(201);
     const cookie = reg.headers['set-cookie'][0].split(';')[0];
     createdTeacherIds.push(reg.body.data.teacher.id);

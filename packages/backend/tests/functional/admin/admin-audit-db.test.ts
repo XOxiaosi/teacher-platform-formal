@@ -55,6 +55,8 @@ function createAdminApp(overrides: { logger?: Logger } = {}) {
         registerProcessHooks: false,
       }),
       logger: overrides.logger,
+      // 旧备份审计专项：T-014 默认封闭，这里显式只为专项测试开启。
+      legacyOperationsEnabled: true,
     }),
   );
   return app;
@@ -156,25 +158,22 @@ describe('recordAdminActionDb 表落库', () => {
 });
 
 describe('路由动作 → AdminAuditLog 行', () => {
-  it('POST /teachers 成功 → teacher.create 行（actorEmail=admin）', async () => {
+  it('POST /invitations 成功 → invitation.create 行（actorEmail=admin）', async () => {
     const app = createAdminApp();
     const agent = await loginAgent(app);
     const email = `audit-create-${suffix}@example.com`;
-    const res = await agent.post('/api/v1/admin/teachers').send({
+    const res = await agent.post('/api/v1/admin/invitations').send({
       email,
-      password: 'teacher-pass-123',
-      displayName: '审计测试',
     });
     expect(res.status).toBe(201);
-    seedEmails.push(email);
-    const teacherId = res.body.data.teacher.id;
+    const invitationId = res.body.data.invitation.id;
 
     const row = await prisma.adminAuditLog.findFirst({
-      where: { actorEmail: ADMIN_EMAIL, action: 'teacher.create', objectId: teacherId },
+      where: { actorEmail: ADMIN_EMAIL, action: 'invitation.create', objectId: invitationId },
       orderBy: { createdAtTs: 'desc' },
     });
     expect(row).not.toBeNull();
-    expect(row?.objectType).toBe('teacher');
+    expect(row?.objectType).toBe('invitation');
   });
 
   it('POST /backup 缺 confirm → backup.run.failed 行 + 400', async () => {

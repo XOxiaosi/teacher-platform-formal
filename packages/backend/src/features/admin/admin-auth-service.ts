@@ -91,10 +91,11 @@ export function createAdminAuthService(options: AdminAuthServiceOptions): AdminA
         return err(validationError('邮箱格式不正确', 'email'));
       }
       // 统一失败语义：邮箱不匹配（非管理员邮箱）也做等时比对，防响应时间枚举
-      const passwordOk = email === adminEmail
+      const emailMatches = email === adminEmail;
+      const passwordOk = emailMatches
         ? verifyPassword(input.password, options.passwordHash)
         : verifyPassword(input.password, hashAdminPassword('timing-equalization-dummy'));
-      if (!passwordOk) {
+      if (!emailMatches || !passwordOk) {
         return err(permissionDenied('邮箱或密码错误'));
       }
       const token = randomBytes(32).toString('base64url');

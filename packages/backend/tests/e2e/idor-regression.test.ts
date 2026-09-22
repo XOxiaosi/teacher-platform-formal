@@ -3,6 +3,7 @@ import request from 'supertest';
 import { afterAll, describe, expect, it } from 'vitest';
 import { PrismaClient } from '@prisma/client';
 import { createApp } from '../../src/index.js';
+import { acceptInvitation } from '../helpers/invitations.js';
 
 /**
  * P0 修复回归：IDOR 水平越权（qa3 t11 真实验收实测）。
@@ -30,14 +31,17 @@ afterAll(async () => {
   await prisma.student.deleteMany({ where: { id: { in: createdStudentIds } } });
   await prisma.sessionStore.deleteMany({ where: { teacherId: { in: createdTeacherIds } } });
   await prisma.teacherRegistry.deleteMany({ where: { id: { in: createdTeacherIds } } });
+  await prisma.teacherInvitation.deleteMany({ where: { email: { contains: 'idor-' } } });
   await prisma.$disconnect();
 });
 
 async function registerTeacher(prefix: string): Promise<{ cookie: string; teacherId: string }> {
   const email = `${prefix}-${randomBytes(6).toString('hex')}@example.com`;
-  const res = await request(app)
-    .post('/api/v1/auth/register')
-    .send({ email, password: 'password123', displayName: prefix });
+  const { response: res } = await acceptInvitation(app, prisma, {
+    email,
+    password: 'password123',
+    displayName: prefix,
+  });
   expect(res.status).toBe(201);
   const teacherId = res.body.data.teacher.id;
   createdTeacherIds.push(teacherId);

@@ -9,6 +9,7 @@ import { createAdminAuthService } from '../../src/features/admin/index.js';
 import { createDatabaseClientPool } from '../../src/shared/database-pool/index.js';
 import { createDatabaseRouter } from '../../src/app/middleware/database-router.js';
 import { loadDatabaseUrl } from '../../../ops/lib/pg-utils.mjs';
+import { seedInvitation } from '../helpers/invitations.js';
 
 /**
  * t78（A装配）：/api/v1/admin 子路由挂载 smoke 验证。
@@ -65,14 +66,16 @@ beforeAll(async () => {
   const built = buildApp();
   teacherPool = built.pool;
   const teacherAgent = request.agent(built.app);
-  const register = await teacherAgent
-    .post('/api/v1/auth/register')
-    .send({ email: `teacher-${randomBytes(4).toString('hex')}@example.com`, password: 'password123', displayName: '教师A' });
-  expect(register.status).toBe(201);
-  createdTeacherIds.push(register.body.data.teacher.id);
+  const email = `teacher-${randomBytes(4).toString('hex')}@example.com`;
+  const invitation = await seedInvitation(prisma, { email });
+  const accepted = await teacherAgent
+    .post('/api/v1/auth/invitations/accept')
+    .send({ token: invitation.token, password: 'password123', displayName: '教师A' });
+  expect(accepted.status).toBe(201);
+  createdTeacherIds.push(accepted.body.data.teacher.id);
   const login = await teacherAgent
     .post('/api/v1/auth/login')
-    .send({ email: register.body.data.teacher.email, password: 'password123' });
+    .send({ email, password: 'password123' });
   expect(login.status).toBe(200);
   const cookies = login.headers['set-cookie'] as unknown as string[];
   teacherSessionCookie = cookies.find((c) => c.startsWith('sessionToken='));
@@ -82,6 +85,7 @@ afterAll(async () => {
   // 登录产生的 SessionStore 引用教师，先删 session 再删注册表（FK 顺序）
   await prisma.sessionStore.deleteMany({ where: { teacherId: { in: createdTeacherIds } } });
   await prisma.teacherRegistry.deleteMany({ where: { id: { in: createdTeacherIds } } });
+  await prisma.teacherInvitation.deleteMany({ where: { email: { startsWith: 'teacher-' } } });
   await teacherPool?.closeAll();
   await prisma.$disconnect();
 });

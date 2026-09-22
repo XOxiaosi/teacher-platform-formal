@@ -62,9 +62,9 @@ function readStringBody(body: unknown, key: string): string | undefined {
 export interface AuthRouterOptions {
   /** 登录失败锁定限流器（P1，t38 §2.4）；缺省不启用锁定（向后兼容） */
   loginLimiter?: RateLimiter;
-  /** 注册限流器（P17 契约：POST /auth/register 按 IP 限流，封顶邮箱枚举探测吞吐）；缺省不启用（直连 createAuthRouter 的测试零改动） */
+  /** 邀请接受限流器（沿用旧配置名，避免装配层失配）；缺省不启用（直连路由测试可注入）。 */
   registerLimiter?: RateLimiter;
-  /** 注册限流配置（测试注入小阈值）；缺省 parseRegisterRateLimitEnv()（REGISTER_RATE_LIMIT_MAX/WINDOW_MS） */
+  /** 邀请接受限流配置（配置名沿用既有环境变量，避免无关迁移）。 */
   registerLimitConfig?: RegisterRateLimitConfig;
 }
 
@@ -74,24 +74,29 @@ export function createAuthRouter(authService: AuthService, options: AuthRouterOp
   const loginLockout = options.loginLimiter
     ? createLoginLockoutMiddleware({ limiter: options.loginLimiter })
     : null;
-  // 注册限流中间件（handler 之前：成功/失败请求一律计数）；registerLimiter 缺省不启用
-  const registerLimit = options.registerLimiter
+  // 邀请接受限流中间件（handler 之前：成功/失败请求一律计数）；缺省不启用。
+  const invitationAcceptLimit = options.registerLimiter
     ? createRegisterRateLimitMiddleware({
         limiter: options.registerLimiter,
         ...(options.registerLimitConfig ? { config: options.registerLimitConfig } : {}),
       })
     : null;
 
-  // POST /api/v1/auth/register → 201 + Set-Cookie sessionToken（P17 契约：IP 滑动窗口限流 20/小时 前置）
-  router.post('/auth/register', registerLimit ?? ((_req, _res, next) => next()), async (req, res) => {
-    const email = readStringBody(req.body, 'email');
+  // 公开自注册显式 404：阻断后续业务 guard 把未命中请求改写为 401；这里不调用任何认证服务。
+  router.post('/auth/register', (_req, res) => {
+    res.status(404).json({ ok: false, error: { code: 'NOT_FOUND', message: '资源不存在' } });
+  });
+
+  // POST /api/v1/auth/invitations/accept → 201 + Set-Cookie sessionToken
+  router.post('/auth/invitations/accept', invitationAcceptLimit ?? ((_req, _res, next) => next()), async (req, res) => {
+    const token = readStringBody(req.body, 'token');
     const password = readStringBody(req.body, 'password');
     const displayName = readStringBody(req.body, 'displayName');
-    if (email === undefined || password === undefined || displayName === undefined) {
-      sendAuthError(res, validationError('请求体必须包含 email/password/displayName', 'body'));
+    if (token === undefined || password === undefined || displayName === undefined) {
+      sendAuthError(res, validationError('请求体必须包含 token/password/displayName', 'body'));
       return;
     }
-    const result = await authService.register({ email, password, displayName });
+    const result = await authService.acceptInvitation({ token, password, displayName });
     if (!result.ok) {
       sendAuthError(res, result.error);
       return;

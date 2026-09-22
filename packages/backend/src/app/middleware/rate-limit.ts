@@ -432,13 +432,13 @@ export function recordLoginResult(
   return limiter.recordFailure(keys.primary, { failLimit, lockoutMs });
 }
 
-// ---- 注册限流（P17 契约 t3/t4：POST /auth/register 按 IP 滑动窗口限流 + 邮箱枚举探测吞吐封顶）----
+// ---- 邀请接受限流（沿用旧配置名，按 IP 滑动窗口封顶探测吞吐）----
 
-/** 注册限流配置（env 可覆盖：REGISTER_RATE_LIMIT_MAX / REGISTER_RATE_LIMIT_WINDOW_MS）。 */
+/** 邀请接受限流配置（env 名为兼容旧部署保持不变）。 */
 export interface RegisterRateLimitConfig {
-  /** 每 IP 每窗口最大注册尝试次数，默认 20 */
+  /** 每 IP 每窗口最大邀请接受尝试次数，默认 20 */
   max: number;
-  /** 注册限流窗口（ms），默认 1 小时 */
+  /** 邀请接受限流窗口（ms），默认 1 小时 */
   windowMs: number;
 }
 
@@ -450,11 +450,11 @@ export function parseRegisterRateLimitEnv(env: NodeJS.ProcessEnv = process.env):
 }
 
 /**
- * 注册限流中间件（挂载在 POST /auth/register handler 之前）。
+ * 邀请接受限流中间件（挂载在 POST /auth/invitations/accept handler 之前）。
  *
  * 设计依据：reports/security/register-rate-limit-fix-contract.md（t2/t3 双线交叉印证冻结）
  * - 键 `register:ip:${ip}`（复用 resolveRequestIp；IP 无法解析 → next() 跳过，与 requestKey 同语义）；
- * - `limiter.check(key, windowMs, max)` 不通过 → 429 + Retry-After + rateLimited('注册请求过于频繁，请稍后重试')
+ * - `limiter.check(key, windowMs, max)` 不通过 → 429 + Retry-After + 统一限流错误
  *   （与 login 锁定同信封：RATE_LIMITED + field:'rate'）；
  * - 在 handler 之前运行 → 成功/失败（含校验失败）请求一律计数（封顶邮箱枚举探测吞吐）；
  * - 键前缀 `register:ip:` 与 login 锁定键 `login:*` 天然隔离（共享同一 limiter 实例无互相污染）；
@@ -482,7 +482,7 @@ export function createRegisterRateLimitMiddleware(options: {
     }
     const result = await options.limiter.check(key, config.windowMs, config.max);
     if (!result.allowed) {
-      sendRateLimited(res, result.retryAfterMs, '注册请求过于频繁，请稍后重试');
+      sendRateLimited(res, result.retryAfterMs, '邀请接受请求过于频繁，请稍后重试');
       return;
     }
     next();

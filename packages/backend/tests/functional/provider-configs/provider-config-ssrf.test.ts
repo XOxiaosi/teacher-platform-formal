@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 import { PrismaClient } from '@prisma/client';
 import { createProviderConfigService } from '../../../src/features/provider-configs/index.js';
 import type { DnsLookup } from '../../../src/shared/ssrf/endpoint-guard.js';
@@ -44,6 +44,39 @@ afterAll(async () => {
 });
 
 describe('provider-config 服务：SSRF baseUrl 校验（契约 §3 L1）', () => {
+  it('本机安全静态模式：保存 hostname 不做 DNS，仍拒绝保留地址', async () => {
+    const teacherId = await createTeacher('staticOnly');
+    const dnsLookup = vi.fn(async () => {
+      throw new Error('static mode must not resolve DNS');
+    });
+    const staticService = createProviderConfigService({
+      prisma,
+      allowedCidrs: [],
+      dnsLookup,
+      endpointValidation: 'static',
+      runtimeEnabled: false,
+    });
+
+    expect(staticService.capabilities()).toEqual({
+      configurationEnabled: true,
+      runtimeEnabled: false,
+      connectionTestEnabled: false,
+      endpointValidation: 'static',
+    });
+    const saved = await staticService.create(teacherId, {
+      providerKind: 'openai', providerName: 'manual', baseUrl: 'https://manual.example.test/v1', apiKey: 'sk-test', model: 'm',
+    });
+    expect(saved.ok).toBe(true);
+    if (saved.ok) createdConfigIds.push(saved.value.id);
+    expect(dnsLookup).not.toHaveBeenCalled();
+
+    const blocked = await staticService.create(teacherId, {
+      providerKind: 'openai', providerName: 'metadata', baseUrl: 'http://169.254.169.254', apiKey: 'sk-test', model: 'm',
+    });
+    expect(blocked.ok).toBe(false);
+    expect(dnsLookup).not.toHaveBeenCalled();
+  });
+
   it('create 禁段 baseUrl → validationError field=baseUrl，且不落库', async () => {
     const teacherId = await createTeacher('ssrfT');
     const before = await prisma.providerConfig.count({ where: { teacherId } });

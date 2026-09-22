@@ -8,6 +8,7 @@ import { createAuthRouter } from '../../../src/app/routes/auth.routes.js';
 import { createProviderUsageService } from '../../../src/features/provider-usage/index.js';
 import { createAuthService } from '../../../src/features/auth/index.js';
 import { createDatabaseTrustedClock } from '../../../src/shared/trusted-clock/index.js';
+import { acceptInvitation } from '../../helpers/invitations.js';
 
 const prisma = new PrismaClient();
 const authService = createAuthService({ prisma, clock: createDatabaseTrustedClock(prisma) });
@@ -26,14 +27,17 @@ afterAll(async () => {
   await prisma.providerUsage.deleteMany({ where: { teacherId: { in: createdTeacherIds } } });
   await prisma.sessionStore.deleteMany({ where: { teacherId: { in: createdTeacherIds } } });
   await prisma.teacherRegistry.deleteMany({ where: { id: { in: createdTeacherIds } } });
+  await prisma.teacherInvitation.deleteMany({ where: { email: { startsWith: 'usage-route-' } } });
   await prisma.$disconnect();
 });
 
 async function registerTeacher(): Promise<{ cookie: string; teacherId: string }> {
   const email = `usage-route-${randomBytes(6).toString('hex')}@example.com`;
-  const res = await request(app)
-    .post('/api/v1/auth/register')
-    .send({ email, password: 'password123', displayName: '用量测试' });
+  const { response: res } = await acceptInvitation(app, prisma, {
+    email,
+    password: 'password123',
+    displayName: '用量测试',
+  });
   if (res.status !== 201) throw new Error(`register failed: ${res.status}`);
   const teacherId = res.body.data.teacher.id;
   createdTeacherIds.push(teacherId);

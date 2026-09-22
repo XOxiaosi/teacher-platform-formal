@@ -16,7 +16,10 @@ export interface ScheduleCompleteInput {
 
 export interface ScheduleCompleteOutput {
   schedule: ScheduleData;
+  /** Backward-compatible first participant lesson. */
   lesson: LessonData;
+  /** One lesson per formally related participant. */
+  lessons: LessonData[];
 }
 
 export interface ScheduleCompleteUseCase {
@@ -24,8 +27,8 @@ export interface ScheduleCompleteUseCase {
 }
 
 export interface ScheduleCompleteTransactionalServices {
-  scheduling: Pick<ScheduleService, 'getSchedule' | 'updateScheduleStatus'>;
-  lessons: Pick<LessonService, 'createLesson'>;
+  scheduling: Pick<ScheduleService, 'getOwnedSchedule' | 'updateScheduleStatus'>;
+  lessons: Pick<LessonService, 'createLesson' | 'listLessonsForSchedule'>;
   changelog: Pick<ChangelogService, 'recordChange'>;
 }
 

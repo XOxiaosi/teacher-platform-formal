@@ -12,9 +12,15 @@ export type Confidence = 'high' | 'medium' | 'low';
 // ---- 创建日程：输入 ----
 export interface CreateScheduleInput {
   teacherId: string;
+  clientRequestId?: string;
+  /** Legacy compatibility only. New lesson creation uses participantIds. */
   studentId?: string;
+  participantIds?: string[];
   type: ScheduleType;
-  title: string;
+  title?: string;
+  location?: string;
+  classFormat?: 'one_to_one' | 'small_group';
+  operationalNote?: string;
   scheduledStart: Date;
   scheduledEnd: Date;
   confidence?: Confidence;
@@ -58,6 +64,7 @@ export interface GetOwnedScheduleInput {
 
 // ---- 更新日程状态：输入 ----
 export interface UpdateScheduleStatusInput {
+  teacherId?: string;
   scheduleId: string;
   targetStatus: import('./state-machine.js').ScheduleStatus;
   newScheduleId?: string; // 改期时指向新日程
@@ -79,8 +86,13 @@ export interface ScheduleData {
   id: string;
   teacherId: string;
   studentId: string | null;
+  participantIds: string[];
   type: string;
+  /** Legacy storage field. New web projections must never render it. */
   title: string;
+  location: string | null;
+  classFormat: 'one_to_one' | 'small_group' | null;
+  operationalNote: string | null;
   scheduledStart: Date;
   scheduledEnd: Date;
   status: string;

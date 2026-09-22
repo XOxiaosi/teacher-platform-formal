@@ -6,7 +6,7 @@ import { createChangelogService, withChangelog } from '../../src/shared/changelo
 import { createFieldCipher, loadEncryptionKey } from '../../src/shared/field-encryption/index.js';
 
 const prisma = new PrismaClient();
-const app = createApp(prisma, { rawPrisma: prisma });
+const app = createApp(prisma, { rawPrisma: prisma, legacyPaymentEditEnabled: true });
 const TEACHER = 'edit-api-workflow-teacher';
 const BASE_TOKEN = new Date('2000-01-01T00:00:00.000Z');
 // P8 phase-3 批1：测试密钥 cipher（与 setup 注入同钥）——校验 DB 密文可解密
@@ -201,7 +201,7 @@ describe('A5-I8 edit API workflow', () => {
   it('uses the explicit raw client when the public client has automatic ChangeLog extension', async () => {
     const { payment } = await fixtures();
     const extended = withChangelog(prisma, createChangelogService(prisma)) as unknown as PrismaClient;
-    const extendedApp = createApp(extended, { rawPrisma: prisma });
+  const extendedApp = createApp(extended, { rawPrisma: prisma, legacyPaymentEditEnabled: true });
     const response = await requestApp('PATCH', `/api/v1/payments/${payment.id}`, {
       expectedUpdatedAt: BASE_TOKEN.toISOString(),
       changes: { note: 'single audit' },

@@ -19,6 +19,7 @@ import {
   type LoginStateStore,
   type WechatIlinkConfig,
 } from '../../../src/features/wechat/index.js';
+import { acceptInvitation } from '../../helpers/invitations.js';
 
 const prisma = new PrismaClient();
 
@@ -98,14 +99,17 @@ afterAll(async () => {
   await prisma.channelIdentity.deleteMany({ where: { teacherId: { in: createdTeacherIds } } });
   await prisma.sessionStore.deleteMany({ where: { teacherId: { in: createdTeacherIds } } });
   await prisma.teacherRegistry.deleteMany({ where: { id: { in: createdTeacherIds } } });
+  await prisma.teacherInvitation.deleteMany({ where: { email: { startsWith: 'wx-ilink-' } } });
   await prisma.$disconnect();
 });
 
 async function registerTeacher(app: express.Express): Promise<{ cookie: string; teacherId: string }> {
   const email = `wx-ilink-${randomBytes(6).toString('hex')}@example.com`;
-  const res = await request(app)
-    .post('/api/v1/auth/register')
-    .send({ email, password: 'password123', displayName: '微信绑定测试' });
+  const { response: res } = await acceptInvitation(app, prisma, {
+    email,
+    password: 'password123',
+    displayName: '微信绑定测试',
+  });
   if (res.status !== 201) throw new Error(`register failed: ${res.status}`);
   const teacherId = res.body.data.teacher.id;
   createdTeacherIds.push(teacherId);

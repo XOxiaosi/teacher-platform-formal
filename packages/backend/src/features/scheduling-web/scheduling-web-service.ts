@@ -40,10 +40,6 @@ export interface SchedulingWebService {
 export interface SchedulingWebCompletionFactoryOptions {
   getClient: () => Promise<Db>;
   cipher?: FieldCipher;
-  recordCompletionSnapshot: (tx: Prisma.TransactionClient, input: {
-    teacherId: string; scheduleId: string; studentId: string; lessonId: string;
-    lessonLedgerEntryId: string; balanceBefore: number; balanceAfter: number;
-  }) => Promise<Result<void, CommonError>>;
 }
 export interface SchedulingWebCompletionService {
   completeSchedule(input: { teacherId: string; scheduleId: string }): Promise<Result<unknown, CommonError>>;
@@ -62,20 +58,11 @@ export function createSchedulingWebService(options: SchedulingWebServiceOptions)
   const cipher = options.cipher ?? createFieldCipherFromEnv();
   function completionFor(tx: Db): SchedulingWebCompletionService {
     return options.completionFactory({
-      // The scheduling command already owns the serializable transaction.  The
-      // existing completion/lesson/ledger path therefore runs in this exact
-      // transaction, including the immutable before/after ledger snapshot.
+      // The scheduling command already owns the serializable transaction, so
+      // the ordinary completion path runs in this exact transaction. B02
+      // keeps lesson-ledger charging and completion snapshots out of it.
       getClient: async () => tx,
       cipher,
-      async recordCompletionSnapshot(snapshotTx, input) {
-        try {
-          await snapshotTx.scheduleCompletionSnapshot.create({ data: input });
-          return ok(undefined);
-        } catch (caught) {
-          if (caught instanceof Prisma.PrismaClientKnownRequestError && caught.code === 'P2002') return ok(undefined);
-          return err(internalError('完课账本快照写入失败'));
-        }
-      },
     });
   }
 
@@ -252,6 +239,11 @@ export function createSchedulingWebService(options: SchedulingWebServiceOptions)
         const old = await tx.recurrenceRule.findFirst({ where: { id: ruleId, teacherId }, include: ruleInclude }); if (!old) return err(notFound('重复规则不存在'));
         if (!matchesVersion(old, input.expectedUpdatedAt)) return err(versionConflict());
         const valid = await validateRule(tx, teacherId, input.rule); if (!valid.ok) return valid;
+        // A replacement begins on its requested cutover date.  Letting the new
+        // rule start anywhere else either creates an overlapping history or
+        // silently leaves a gap before the cutover.
+        if (input.rule.startDate !== input.fromDate) return err(validationError('替换规则开始日期必须等于替换日期', 'rule.startDate'));
+        if (input.fromDate < localDay(old.startDate)) return err(validationError('替换日期不能早于原规则开始日期', 'fromDate'));
         if (input.rule.enabled !== false && await conflictForRule(tx, teacherId, input.rule, ruleId)) return err(validationError('重复安排与现有排期冲突', 'weekdays'));
         const cutoff = addDays(input.fromDate, -1);
         const oldEnd = old.endDate ? localDay(old.endDate) : undefined;
@@ -364,7 +356,13 @@ function statusWeb(value: string): WebStatus {
   throw new Error(`unsupported scheduling status: ${value}`);
 }
 function unique<T>(values: readonly T[]) { return [...new Set(values)]; }
-function validDate(value: string) { return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(dateOnly(value).getTime()); }
+function validDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = dateOnly(value);
+  // `new Date('2026-02-30')` normalizes to March 2.  Match the canonical
+  // serialization so only actual calendar days enter schedule/rule state.
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
 function validTime(value: string) { return /^([01]\d|2[0-3]):[0-5]\d$/.test(value); }
 function dateOnly(value: string) { return new Date(`${value}T00:00:00.000Z`); }
 function instant(day: string, time: string) { return new Date(`${day}T${time}:00+08:00`); }

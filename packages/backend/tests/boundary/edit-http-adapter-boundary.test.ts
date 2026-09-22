@@ -39,7 +39,7 @@ describe('A5-I8 HTTP edit adapter boundaries', () => {
     const index = source('index.ts');
 
     expect(coreRoutes).toContain('createEditRouter');
-    expect(coreRoutes).toMatch(/if \(dependencies\.edits\)[\s\S]*createEditRouter\(dependencies\.edits\)/);
+    expect(coreRoutes).toMatch(/if \(dependencies\.edits\)[\s\S]*createEditRouter\(dependencies\.edits,\s*\{/);
     expect(index).toMatch(/createCoreRouter\(client,\s*\{[\s\S]*rawPrisma:\s*editRawPrisma/);
     expect(index).toContain('const editRawPrisma = options?.rawPrisma');
     expect(index).toContain('const confirmationPrisma = options?.rawPrisma ?? (client === prisma ? basePrisma : client)');

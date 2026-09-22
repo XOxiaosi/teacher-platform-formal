@@ -108,7 +108,24 @@ describe('provider-config 服务：owner 隔离', () => {
 });
 
 describe('provider-config 服务：primary 唯一化', () => {
-  it('设为 primary 清同教师其他 primary', async () => {
+  it('并发首次创建：同一教师恰有一条 primary', async () => {
+    const teacherId = await createTeacher('concurrentFirst');
+    const [first, second] = await Promise.all([
+      service.create(teacherId, { ...VALID_INPUT, providerName: 'first-concurrent' }),
+      service.create(teacherId, { ...VALID_INPUT, providerName: 'second-concurrent' }),
+    ]);
+    expect(first.ok && second.ok).toBe(true);
+    if (!first.ok || !second.ok) return;
+    createdConfigIds.push(first.value.id, second.value.id);
+
+    const list = await service.list(teacherId);
+    expect(list.ok).toBe(true);
+    if (!list.ok) return;
+    expect(list.value).toHaveLength(2);
+    expect(list.value.filter((item) => item.isPrimary)).toHaveLength(1);
+  });
+
+  it('设为 primary 清同教师其他 primary，且不丢失同次 model 更新', async () => {
     const teacherId = await createTeacher('primaryT');
     const first = await service.create(teacherId, { ...VALID_INPUT, providerName: 'deepseek' });
     const second = await service.create(teacherId, { ...VALID_INPUT, providerName: 'qwen', baseUrl: 'https://dashscope.aliyuncs.com' });
@@ -118,10 +135,11 @@ describe('provider-config 服务：primary 唯一化', () => {
     expect(first.value.isPrimary).toBe(true);
     expect(second.value.isPrimary).toBe(false);
 
-    const promoted = await service.update(teacherId, second.value.id, { isPrimary: true });
+    const promoted = await service.update(teacherId, second.value.id, { isPrimary: true, model: 'qwen-plus' });
     expect(promoted.ok).toBe(true);
     if (!promoted.ok) return;
     expect(promoted.value.isPrimary).toBe(true);
+    expect(promoted.value.model).toBe('qwen-plus');
 
     const list = await service.list(teacherId);
     expect(list.ok).toBe(true);
@@ -129,6 +147,47 @@ describe('provider-config 服务：primary 唯一化', () => {
     const primaries = list.value.filter((item) => item.isPrimary);
     expect(primaries).toHaveLength(1);
     expect(primaries[0].id).toBe(second.value.id);
+  });
+
+  it('并发选默认：最终同一教师恰有一条 primary', async () => {
+    const teacherId = await createTeacher('concurrentPromote');
+    const first = await service.create(teacherId, { ...VALID_INPUT, providerName: 'first-promote' });
+    const second = await service.create(teacherId, { ...VALID_INPUT, providerName: 'second-promote' });
+    expect(first.ok && second.ok).toBe(true);
+    if (!first.ok || !second.ok) return;
+    createdConfigIds.push(first.value.id, second.value.id);
+
+    const [promoteFirst, promoteSecond] = await Promise.all([
+      service.update(teacherId, first.value.id, { isPrimary: true }),
+      service.update(teacherId, second.value.id, { isPrimary: true }),
+    ]);
+    expect(promoteFirst.ok && promoteSecond.ok).toBe(true);
+
+    const list = await service.list(teacherId);
+    expect(list.ok).toBe(true);
+    if (!list.ok) return;
+    expect(list.value.filter((item) => item.isPrimary)).toHaveLength(1);
+  });
+
+  it('并发删除原默认与选新默认：保留配置仍恰有一条 primary', async () => {
+    const teacherId = await createTeacher('concurrentRemove');
+    const first = await service.create(teacherId, { ...VALID_INPUT, providerName: 'first-remove' });
+    const second = await service.create(teacherId, { ...VALID_INPUT, providerName: 'second-remove' });
+    expect(first.ok && second.ok).toBe(true);
+    if (!first.ok || !second.ok) return;
+    createdConfigIds.push(first.value.id, second.value.id);
+
+    const [removed, promoted] = await Promise.all([
+      service.remove(teacherId, first.value.id),
+      service.update(teacherId, second.value.id, { isPrimary: true }),
+    ]);
+    expect(removed.ok && promoted.ok).toBe(true);
+
+    const list = await service.list(teacherId);
+    expect(list.ok).toBe(true);
+    if (!list.ok) return;
+    expect(list.value).toHaveLength(1);
+    expect(list.value[0]).toMatchObject({ id: second.value.id, isPrimary: true });
   });
 });
 
@@ -160,7 +219,7 @@ describe('provider-config 服务：删除回退', () => {
 });
 
 describe('provider-config 服务：test 端点错误归一', () => {
-  it('未注入探针：配置可解密即 ok', async () => {
+  it('未注入探针：明确 not_run，不解密也不伪造成功', async () => {
     const teacherId = await createTeacher('probeT');
     const created = await service.create(teacherId, VALID_INPUT);
     expect(created.ok).toBe(true);
@@ -170,9 +229,11 @@ describe('provider-config 服务：test 端点错误归一', () => {
     const result = await service.testConnection(teacherId, created.value.id);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.ok).toBe(true);
+    expect(result.value.ok).toBe(false);
     expect(result.value.providerName).toBe('deepseek');
     expect(result.value.model).toBe('deepseek-chat');
+    expect(result.value.providerError).toMatchObject({ kind: 'unknown', status: 0, retryable: false });
+    expect(result.value.providerError?.message).toContain('未发起网络请求');
   });
 
   it('注入探针：auth 错误映射 ProviderError kind=auth', async () => {
@@ -208,5 +269,21 @@ describe('provider-config 服务：test 端点错误归一', () => {
 
     const missing = await service.create(teacherId, { ...VALID_INPUT, apiKey: '' });
     expect(missing.ok).toBe(false);
+  });
+
+  it('校验：空白 model 拒绝，disabled 配置不可设为默认', async () => {
+    const teacherId = await createTeacher('validateModel');
+    const created = await service.create(teacherId, VALID_INPUT);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    createdConfigIds.push(created.value.id);
+
+    const blankModel = await service.update(teacherId, created.value.id, { model: '  ' });
+    expect(blankModel.ok).toBe(false);
+    if (!blankModel.ok) expect(blankModel.error.field).toBe('model');
+
+    const disabledPrimary = await service.update(teacherId, created.value.id, { status: 'disabled', isPrimary: true });
+    expect(disabledPrimary.ok).toBe(false);
+    if (!disabledPrimary.ok) expect(disabledPrimary.error.field).toBe('isPrimary');
   });
 });
