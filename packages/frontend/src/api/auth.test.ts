@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, authRequest, apiRequest, onSessionExpired } from './client';
-import { login, logout, me, register } from './auth';
+import { acceptInvitation, login, logout, me } from './auth';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -16,16 +16,16 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe('auth api', () => {
-  it('register 打 /auth/register，credentials:include 且不带 x-teacher-id', async () => {
+  it('acceptInvitation 打邀请接受接口且不带邮箱', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ ok: true, data: null }, 201));
 
-    await register({ email: 'a@b.com', password: 'password123', displayName: '张三' });
+    await acceptInvitation({ token: 'invite-1', password: 'password123', displayName: '张三' });
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/v1/auth/register', {
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/auth/invitations/accept', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ email: 'a@b.com', password: 'password123', displayName: '张三' }),
+      body: JSON.stringify({ token: 'invite-1', password: 'password123', displayName: '张三' }),
     });
   });
 

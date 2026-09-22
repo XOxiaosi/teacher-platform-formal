@@ -22,6 +22,16 @@ beforeEach(() => {
 });
 
 describe('认证壳', () => {
+  it('邀请接受路由绕过登录页并显示创建账号表单', async () => {
+    window.history.replaceState(null, '', '/accept-invitation#token=synthetic-token');
+    vi.mocked(authApi.me).mockReturnValue(new Promise<MeData | null>(() => undefined));
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: '创建你的工作空间' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '开启今天的教学工作' })).not.toBeInTheDocument();
+    window.history.replaceState(null, '', '/');
+  });
+
   it('恢复会话期间显示加载状态，不加载业务工作区', () => {
     vi.mocked(authApi.me).mockReturnValue(new Promise<MeData | null>(() => undefined));
 

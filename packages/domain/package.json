@@ -18,7 +18,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test test/teacher-time-context.test.mjs"
+    "test": "npm run build && node --test test/teacher-time-context.test.mjs"
   },
   "dependencies": {
     "@teacher-platform/api-contracts": "0.1.0"

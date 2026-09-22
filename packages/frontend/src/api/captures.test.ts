@@ -11,7 +11,7 @@ describe('candidate API contract', () => {
     expect(request).toHaveBeenLastCalledWith('/captures/event%2F1/candidates/candidate%2F2', { method: 'PATCH', body: { version: 3, text: '已修改' } });
     await reviewCaptureCandidate('e1', 'c2', { version: 4, action: 'defer' });
     expect(request).toHaveBeenLastCalledWith('/captures/e1/candidates/c2/review', { method: 'POST', body: { version: 4, action: 'defer' } });
-    const body = { version: 5, clientRequestId: 'same-request', studentId: 'student-b' };
+    const body = { version: 5, clientRequestId: 'same-request', studentId: 'student-b', visibility: 'parent_shareable' as const };
     await confirmCaptureCandidate('e1', 'c2', body);
     expect(request).toHaveBeenLastCalledWith('/captures/e1/candidates/c2/confirm-record', { method: 'POST', body });
   });

@@ -11,14 +11,17 @@ export interface LoginCredentials {
   password: string;
 }
 
-export interface RegisterInput extends LoginCredentials {
+export interface AcceptInvitationInput {
+  token: string;
   displayName: string;
+  password: string;
 }
 
-/** POST /api/v1/auth/register → 201 Set-Cookie sessionToken */
-export function register(input: RegisterInput): Promise<void> {
-  return authRequest<void>('/auth/register', { method: 'POST', body: input });
+/** POST /api/v1/auth/invitations/accept → 201 Set-Cookie sessionToken */
+export function acceptInvitation(input: AcceptInvitationInput): Promise<void> {
+  return authRequest<void>('/auth/invitations/accept', { method: 'POST', body: input });
 }
+
 
 /** POST /api/v1/auth/login → 200 Set-Cookie sessionToken */
 export function login(credentials: LoginCredentials): Promise<void> {

@@ -150,8 +150,9 @@ export function ConnectedWorkspace() {
     },
     savePreferences: (changes) => command('preferences', { changes, expectedUpdatedAt: snapshotRef.current!.preferenceVersion }),
     addPayment: async (payment) => {
-      const intent = `payment:${payment.id}`;
-      await transaction(async () => { await createPayment(auth.teacherId!, { clientRequestId: requestKey(intent), studentId: payment.studentId, amount: payment.amount, lessonCount: payment.lessons, paidAt: `${payment.date}T12:00:00+08:00` }); keys.current.delete(intent); });
+      // The current payment endpoint has no durable idempotency contract yet.
+      // Do not send a decorative request key that the server cannot honor.
+      await transaction(() => createPayment(auth.teacherId!, { studentId: payment.studentId, amount: payment.amount, lessonCount: payment.lessons, paidAt: `${payment.date}T12:00:00+08:00` }));
     },
     saveSchedule: (schedule) => {
       const current = snapshotRef.current!.data;

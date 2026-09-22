@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from './client';
 import {
-  createTeacher,
+  createInvitation,
+  listInvitations,
+  revokeInvitation,
   getHealth,
   getInteractions,
   pollBackupStatus,
@@ -23,35 +25,28 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe('admin actions api', () => {
-  it('createTeacher POST /admin/teachers 带创建字段', async () => {
+  it('createInvitation POST /admin/invitations 不携带密码', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({
       ok: true,
-      data: { id: 't1', email: 'a@b.com', displayName: '张三', status: 'active', databaseName: 'teacher_db_a' },
+      data: { invitation: { id: 'i1', email: 'a@b.com', status: 'pending', expiresAtTs: '2026-08-04T00:00:00Z', createdAtTs: '2026-08-01T00:00:00Z' }, token: 'raw' },
     }, 201));
 
-    await createTeacher({ email: 'a@b.com', password: 'secret123', displayName: '张三' });
+    await createInvitation({ email: 'a@b.com', expiresInHours: 72 });
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/v1/admin/teachers', {
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/admin/invitations', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ email: 'a@b.com', password: 'secret123', displayName: '张三' }),
+      body: JSON.stringify({ email: 'a@b.com', expiresInHours: 72 }),
     });
   });
 
-  it('createTeacher provision=1 时拼接 ?provision=1', async () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({
-      ok: true,
-      data: { id: 't1', email: 'a@b.com', displayName: '张三', status: 'active', databaseName: 'teacher_db_a' },
-    }, 201));
-
-    await createTeacher({ email: 'a@b.com', password: 'secret123', displayName: '张三', databaseName: 'teacher_db_x' }, true);
-
-    expect(fetchMock).toHaveBeenCalledWith('/api/v1/admin/teachers?provision=1', expect.objectContaining({
-      method: 'POST',
-      credentials: 'include',
-      body: JSON.stringify({ email: 'a@b.com', password: 'secret123', displayName: '张三', databaseName: 'teacher_db_x' }),
-    }));
+  it('listInvitations 与 revokeInvitation 使用管理接口', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ ok: true, data: { items: [] } }));
+    await listInvitations();
+    await revokeInvitation('i/1');
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/admin/invitations');
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/v1/admin/invitations/i%2F1/revoke');
   });
 
   it('updateTeacherStatus PATCH /admin/teachers/:id/status {status}', async () => {

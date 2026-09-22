@@ -32,6 +32,9 @@ beforeEach(() => {
     totals: { promptTokens: 0, completionTokens: 0, totalTokens: 0, requests: 0 },
     byProvider: [],
   });
+  vi.mocked(adminActionsApi.listInvitations).mockReset().mockResolvedValue({ items: [] });
+  vi.mocked(adminActionsApi.createInvitation).mockReset();
+  vi.mocked(adminActionsApi.revokeInvitation).mockReset();
   vi.mocked(adminActionsApi.getInteractions).mockReset().mockResolvedValue({
     total: 0,
     byStatus: {},
