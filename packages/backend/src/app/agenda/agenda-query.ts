@@ -53,7 +53,11 @@ function sourceOverflow(source: { items: readonly unknown[]; total: number }): b
 
 function lessonStudentIds(schedules: readonly ScheduleData[]): string[] {
   const ids = schedules.flatMap((schedule) => (
-    schedule.type === 'lesson' && schedule.studentId ? [schedule.studentId] : []
+    schedule.type === 'lesson'
+      ? (schedule.participantIds.length > 0
+        ? schedule.participantIds
+        : (schedule.studentId ? [schedule.studentId] : []))
+      : []
   ));
   return [...new Set(ids)].sort();
 }

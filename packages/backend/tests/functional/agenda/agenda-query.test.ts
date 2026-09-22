@@ -53,8 +53,12 @@ const LESSON: ScheduleData = {
   id: 'schedule-1',
   teacherId: 'teacher-a',
   studentId: 'student-1',
+  participantIds: ['student-1'],
   type: 'lesson',
   title: '物理课',
+  location: '工作室 A',
+  classFormat: 'one_to_one',
+  operationalNote: null,
   scheduledStart: new Date('2030-07-24T02:00:00.000Z'),
   scheduledEnd: new Date('2030-07-24T03:00:00.000Z'),
   status: 'planned',
@@ -231,6 +235,33 @@ describe('Agenda Query orchestration', () => {
         dueAtBefore: new Date('2030-07-28T16:00:00.000Z'),
       });
       expect(fixture.fns.pendingActions).toHaveBeenCalledWith({ teacherId: 'teacher-a', activeAt: NOW });
+    }
+  });
+
+  it('小班课程批量解析所有参与学生，不只使用旧 studentId', async () => {
+    const { query, fns } = await createQuery({
+      schedules: ok({
+        items: [{ ...LESSON, studentId: 'student-1', participantIds: ['student-2', 'student-1', 'student-2'], classFormat: 'small_group' }],
+        total: 1,
+      }),
+      students: ok([
+        STUDENT,
+        { ...STUDENT, id: 'student-2', name: '小红' },
+      ]),
+    });
+    if (!query) return;
+
+    const result = await query.getToday({ teacherId: 'teacher-a', timeZone: 'Asia/Shanghai' });
+
+    expect(result.ok).toBe(true);
+    expect(fns.students).toHaveBeenCalledWith({
+      teacherId: 'teacher-a',
+      studentIds: ['student-1', 'student-2'],
+    });
+    if (result.ok) {
+      expect(result.value.items[0]).toMatchObject({
+        lessonDetails: { participantLabel: '小班（2人）' },
+      });
     }
   });
 

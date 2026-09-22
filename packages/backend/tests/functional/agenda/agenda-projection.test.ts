@@ -43,8 +43,12 @@ function schedule(input: Partial<ScheduleData> & Pick<ScheduleData, 'id' | 'titl
     id: input.id,
     teacherId: 'teacher-a',
     studentId: null,
+    participantIds: [],
     type: 'lesson',
     title: input.title,
+    location: null,
+    classFormat: null,
+    operationalNote: null,
     scheduledStart: new Date('2030-07-22T00:00:00.000Z'),
     scheduledEnd: new Date('2030-07-22T01:00:00.000Z'),
     status: 'planned',
@@ -119,7 +123,15 @@ describe('Agenda pure projection', () => {
     expect(projection.projectAgendaToday).toBeTypeOf('function');
     if (!projection.projectAgendaToday) return;
 
-    const lesson = schedule({ id: 'schedule-1', title: '物理课', studentId: 'student-1' });
+    const lesson = schedule({
+      id: 'schedule-1',
+      title: '物理课',
+      studentId: 'student-1',
+      participantIds: ['student-1'],
+      location: '工作室 A',
+      classFormat: 'one_to_one',
+      operationalNote: '先确认错题是否订正',
+    });
     const result = projection.projectAgendaToday({
       generatedAt: NOW,
       timeZone: 'Asia/Shanghai',
@@ -168,7 +180,7 @@ describe('Agenda pure projection', () => {
     const lessonItem = result.items[0];
     expect(lessonItem).toMatchObject({
       kind: 'lesson',
-      title: '物理课',
+      title: '课程安排',
       startAt: lesson.scheduledStart.toISOString(),
       endAt: lesson.scheduledEnd.toISOString(),
       allDay: false,
@@ -177,7 +189,7 @@ describe('Agenda pure projection', () => {
         id: 'Schedule:schedule-1',
         type: 'Schedule',
         objectId: 'schedule-1',
-        label: '物理课',
+        label: '课程安排',
       },
       studentRef: {
         id: 'Student:student-1',
@@ -185,7 +197,14 @@ describe('Agenda pure projection', () => {
         objectId: 'student-1',
         label: '小明',
       },
+      lessonDetails: {
+        location: '工作室 A',
+        participantLabel: '小明',
+      },
     });
+    expect(JSON.stringify(lessonItem)).not.toContain('物理课');
+    expect(JSON.stringify(lessonItem)).not.toContain('先确认错题是否订正');
+    expect(JSON.stringify(lessonItem)).not.toContain('one_to_one');
     expect(lessonItem?.actions).toHaveLength(1);
     expect(lessonItem?.actions[0]?.referenceId).toBe(lessonItem?.sourceRef.id);
 
@@ -206,6 +225,46 @@ describe('Agenda pure projection', () => {
     });
     expect(memoItem).not.toHaveProperty('endAt');
     expect(memoItem?.actions[0]?.referenceId).toBe(memoItem?.sourceRef.id);
+  });
+
+  it('小班摘要只显示班型与人数，不泄露完整名单或备注', async () => {
+    const projection = await loadProjection();
+    expect(projection.projectAgendaToday).toBeTypeOf('function');
+    if (!projection.projectAgendaToday) return;
+
+    const result = projection.projectAgendaToday({
+      generatedAt: NOW,
+      timeZone: 'Asia/Shanghai',
+      businessDate: '2030-07-22',
+      schedules: [schedule({
+        id: 'schedule-group',
+        title: '竞赛集训',
+        studentId: 'student-1',
+        participantIds: ['student-1', 'student-2'],
+        location: '教室 2',
+        classFormat: 'small_group',
+        operationalNote: '小测后逐人讲解',
+      })],
+      memos: [],
+      pendingActions: [],
+      students: [
+        student({ id: 'student-1', name: '小明' }),
+        student({ id: 'student-2', name: '小红' }),
+      ],
+    });
+
+    expect(result.items[0]).toMatchObject({
+      title: '课程安排',
+      lessonDetails: {
+        location: '教室 2',
+        participantLabel: '小班（2人）',
+      },
+    });
+    expect(result.items[0]).not.toHaveProperty('studentRef');
+    const serialized = JSON.stringify(result.items[0]);
+    for (const forbidden of ['竞赛集训', '小明', '小红', '小测后逐人讲解', 'small_group']) {
+      expect(serialized).not.toContain(forbidden);
+    }
   });
 
   it('Today省略missing Student且不泄露owner敏感字段、token或URL', async () => {

@@ -68,17 +68,35 @@ function lessonItem(
     || !validDate(schedule.scheduledStart)
     || !validDate(schedule.scheduledEnd)
   ) return null;
-  const sourceRef = reference('Schedule', schedule.id, schedule.title);
-  const studentRef = schedule.studentId ? students.get(schedule.studentId) : undefined;
+  // T-016: an Agenda course deliberately has no course-name surface. The
+  // legacy Schedule.title must not enter either item title or reference label.
+  const sourceRef = reference('Schedule', schedule.id, '课程安排');
+  const participantIds = [...new Set(schedule.participantIds?.length
+    ? schedule.participantIds
+    : (schedule.studentId ? [schedule.studentId] : []))];
+  const participantRefs = participantIds
+    .map((studentId) => students.get(studentId))
+    .filter((student): student is ObjectReference => student !== undefined);
+  const isSmallGroup = schedule.classFormat === 'small_group' || participantIds.length > 1;
+  const studentRef = !isSmallGroup && participantRefs.length === 1
+    ? participantRefs[0]
+    : undefined;
+  const participantLabel = isSmallGroup
+    ? (participantIds.length >= 2 ? `小班（${participantIds.length}人）` : undefined)
+    : studentRef?.label;
   return {
     id: `schedule:${schedule.id}`,
     kind: 'lesson',
-    title: bounded(schedule.title, MAX_TITLE_LENGTH),
+    title: '课程安排',
     startAt: schedule.scheduledStart.toISOString(),
     endAt: schedule.scheduledEnd.toISOString(),
     allDay: false,
     status: schedule.status,
     ...(studentRef ? { studentRef } : {}),
+    lessonDetails: {
+      ...(schedule.location ? { location: schedule.location } : {}),
+      ...(participantLabel ? { participantLabel } : {}),
+    },
     sourceRef,
     actions: [openAction(sourceRef)],
   };

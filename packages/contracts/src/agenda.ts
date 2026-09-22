@@ -8,6 +8,15 @@ export type AgendaItemKind =
   | 'pending_action'
   | 'custom_reminder';
 
+/**
+ * 课程卡与摘要只使用这些工作信息，不承载课程标题、授课内容或教学目标。
+ * 字段保持可选，旧日程在没有结构化信息时由界面明确显示“待补充”。
+ */
+export interface AgendaLessonDetails {
+  location?: string;
+  participantLabel?: string;
+}
+
 export interface AgendaItem {
   id: string;
   kind: AgendaItemKind;
@@ -17,6 +26,7 @@ export interface AgendaItem {
   allDay: boolean;
   status: string;
   studentRef?: ObjectReference;
+  lessonDetails?: AgendaLessonDetails;
   sourceRef: ObjectReference;
   actions: PresentationAction[];
 }
