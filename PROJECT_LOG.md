@@ -241,6 +241,7 @@ D06 为范围约束；D07 已明确完整微信私聊，不重复列为待用户
 - 改动与证据：新增 `packages/backend/tests/e2e/a02-teaching-runtime-http-workflow.test.ts`、[A02 HTTP 闭环验收附件](evidence/validation/A02-RUNTIME-HTTP-CLOSED-LOOP.md) 及本日志；`packages/backend/vitest.config.ts` 将数据库建库 Hook 的有界超时从 Vitest 默认 10 秒明确为 30 秒。没有修改生产代码、schema 或迁移。
 - 聚焦验证：根安全 harness 启动短生命周期 PostgreSQL 17 并应用 41 个迁移，A02 文件 1/1、测试 2/2 通过，退出码 0，临时集群正常关闭；后端 build 和目标测试 lint 退出 0。独立契约复核与最终暂存区复核均为 P1/P2/P3=0。
 - 完整门禁：首次 `npm run check` 中 A02 2/2 通过，但 4 个既有套件在 `beforeAll` 创建数据库并应用 41 个迁移时超过默认 10 秒；全新临时库定向复跑 4 文件/45 测试通过。第二次完整门禁让 `db-routing-workflow` 在 10.788 秒再次复现；因 backend 已串行执行，排除并行争用后设置 `hookTimeout: 30_000`。修复后定向 4 文件/45 测试通过，其中该套件用时 11.529 秒；最终 `npm run check` 退出 0：治理 25、后端 333 文件/2876 测试、前端 58 文件/396 测试、管理端 13 文件/84 测试、ops 150 通过/2 个 Windows 专属按平台跳过，类型、lint、41 个迁移与全部生产构建通过。
+- 2026-09-23 门禁回归修正：后续完整门禁中本文件在全量负载下偶发 1/2 失败，单文件与全新 PostgreSQL 17 下连续 20 轮均为 2/2；两次独立诊断均确认产品 runner、租约和重建链路无重复执行证据，脆弱点是测试只等待约 800ms 且失败信息不足。现改为单调时钟 5 秒 deadline、每次请求受剩余时间约束，超时附带 HTTP 与持久 `TaskRuntime` 状态，首个异步闭环使用局部 30 秒测试上限；不修改生产状态机。目标 lint、后端 build、隔离 2/2 与最终独立复核 P0/P1/P2=0；最终根 `npm run check` 退出 0，后端 340 文件/3016 测试全部通过，其他完整计数见当前投影。
 - 完成边界：合成闭环只证明平台运行、隔离、持久化和由新消息触发的恢复契约；不证明真实模型质量、真实 DSH/DeepSeek、真实微信、无触发后台恢复、正式写事务、费用、设备、部署或发布。A02 总任务继续保持进行中，真实运行时验收仍在既有外部边界内。
 
 ### P3-LESSON-LEDGER-STUDENT-QUERY-VALIDATION-06｜2026-09-21｜课时流水学生筛选拒绝静默降级

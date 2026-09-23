@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 import request from 'supertest';
 import { afterAll, describe, expect, it } from 'vitest';
 import { PrismaClient } from '@prisma/client';
@@ -78,15 +79,68 @@ async function waitForTask(
   cookie: string,
   taskId: string,
   status: string,
+  diagnosticPrisma: PrismaClient = prisma,
 ) {
-  for (let attempt = 0; attempt < 80; attempt += 1) {
-    const response = await request(app)
-      .get(`/api/v1/teaching-tasks/${taskId}`)
-      .set('Cookie', cookie);
-    if (response.status === 200 && response.body.data.task.status === status) return response;
-    await new Promise<void>((resolve) => setTimeout(resolve, 10));
+  const deadline = performance.now() + 5_000;
+  const pollIntervalMs = 50;
+  let lastResponse: request.Response | undefined;
+  let lastRequestError: unknown;
+
+  while (performance.now() < deadline) {
+    const remainingMs = deadline - performance.now();
+    if (remainingMs <= 0) break;
+    try {
+      const response = await request(app)
+        .get(`/api/v1/teaching-tasks/${taskId}`)
+        .set('Cookie', cookie)
+        .timeout({ deadline: Math.max(1, Math.ceil(remainingMs)) });
+      lastResponse = response;
+      if (response.status === 200 && response.body?.data?.task?.status === status) return response;
+    } catch (error) {
+      lastRequestError = error;
+    }
+
+    const remainingAfterRequestMs = deadline - performance.now();
+    if (remainingAfterRequestMs <= 0) break;
+    await new Promise<void>((resolve) => setTimeout(resolve, Math.min(pollIntervalMs, remainingAfterRequestMs)));
   }
-  throw new Error(`task ${taskId} did not reach ${status}`);
+
+  const task = lastResponse?.body?.data?.task as {
+    status?: unknown;
+    attemptCount?: unknown;
+    version?: unknown;
+    leaseEpoch?: unknown;
+    lastError?: unknown;
+  } | undefined;
+  let persistedTask: {
+    status: string;
+    attemptCount: number;
+    version: number;
+    leaseEpoch: number;
+    lastError: unknown;
+  } | undefined;
+  let diagnosticReadError: unknown;
+  try {
+    persistedTask = (await diagnosticPrisma.taskRuntime.findUnique({
+      where: { id: taskId },
+      select: { status: true, attemptCount: true, version: true, leaseEpoch: true, lastError: true },
+    })) ?? undefined;
+  } catch (error) {
+    diagnosticReadError = error;
+  }
+  throw new Error([
+    `task ${taskId} did not reach ${status} within 5000ms`,
+    `httpStatus=${lastResponse?.status ?? 'none'}`,
+    `taskStatus=${persistedTask?.status ?? task?.status ?? 'none'}`,
+    `attemptCount=${persistedTask?.attemptCount ?? task?.attemptCount ?? 'none'}`,
+    `version=${persistedTask?.version ?? task?.version ?? 'none'}`,
+    `leaseEpoch=${persistedTask?.leaseEpoch ?? task?.leaseEpoch ?? 'none'}`,
+    `lastError=${persistedTask?.lastError === undefined
+      ? (task?.lastError === undefined ? 'none' : JSON.stringify(task.lastError))
+      : JSON.stringify(persistedTask.lastError)}`,
+    `requestError=${lastRequestError instanceof Error ? lastRequestError.message : lastRequestError ?? 'none'}`,
+    `diagnosticReadError=${diagnosticReadError instanceof Error ? diagnosticReadError.message : diagnosticReadError ?? 'none'}`,
+  ].join('; '));
 }
 
 describe('A02 合成教学 Runtime 认证 HTTP 闭环', () => {
@@ -267,7 +321,7 @@ describe('A02 合成教学 Runtime 认证 HTTP 闭环', () => {
         .send(continuedBody);
       expect(continued.status).toBe(202);
       expect(continued.body.data).toMatchObject({ replayed: false, task: { status: 'queued' } });
-      const completed = await waitForTask(restarted.app, ownerCookie, taskId, 'succeeded');
+      const completed = await waitForTask(restarted.app, ownerCookie, taskId, 'succeeded', restartedPrisma);
       expect(resumedRuns).toBe(1);
       expect(checkpoints).toEqual([
         expect.objectContaining({ schemaVersion: 1, runtimeVersion: 'dsh-v1', contextEpoch: 0 }),
@@ -315,7 +369,7 @@ describe('A02 合成教学 Runtime 认证 HTTP 闭环', () => {
     } finally {
       await restartedPrisma.$disconnect();
     }
-  });
+  }, 30_000);
 
   it('runtime unavailable 时只持久回执，不唤醒 driver 或伪造成功', async () => {
     let unavailableRuns = 0;
