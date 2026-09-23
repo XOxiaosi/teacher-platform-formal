@@ -3,7 +3,7 @@ import { createDemoWechatFeedbacks } from './wechat-feedback';
 
 export type Student = { id: string; name: string; grade: string; balance: number; notes: string[] };
 export type Schedule = {
-  updatedAt?: string; version?: string;
+  createdAt?: string; updatedAt?: string; version?: string;
   id: string; day: string; start: string; end: string; location: string;
   participants: string[]; format: '一对一' | '小班'; note: string; status: '已排期' | '已完成' | '已取消';
   /** A stored exception or materialized history for a recurring occurrence. */

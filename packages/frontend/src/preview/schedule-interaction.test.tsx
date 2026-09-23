@@ -36,6 +36,44 @@ describe('日程交互修复', () => {
     expect(screen.getByRole('checkbox', { name: '王浩然' })).toBeChecked();
   });
 
+  it('选用已有课程必须先选择来源，切回全新课程会恢复独立草稿', () => {
+    const data = createDemoData();
+    const source = { ...data.schedules[0], id: 'source', start: '14:00', end: '16:00', location: '来源地点', participants: ['s2'], note: '来源备注' };
+    const { actions } = setup({ ...data, schedules: [source], recurrenceRules: [] });
+    render(<NewScheduleForm actions={actions} initialDay="2026-09-28" initialStudentId="s1" />);
+    fireEvent.change(screen.getByLabelText('地点'), { target: { value: '新建地点' } });
+    fireEvent.click(screen.getByLabelText('每周重复'));
+    fireEvent.click(screen.getByLabelText('选用已有课程'));
+    expect(screen.getByLabelText('仅一次')).toBeChecked();
+    expect(screen.getByLabelText('每周重复')).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: '保存排期' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('请先选择要预填的已有课程。');
+    expect(actions.saveSchedule).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText('已有课程'), { target: { value: source.id } });
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('地点')).toHaveValue('来源地点');
+    fireEvent.click(screen.getByLabelText('创建全新课程'));
+    expect(screen.getByLabelText('地点')).toHaveValue('新建地点');
+    expect(screen.getByLabelText('日期')).toHaveValue('2026-09-28');
+    expect(screen.getByLabelText('参与人')).toHaveValue('s1');
+    fireEvent.click(screen.getByLabelText('选用已有课程'));
+    fireEvent.click(screen.getByRole('button', { name: '保存排期' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('请先选择要预填的已有课程。');
+    expect(actions.saveSchedule).not.toHaveBeenCalled();
+  });
+
+  it('历史新排期明确显示北京时间的日期与实际上课时段，且只保存不自动扣课', () => {
+    const data = createDemoData();
+    const { actions } = setup({ ...data, businessDate: '2026-09-10', schedules: [], recurrenceRules: [] });
+    render(<NewScheduleForm actions={actions} initialDay="2026-09-09" initialStudentId="s1" />);
+    expect(screen.getByRole('note')).toHaveTextContent('历史日期：2026年9月9日 10:00–12:00（北京时间），仅保存，不自动完课或扣课。');
+    fireEvent.change(screen.getByLabelText('地点'), { target: { value: '补录地点' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存排期' }));
+    expect(actions.saveSchedule).toHaveBeenCalledWith(expect.objectContaining({ day: '2026-09-09', start: '10:00', end: '12:00', location: '补录地点', status: '已排期' }));
+    expect(actions.complete).not.toHaveBeenCalled();
+    expect(actions.addPayment).not.toHaveBeenCalled();
+  });
+
   it('本次及以后修改日期不在重复星期时，确认前阻止保存', () => {
     const data = createDemoData();
     const rule = data.recurrenceRules[0];
@@ -135,5 +173,23 @@ describe('日程交互修复', () => {
     expect(screen.getByText(/修订前：.*原地点.*李雨桐.*原备注/)).toBeInTheDocument();
     expect(screen.getByText(/修订后：.*现地点.*王浩然.*现备注/)).toBeInTheDocument();
     expect(screen.getByText('李雨桐：7 → 6 课时')).toBeInTheDocument();
+  });
+
+  it('历史课程保留实际上课时间，并单独展示北京时间补录时间', () => {
+    const data = createDemoData();
+    const historical = { ...data.schedules[0], day: '2026-09-01', start: '09:00', end: '10:30', createdAt: '2026-09-06T01:30:00.000Z' };
+    const { actions } = setup({ ...data, businessDate: '2026-09-10', schedules: [historical] });
+    render(<ScheduleDetails actions={actions} item={historical} />);
+    expect(screen.getByText('时间').parentElement).toHaveTextContent('2026年9月1日 09:00–10:30');
+    expect(screen.getByText('补录时间').parentElement).toHaveTextContent('2026年9月6日 09:30（北京时间）');
+  });
+
+  it('历史课程当天录入时使用中性录入时间，不误称补录', () => {
+    const data = createDemoData();
+    const historical = { ...data.schedules[0], day: '2026-09-01', createdAt: '2026-09-01T01:30:00.000Z' };
+    const { actions } = setup({ ...data, businessDate: '2026-09-10', schedules: [historical] });
+    render(<ScheduleDetails actions={actions} item={historical} />);
+    expect(screen.getByText('录入时间').parentElement).toHaveTextContent('2026年9月1日 09:30（北京时间）');
+    expect(screen.queryByText('补录时间')).not.toBeInTheDocument();
   });
 });

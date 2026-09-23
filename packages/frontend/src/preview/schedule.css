@@ -32,11 +32,15 @@
 .short-schedule-card .schedule-status { padding: 3px 8px; border-radius: var(--radius-pill); background: var(--canvas); color: var(--text-muted); font-size: 11px; white-space: nowrap; }
 .short-schedule-card.status-completed { border-left-color: #2e8a76; }
 .short-schedule-card.status-cancelled { border-left-color: var(--error); }
-.recurrence-kind, .weekday-picker, .participant-picker { margin: 0 0 16px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-md); }
-.recurrence-kind, .weekday-picker, .participant-picker { display: flex; flex-wrap: wrap; gap: 8px 14px; }
-.recurrence-kind legend, .weekday-picker legend, .participant-picker legend { padding: 0 4px; color: var(--text-muted); font-size: 12px; }
-.recurrence-kind label, .weekday-picker label, .participant-picker label { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; margin: 0; font-weight: 400; }
-.recurrence-kind input[type="radio"], .weekday-picker input[type="checkbox"], .participant-picker input[type="checkbox"] { width: 18px; height: 18px; min-height: 0; flex: 0 0 18px; padding: 0; accent-color: var(--primary); }
+.schedule-source, .recurrence-kind, .weekday-picker, .participant-picker { margin: 0 0 16px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-md); }
+.schedule-source, .recurrence-kind, .weekday-picker, .participant-picker { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.schedule-source legend, .recurrence-kind legend, .weekday-picker legend, .participant-picker legend { padding: 0 4px; color: var(--text-muted); font-size: 12px; }
+.schedule-source label, .recurrence-kind label, .weekday-picker label, .participant-picker label { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; margin: 0; font-weight: 400; }
+.schedule-source input[type="radio"], .recurrence-kind input[type="radio"], .weekday-picker input[type="checkbox"], .participant-picker input[type="checkbox"] { width: 18px; height: 18px; min-height: 0; flex: 0 0 18px; padding: 0; accent-color: var(--primary); }
+.schedule-source-picker { display: grid; gap: 10px; margin: -4px 0 16px; padding: 12px; border-left: 3px solid var(--primary); background: var(--canvas); }
+.schedule-source-picker label { margin: 0; }
+.schedule-source-empty, .schedule-source-note, .schedule-history-note, .recurrence-kind small { margin: 0; color: var(--text-muted); font-size: 12px; }
+.schedule-history-note { padding: 10px 12px; border-left: 3px solid var(--warning); background: color-mix(in srgb, var(--warning) 10%, var(--canvas)); }
 .weekday-picker label:last-child { width: 100%; display: grid; }
 .participant-picker { grid-column: 1 / -1; }
 .recurrence-rules { display: grid; gap: 10px; margin-top: 24px; }

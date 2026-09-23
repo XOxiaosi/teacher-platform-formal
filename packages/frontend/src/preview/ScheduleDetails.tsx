@@ -1,4 +1,4 @@
-import type { Schedule, ScheduleRevision } from './data';
+import { today as fallbackToday, type Schedule, type ScheduleRevision } from './data';
 import { commitAction } from './action-result';
 import { Confirm, type PreviewActions, studentName } from './PreviewApp';
 import { ruleFor, scheduleConflict, schedulesInRange } from './recurrence';
@@ -15,6 +15,19 @@ function statusLabel(status: Schedule['status']) {
 
 function scheduleValues(actions: PreviewActions, item: Schedule) {
   return <>{formatDate(item.day)} {item.start}–{item.end}；地点：{item.location || '待补充'}；参与人：{participantNames(actions, item)}；形式：{item.format}；备注：{item.note || '暂无备注'}</>;
+}
+
+function shanghaiDay(value: string): string | null {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
+  const take = (kind: string) => parts.find((part) => part.type === kind)?.value || '';
+  return `${take('year')}-${take('month')}-${take('day')}`;
+}
+
+export function historicalEntryLabel(item: Schedule, businessDate: string): '补录时间' | '录入时间' | null {
+  if (!item.createdAt || item.day >= businessDate) return null;
+  return shanghaiDay(item.createdAt) && shanghaiDay(item.createdAt)! > item.day ? '补录时间' : '录入时间';
 }
 
 function revisionHistory(actions: PreviewActions, revisions: ScheduleRevision[]) {
@@ -63,9 +76,10 @@ function scopeChooser(actions: PreviewActions, item: Schedule, kind: 'edit' | 'c
 export function ScheduleDetails({ actions, item }: { actions: PreviewActions; item: Schedule }) {
   const rule = ruleFor(actions.data, item);
   const canAct = item.status === '已排期';
+  const entryLabel = historicalEntryLabel(item, actions.data.businessDate || fallbackToday);
   const records = actions.data.completionRecords.filter((record) => record.scheduleId === item.id);
   const revisions = (actions.data.scheduleRevisions || []).filter((entry) => entry.scheduleId === item.id);
-  return <><dl className="schedule-detail"><div><dt>状态</dt><dd>{statusLabel(item.status)}</dd></div><div><dt>时间</dt><dd>{formatDate(item.day)} {item.start}–{item.end}</dd></div><div><dt>地点</dt><dd>{item.location || '待补充'}</dd></div><div><dt>{item.status === '已完成' ? '当前名单' : '参与人'}</dt><dd>{participantNames(actions, item)}</dd></div><div><dt>形式</dt><dd>{item.format}</dd></div><div><dt>备注</dt><dd>{item.note || '暂无备注'}</dd></div>{rule && <div><dt>重复规则</dt><dd>{rule.enabled ? `每周 ${rule.weekdays.map((day) => ['一', '二', '三', '四', '五', '六', '日'][day - 1]).join('、')} · ${rule.endDate ? `至 ${formatDate(rule.endDate)}` : '无结束日期'}` : '已暂停'}</dd></div>}{item.status === '已完成' && <div><dt>原扣课记录</dt><dd>{records.length ? records.map((record) => `${studentName(actions.data, record.studentId)}：${record.before} → ${record.after} 课时`).join('；') : '未找到原扣课记录'}</dd></div>}{item.status === '已完成' && revisionHistory(actions, revisions)}</dl>{canAct ? <div className="dialog-actions schedule-detail-actions"><button className="button secondary" onClick={() => rule ? scopeChooser(actions, item, 'edit') : openScheduleEditor(actions, item)}>编辑</button><button className="button secondary" onClick={() => rule ? scopeChooser(actions, item, 'cancel') : cancel(actions, item, 'this')}>取消</button><button className="button primary" onClick={() => complete(actions, item)}>完成并确认</button></div> : <><p className="dialog-copy">{item.status === '已完成' ? '已完成。编辑课程不会重新扣课，原扣课记录保留。' : '已取消：可恢复为待上课课程。'}</p>{item.status === '已完成' && <div className="dialog-actions"><button className="button secondary" onClick={() => openScheduleEditor(actions, item)}>编辑课程</button></div>}{item.status === '已取消' && <div className="dialog-actions"><button className="button primary" onClick={() => restore(actions, item)}>恢复排期</button></div>}</>}</>;
+  return <><dl className="schedule-detail"><div><dt>状态</dt><dd>{statusLabel(item.status)}</dd></div><div><dt>时间</dt><dd>{formatDate(item.day)} {item.start}–{item.end}</dd></div>{entryLabel && <div><dt>{entryLabel}</dt><dd>{formatDateTime(item.createdAt!)}（北京时间）</dd></div>}<div><dt>地点</dt><dd>{item.location || '待补充'}</dd></div><div><dt>{item.status === '已完成' ? '当前名单' : '参与人'}</dt><dd>{participantNames(actions, item)}</dd></div><div><dt>形式</dt><dd>{item.format}</dd></div><div><dt>备注</dt><dd>{item.note || '暂无备注'}</dd></div>{rule && <div><dt>重复规则</dt><dd>{rule.enabled ? `每周 ${rule.weekdays.map((day) => ['一', '二', '三', '四', '五', '六', '日'][day - 1]).join('、')} · ${rule.endDate ? `至 ${formatDate(rule.endDate)}` : '无结束日期'}` : '已暂停'}</dd></div>}{item.status === '已完成' && <div><dt>原扣课记录</dt><dd>{records.length ? records.map((record) => `${studentName(actions.data, record.studentId)}：${record.before} → ${record.after} 课时`).join('；') : '未找到原扣课记录'}</dd></div>}{item.status === '已完成' && revisionHistory(actions, revisions)}</dl>{canAct ? <div className="dialog-actions schedule-detail-actions"><button className="button secondary" onClick={() => rule ? scopeChooser(actions, item, 'edit') : openScheduleEditor(actions, item)}>编辑</button><button className="button secondary" onClick={() => rule ? scopeChooser(actions, item, 'cancel') : cancel(actions, item, 'this')}>取消</button><button className="button primary" onClick={() => complete(actions, item)}>完成并确认</button></div> : <><p className="dialog-copy">{item.status === '已完成' ? '已完成。编辑课程不会重新扣课，原扣课记录保留。' : '已取消：可恢复为待上课课程。'}</p>{item.status === '已完成' && <div className="dialog-actions"><button className="button secondary" onClick={() => openScheduleEditor(actions, item)}>编辑课程</button></div>}{item.status === '已取消' && <div className="dialog-actions"><button className="button primary" onClick={() => restore(actions, item)}>恢复排期</button></div>}</>}</>;
 }
 
 export function openScheduleDetails(actions: PreviewActions, item: Schedule): void {

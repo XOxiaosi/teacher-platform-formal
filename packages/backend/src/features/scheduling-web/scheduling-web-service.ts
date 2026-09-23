@@ -12,7 +12,7 @@ export type WebStatus = '已排期' | '已完成' | '已取消';
 export interface WebSchedule {
   id: string; day: string; start: string; end: string; location: string;
   participants: string[]; format: WebFormat; note: string; status: WebStatus;
-  recurrenceRuleId?: string; recurrenceDay?: string; updatedAt: string; version: string;
+  recurrenceRuleId?: string; recurrenceDay?: string; createdAt?: string; updatedAt: string; version: string;
 }
 export interface WebRule {
   id: string; startDate: string; weekdays: number[]; endDate?: string; enabled: boolean;
@@ -380,7 +380,7 @@ function synthetic(value: string) { const marker = value.lastIndexOf('@'); const
 function matchesVersion(row: { updatedAtTs?: Date } | undefined, expected: string | undefined) { return !!expected && !!row?.updatedAtTs && row.updatedAtTs.toISOString() === expected; }
 function toSchedule(row: any, cipher: FieldCipher | undefined): WebSchedule {
   const updatedAt = row.updatedAtTs.toISOString();
-  return { id: row.id, day: localDay(row.scheduledStartTs), start: localTime(row.scheduledStartTs), end: localTime(row.scheduledEndTs), location: row.locationCiphertext ? decryptFieldValue(cipher, row.locationCiphertext) : '', participants: (row.participants ?? []).map((p: any) => p.studentId), format: formatWeb(row.classFormat), note: row.operationalNoteCiphertext ? decryptFieldValue(cipher, row.operationalNoteCiphertext) : '', status: statusWeb(row.status), ...(row.recurrenceRuleId ? { recurrenceRuleId: row.recurrenceRuleId } : {}), ...(row.recurrenceDay ? { recurrenceDay: localDay(row.recurrenceDay) } : {}), updatedAt, version: updatedAt };
+  return { id: row.id, day: localDay(row.scheduledStartTs), start: localTime(row.scheduledStartTs), end: localTime(row.scheduledEndTs), location: row.locationCiphertext ? decryptFieldValue(cipher, row.locationCiphertext) : '', participants: (row.participants ?? []).map((p: any) => p.studentId), format: formatWeb(row.classFormat), note: row.operationalNoteCiphertext ? decryptFieldValue(cipher, row.operationalNoteCiphertext) : '', status: statusWeb(row.status), ...(row.recurrenceRuleId ? { recurrenceRuleId: row.recurrenceRuleId } : {}), ...(row.recurrenceDay ? { recurrenceDay: localDay(row.recurrenceDay) } : {}), ...(row.createdAtTs ? { createdAt: row.createdAtTs.toISOString() } : {}), updatedAt, version: updatedAt };
 }
 function toRule(row: any, cipher: FieldCipher | undefined): WebRule { const updatedAt = row.updatedAtTs.toISOString(); return { id: row.id, startDate: localDay(row.startDate), weekdays: Array.isArray(row.weekdays) ? row.weekdays as number[] : [], ...(row.endDate ? { endDate: localDay(row.endDate) } : {}), enabled: row.enabled, start: row.startTime, end: row.endTime, location: decryptFieldValue(cipher, row.locationCiphertext), participants: (row.participants ?? []).map((p: any) => p.studentId), format: formatWeb(row.classFormat), note: row.operationalNoteCiphertext ? decryptFieldValue(cipher, row.operationalNoteCiphertext) : '', updatedAt, version: updatedAt }; }
 function ruleFields(rule: any, cipher: FieldCipher | undefined, day: string): WebFields { const dto = toRule(rule, cipher); return { day, start: dto.start, end: dto.end, location: dto.location, participants: dto.participants, format: dto.format, note: dto.note }; }

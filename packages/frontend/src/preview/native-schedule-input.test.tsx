@@ -51,7 +51,7 @@ describe('native schedule date/time inputs', () => {
 
     expect(screen.getByLabelText('日期')).toHaveValue('2026-09-07');
     expect(screen.getByLabelText('开始时间')).toHaveValue('10:00');
-    expect(screen.getByLabelText('结束时间')).toHaveValue('11:00');
+    expect(screen.getByLabelText('结束时间')).toHaveValue('12:00');
     inputScheduleDateAndTimes('2026-09-10', '09:00', '10:00');
     fireEvent.change(screen.getByLabelText('地点'), { target: { value: '输入事件工作室' } });
     fireEvent.click(screen.getByRole('button', { name: '保存排期' }));

@@ -278,6 +278,35 @@ describe('connected workspace server-backed writes', () => {
     fireEvent.click(checkbox);
     await waitFor(() => expect(mock.command).toHaveBeenCalledWith('memo-status', expect.objectContaining({ id: 'm1', done: true, expectedUpdatedAt: 'm1-v1' })));
   });
+  it('saves a course sourced from an existing row as a fresh scheduling command without completion or payment', async () => {
+    location.hash = '#/schedules';
+    const state = snapshot();
+    state.data.businessDate = '2026-09-22';
+    const source = { ...state.data.schedules[0], id: 'saved-source', day: '2026-09-18', start: '14:00', end: '16:00', location: '线上工作室', participants: ['s2'], format: '一对一' as const, note: '保留课前准备', status: '已完成' as const, version: 'source-version', recurrenceRuleId: 'rule-source', recurrenceDay: '2026-09-18' };
+    state.data.schedules = [source];
+    mock.load.mockResolvedValue(state);
+    render(<ConnectedWorkspace />);
+    await screen.findByRole('heading', { name: '日程安排' });
+    fireEvent.click(screen.getByRole('button', { name: '+ 新增排期' }));
+    fireEvent.click(screen.getByLabelText('选用已有课程'));
+    fireEvent.change(screen.getByLabelText('已有课程'), { target: { value: source.id } });
+    expect(screen.getByLabelText('日期')).toHaveValue('2026-09-22');
+    expect(screen.getByLabelText('开始时间')).toHaveValue('14:00');
+    expect(screen.getByLabelText('结束时间')).toHaveValue('16:00');
+    expect(screen.getByLabelText('地点')).toHaveValue('线上工作室');
+    fireEvent.click(screen.getByRole('button', { name: '保存排期' }));
+    await waitFor(() => expect(mock.schedule).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'save-schedule',
+      schedule: expect.objectContaining({ day: '2026-09-22', start: '14:00', end: '16:00', location: '线上工作室', participants: ['s2'], format: '一对一', note: '保留课前准备', status: '已排期' }),
+    })));
+    const saved = mock.schedule.mock.calls[0][0].schedule;
+    expect(saved.id).not.toBe(source.id);
+    expect(saved).not.toHaveProperty('createdAt');
+    expect(saved).not.toHaveProperty('version');
+    expect(saved).not.toHaveProperty('recurrenceRuleId');
+    expect(mock.payment).not.toHaveBeenCalled();
+    expect(mock.schedule.mock.calls.some(([payload]) => payload.kind === 'complete')).toBe(false);
+  });
   it('blocks further writes when a successful save cannot reload its canonical result', async () => {
     render(<ConnectedWorkspace />); await screen.findByRole('heading', { name: '我的学生' });
     fireEvent.click(screen.getByRole('button', { name: '+ 新增学生' }));

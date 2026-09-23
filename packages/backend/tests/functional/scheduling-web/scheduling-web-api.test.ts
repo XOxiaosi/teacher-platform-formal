@@ -99,10 +99,14 @@ describe('Scheduling Web persistent bridge', () => {
     const ownerStudent = await prisma.student.create({ data: { teacherId: teacherA, name: '隔离学生', grade: '初二' } });
     const ownerCreate = await command(cookieA, { clientRequestId: 'once-create-0001', kind: 'save-schedule', schedule: schedule(ownerStudent.id) });
     expect(ownerCreate.status).toBe(200); const ownerSchedule = ownerCreate.body.data.schedules[0];
+    expect(ownerSchedule.createdAt).toEqual(expect.any(String));
+    expect(Number.isNaN(Date.parse(ownerSchedule.createdAt))).toBe(false);
     const attack = await command(cookieB, { clientRequestId: 'attack-cancel-0001', kind: 'cancel', before: ownerSchedule });
     expect(attack.status).toBe(404); expect(attack.body.error.code).toBe('NOT_FOUND');
+    const otherState = await request(app).get('/api/v1/scheduling-web/state').set('Cookie', cookieB);
+    expect(otherState.status).toBe(200); expect(otherState.body.data.schedules).toEqual([]);
     const stillOwner = await request(app).get('/api/v1/scheduling-web/state').set('Cookie', cookieA);
-    expect(stillOwner.body.data.schedules[0]).toMatchObject({ id: ownerSchedule.id, status: '已排期' });
+    expect(stillOwner.body.data.schedules[0]).toMatchObject({ id: ownerSchedule.id, status: '已排期', createdAt: ownerSchedule.createdAt });
   });
 
   it('is retry-safe, rejects stale versions, and never reopens an earlier rule cutoff', async () => {

@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
-import type { RecurrenceRule, Schedule } from './data';
+import type { DemoData, RecurrenceRule, Schedule } from './data';
 import { today as fallbackToday } from './data';
 import { commitAction } from './action-result';
 import { Confirm, type PreviewActions } from './PreviewApp';
@@ -18,6 +18,35 @@ function FormError({ message }: { message: string }) {
 
 export function initialRuleEnd(repeatDraft?: { end: string }, sourceEnd?: string) {
   return repeatDraft?.end ?? sourceEnd ?? '';
+}
+
+/** The state already holds stored rows only; recurrence projections are never added here. */
+export function persistedScheduleSources(data: Pick<DemoData, 'schedules' | 'students'>, query = ''): Schedule[] {
+  const normalized = query.trim().toLocaleLowerCase();
+  return data.schedules.filter((schedule) => {
+    if (!normalized) return true;
+    const people = schedule.participants.map((id) => data.students.find((student) => student.id === id)?.name || '').join(' ');
+    return [schedule.day, schedule.start, schedule.end, schedule.location, schedule.format, people].join(' ').toLocaleLowerCase().includes(normalized);
+  });
+}
+
+export function scheduleSourceLabel(data: Pick<DemoData, 'students'>, schedule: Schedule) {
+  const people = schedule.participants.map((id) => data.students.find((student) => student.id === id)?.name || '待补充').join('、') || '待补充参与人';
+  const status = schedule.status === '已排期' ? '待上课' : schedule.status;
+  return `${formatDate(schedule.day)} ${schedule.start}–${schedule.end} · ${people} · ${schedule.location || '待补充地点'} · ${schedule.format} · ${status}`;
+}
+
+/** Copy editable lesson fields only; identity, target day, lifecycle and ledgers stay with the fresh draft. */
+export function prefillNewScheduleFromSource(draft: Schedule, source: Schedule): Schedule {
+  return {
+    ...draft,
+    start: source.start,
+    end: source.end,
+    location: source.location,
+    participants: [...source.participants],
+    format: source.format,
+    note: source.note,
+  };
 }
 
 function validateFields(schedule: Schedule) {
@@ -145,12 +174,34 @@ function WeekdayPicker({ days, setDays, end, setEnd, min, legend = '每周哪几
 export function NewScheduleForm({ actions, initialStudentId, initialDay }: { actions: PreviewActions; initialStudentId?: string; initialDay?: string }) {
   const today = actions.data.businessDate || fallbackToday;
   const [kind, setKind] = useState<'once' | 'weekly'>('once');
-  const [form, setForm] = useState<Schedule>({ id: `sc-${Date.now()}`, day: initialDay || today, start: '10:00', end: '11:00', location: '', participants: initialStudentId ? [initialStudentId] : [], format: '一对一', note: '', status: '已排期' });
+  const [sourceMode, setSourceMode] = useState<'new' | 'existing'>('new');
+  const [sourceQuery, setSourceQuery] = useState('');
+  const [selectedSourceId, setSelectedSourceId] = useState('');
+  const [freshDraft, setFreshDraft] = useState<Schedule>({ id: `sc-${Date.now()}`, day: initialDay || today, start: '10:00', end: '12:00', location: '', participants: initialStudentId ? [initialStudentId] : [], format: '一对一', note: '', status: '已排期' });
+  const [form, setForm] = useState<Schedule>(freshDraft);
   const [repeat, setRepeat] = useState({ weekdays: [] as number[], endDate: '' });
   const [error, setError] = useState('');
   const set = <K extends keyof Schedule>(key: K, value: Schedule[K]) => setForm((old) => ({ ...old, [key]: value }));
+  useEffect(() => { if (sourceMode === 'new') setFreshDraft(form); }, [form, sourceMode]);
+  const sources = persistedScheduleSources(actions.data, sourceQuery);
+  const changeSourceMode = (next: 'new' | 'existing') => {
+    setSourceMode(next);
+    setSelectedSourceId('');
+    setError('');
+    if (next === 'existing') setKind('once');
+    else setForm(freshDraft);
+  };
+  const selectSource = (sourceId: string) => {
+    setSelectedSourceId(sourceId);
+    setError('');
+    const source = sources.find((item) => item.id === sourceId);
+    if (!source) return;
+    setKind('once');
+    setForm((draft) => prefillNewScheduleFromSource(draft, source));
+  };
   const submit = (event: FormEvent) => {
     event.preventDefault();
+    if (sourceMode === 'existing' && !selectedSourceId) return setError('请先选择要预填的已有课程。');
     const next = { ...form, location: form.location.trim(), note: form.note.trim() };
     const fieldsError = validateFields(next);
     if (fieldsError) return setError(fieldsError);
@@ -164,7 +215,8 @@ export function NewScheduleForm({ actions, initialStudentId, initialDay }: { act
     if (recurrenceConflict(actions.data, rule)) return setError('该重复规则会与未来排期发生时间冲突；请调整后再保存。');
     commitAction(actions, () => actions.saveRule(rule), () => { actions.close(); actions.toast('每周重复排期已保存。'); });
   };
-  return <form onSubmit={submit} className="schedule-form"><fieldset className="recurrence-kind"><legend>排期方式</legend><label><input type="radio" checked={kind === 'once'} onChange={() => setKind('once')} />仅一次</label><label><input type="radio" checked={kind === 'weekly'} onChange={() => setKind('weekly')} />每周重复</label></fieldset><Fields value={form} set={set} actions={actions} />{kind === 'weekly' && <WeekdayPicker days={repeat.weekdays} setDays={(weekdays) => setRepeat((old) => ({ ...old, weekdays }))} end={repeat.endDate} setEnd={(endDate) => setRepeat((old) => ({ ...old, endDate }))} min={form.day} />}<label>备注<textarea value={form.note} onChange={(event) => set('note', event.target.value)} /></label><FormError message={error} /><div className="dialog-actions"><button type="button" className="button secondary" onClick={actions.close}>取消</button><button className="button primary">保存排期</button></div></form>;
+  const historical = form.day < today;
+  return <form onSubmit={submit} className="schedule-form"><fieldset className="schedule-source"><legend>课程来源</legend><label><input type="radio" name="schedule-source" checked={sourceMode === 'new'} onChange={() => changeSourceMode('new')} />创建全新课程</label><label><input type="radio" name="schedule-source" checked={sourceMode === 'existing'} onChange={() => changeSourceMode('existing')} />选用已有课程</label></fieldset>{sourceMode === 'existing' && <section className="schedule-source-picker" aria-label="选用已有课程"><label>查找已有课程<input type="search" value={sourceQuery} onChange={(event) => setSourceQuery(event.target.value)} placeholder="日期、时间、对象、地点或形式" /></label>{sources.length ? <label>已有课程<select value={selectedSourceId} onChange={(event) => selectSource(event.target.value)}><option value="">请选择要预填的课程</option>{sources.map((item) => <option key={item.id} value={item.id}>{scheduleSourceLabel(actions.data, item)}</option>)}</select></label> : <p className="schedule-source-empty">没有符合条件的已保存课程；重复规则的虚拟投影不会出现在这里。</p>}<p className="schedule-source-note">选用后只预填时间、地点、参与人、形式和备注；会创建一条新的排期。</p></section>}<fieldset className="recurrence-kind"><legend>排期方式</legend><label><input type="radio" checked={kind === 'once'} onChange={() => setKind('once')} />仅一次</label><label><input type="radio" checked={kind === 'weekly'} disabled={sourceMode === 'existing'} onChange={() => setKind('weekly')} />每周重复</label>{sourceMode === 'existing' && <small>选用已有课程仅保存为单次新排期。</small>}</fieldset><Fields value={form} set={set} actions={actions} />{historical && <p className="schedule-history-note" role="note">历史日期：{formatDate(form.day)} {form.start}–{form.end}（北京时间），仅保存，不自动完课或扣课。</p>}{kind === 'weekly' && <WeekdayPicker days={repeat.weekdays} setDays={(weekdays) => setRepeat((old) => ({ ...old, weekdays }))} end={repeat.endDate} setEnd={(endDate) => setRepeat((old) => ({ ...old, endDate }))} min={form.day} />}<label>备注<textarea value={form.note} onChange={(event) => set('note', event.target.value)} /></label><FormError message={error} /><div className="dialog-actions"><button type="button" className="button secondary" onClick={actions.close}>取消</button><button className="button primary">保存排期</button></div></form>;
 }
 
 function ruleSchedule(rule: RecurrenceRule): Schedule {
