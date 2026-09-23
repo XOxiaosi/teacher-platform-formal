@@ -108,8 +108,12 @@ export function createPaymentRouter(dependencies: PaymentRouteDependencies): Rou
   router.post('/payments', async (req, res) => {
     const teacher = getTeacherId(req);
     if (!teacher.ok) return sendTeacherError(res, teacher.error);
+    if (typeof req.body?.clientRequestId !== 'string' || !req.body.clientRequestId.trim()) {
+      return sendTeacherError(res, validationError('clientRequestId 必填', 'clientRequestId'));
+    }
     const result = await dependencies.payments.createPayment({
       teacherId: teacher.value,
+      clientRequestId: req.body.clientRequestId.trim(),
       studentId: req.body.studentId,
       amount: Number(req.body.amount),
       lessonCount: Number(req.body.lessonCount),

@@ -61,6 +61,7 @@ describe('核心教师工作流端到端', () => {
 
     const createdPayment = await payments.createPayment({
       teacherId: TEACHER_ID,
+      clientRequestId: 'core-teacher-payment-0001',
       studentId: createdStudent.value.id,
       amount: 3000,
       lessonCount: 10,

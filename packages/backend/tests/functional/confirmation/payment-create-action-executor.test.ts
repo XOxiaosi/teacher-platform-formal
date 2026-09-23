@@ -66,6 +66,7 @@ describe('P29-W1 payments.create executor', () => {
       const executor = registry.get('payments.create');
       if (!executor.ok) return executor;
       return executor.value.execute({
+        pendingActionId: 'payment-executor-success-0001',
         teacherId: TEACHER_A,
         target: { type: 'Student', id: student.id },
         parameters: {
@@ -87,6 +88,7 @@ describe('P29-W1 payments.create executor', () => {
     const paymentId = result.value.references[0].id;
     const persisted = await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } });
     expect(persisted.teacherId).toBe(TEACHER_A);
+    expect(persisted.clientRequestId).toBe('agent-confirmed:payment-executor-success-0001');
     expect(persisted.studentId).toBe(student.id);
     expect(persisted.amount).toBe(1200);
     expect(persisted.lessonCount).toBe(10);
@@ -97,6 +99,19 @@ describe('P29-W1 payments.create executor', () => {
     expect(cipher.decrypt(persisted.note!)).toBe('暑期课包');
     expect(persisted.createdAtTs).toBeInstanceOf(Date);
     expect(persisted.updatedAtTs).toBeInstanceOf(Date);
+
+    const ledgerEntries = await prisma.lessonLedgerEntry.findMany({
+      where: { teacherId: TEACHER_A, paymentId },
+    });
+    expect(ledgerEntries).toHaveLength(1);
+    expect(ledgerEntries[0]).toMatchObject({
+      teacherId: TEACHER_A,
+      studentId: student.id,
+      entryType: 'purchase',
+      lessonDelta: 10,
+      amount: 1200,
+      paymentId,
+    });
 
     // 恰好一条显式 agent-confirmed 审计（fixture 学生创建不经 changelog extension，不产生审计）
     const logs = await prisma.changeLog.findMany({
@@ -109,6 +124,11 @@ describe('P29-W1 payments.create executor', () => {
     expect(logs[0].targetType).toBe('Payment');
     expect(logs[0].before).toBeNull();
     expect(logs[0].after).not.toBeNull();
+    const ledgerLogs = await prisma.changeLog.findMany({
+      where: { teacherId: TEACHER_A, targetId: ledgerEntries[0].id, source: 'system' },
+    });
+    expect(ledgerLogs).toHaveLength(1);
+    expect(ledgerLogs[0]).toMatchObject({ module: 'payments', action: 'create', targetType: 'LessonLedgerEntry' });
   });
 
   it('未提供 note 时 payment.note 为 null', async () => {
@@ -119,6 +139,7 @@ describe('P29-W1 payments.create executor', () => {
       const executor = registry.get('payments.create');
       if (!executor.ok) return executor;
       return executor.value.execute({
+        pendingActionId: 'payment-executor-no-note-0001',
         teacherId: TEACHER_A,
         target: { type: 'Student', id: student.id },
         parameters: {
@@ -135,6 +156,32 @@ describe('P29-W1 payments.create executor', () => {
     if (!result.ok) return;
     const payment = await prisma.payment.findFirstOrThrow({ where: { teacherId: TEACHER_A } });
     expect(payment.note).toBeNull();
+  });
+
+  it('缺失稳定待确认操作 ID 时拒绝且零写入', async () => {
+    const student = await createStudent();
+
+    const result = await prisma.$transaction(async (tx) => {
+      const registry = createDatabaseConfirmableActionRegistry(tx);
+      const executor = registry.get('payments.create');
+      if (!executor.ok) return executor;
+      return executor.value.execute({
+        teacherId: TEACHER_A,
+        target: { type: 'Student', id: student.id },
+        parameters: {
+          studentId: student.id,
+          amount: 800,
+          lessonCount: 5,
+          paidAt: '2031-02-03T04:05:06Z',
+          expectedUpdatedAt: student.updatedAtTs.toISOString(),
+        },
+      } as never);
+    });
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'VALIDATION_ERROR', field: 'pendingActionId' } });
+    expect(await prisma.payment.count({ where: { teacherId: TEACHER_A } })).toBe(0);
+    expect(await prisma.lessonLedgerEntry.count({ where: { teacherId: TEACHER_A } })).toBe(0);
+    expect(await prisma.changeLog.count({ where: { teacherId: TEACHER_A } })).toBe(0);
   });
 
   it('target 与 parameters 不一致拒绝且零写入', async () => {
@@ -184,7 +231,7 @@ describe('P29-W1 payments.create executor', () => {
         const registry = createDatabaseConfirmableActionRegistry(tx);
         const executor = registry.get('payments.create');
         if (!executor.ok) return executor;
-        return executor.value.execute({ teacherId: TEACHER_A, target, parameters });
+        return executor.value.execute({ pendingActionId: 'payment-executor-invalid-parameters-0001', teacherId: TEACHER_A, target, parameters });
       });
       expect(result).toMatchObject({ ok: false, error: { code: 'VALIDATION_ERROR', field: 'parameters' } });
       const effects = expectZeroEffects(student.id);
@@ -201,6 +248,7 @@ describe('P29-W1 payments.create executor', () => {
       const executor = registry.get('payments.create');
       if (!executor.ok) return executor;
       return executor.value.execute({
+        pendingActionId: 'payment-executor-invalid-target-0001',
         teacherId: TEACHER_A,
         target: { type: 'Payment', id: student.id },
         parameters: {
@@ -232,6 +280,7 @@ describe('P29-W1 payments.create executor', () => {
       const executor = registry.get('payments.create');
       if (!executor.ok) return executor;
       return executor.value.execute({
+        pendingActionId: 'payment-executor-stale-student-0001',
         teacherId: TEACHER_A,
         target: { type: 'Student', id: student.id },
         parameters: {
@@ -258,6 +307,7 @@ describe('P29-W1 payments.create executor', () => {
       const executor = registry.get('payments.create');
       if (!executor.ok) return executor;
       return executor.value.execute({
+        pendingActionId: 'payment-executor-cross-tenant-0001',
         teacherId: TEACHER_B,
         target: { type: 'Student', id: student.id },
         parameters: {
@@ -282,6 +332,7 @@ describe('P29-W1 payments.create executor', () => {
       const executor = registry.get('payments.create');
       if (!executor.ok) return executor;
       return executor.value.execute({
+        pendingActionId: 'payment-executor-missing-student-0001',
         teacherId: TEACHER_A,
         target: { type: 'Student', id: 'missing-student' },
         parameters: {
@@ -324,6 +375,7 @@ describe('P29-W1 payments.create executor', () => {
         const executor = registry.get('payments.create');
         if (!executor.ok) return executor;
         return executor.value.execute({
+          pendingActionId: 'payment-executor-invalid-fields-0001',
           teacherId: TEACHER_A,
           target: { type: 'Student', id: student.id },
           parameters,

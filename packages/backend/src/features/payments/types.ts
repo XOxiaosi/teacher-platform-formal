@@ -2,11 +2,12 @@ import type { Result, CommonError, PaginationParams } from '@teacher-platform/co
 
 export interface CreatePaymentInput {
   teacherId: string;
+  clientRequestId: string;
   studentId: string;
   amount: number;
   lessonCount: number;
   paidAt: Date;
-  note?: string;
+  note?: string | null;
 }
 
 export interface ListPaymentsInput extends PaginationParams {

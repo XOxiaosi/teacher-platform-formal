@@ -31,6 +31,11 @@ import { StudentLedgerReadback } from './student-ledger/StudentLedgerReadback';
 import { getTeachingRuntimeAvailability } from '../api/teaching-tasks';
 import { AssistantWorkspace } from './assistant';
 import { createTeachingTaskTransport } from './assistant/teaching-task-transport';
+import {
+  beginPendingPaymentRequest,
+  clearPendingPaymentRequest,
+  readPendingPaymentRequest,
+} from './payments/pending-payment';
 
 const routeParts = () => location.hash.replace(/^#\/?/, '').split('?')[0].split('/').filter(Boolean);
 
@@ -112,6 +117,7 @@ export function ConnectedWorkspace() {
   if (!snapshot) return <main className="connected-load"><h1>教师工作室</h1>{error ? <><p role="alert">{error}</p><button className="button primary" onClick={retry} disabled={busy}>重新加载</button><button className="button secondary" onClick={() => void auth.logout()}>退出登录</button></> : <p role="status">正在加载你的工作资料…</p>}</main>;
   const actions: PreviewActions = {
     connected: true, data: snapshot.data, ui, setUi, open, close, toast,
+    pendingPayment: readPendingPaymentRequest(auth.teacherId!)?.payment,
     setData: () => { throw new Error('该操作尚未连接，请勿重复提交。'); },
     saveStudent: async (name, grade, id) => {
       if (id) await transaction(() => updateStudentProfile(auth.teacherId!, id, { expectedUpdatedAt: snapshotRef.current!.studentVersions[id], changes: { name, grade } }));
@@ -150,9 +156,14 @@ export function ConnectedWorkspace() {
     },
     savePreferences: (changes) => command('preferences', { changes, expectedUpdatedAt: snapshotRef.current!.preferenceVersion }),
     addPayment: async (payment) => {
-      // The current payment endpoint has no durable idempotency contract yet.
-      // Do not send a decorative request key that the server cannot honor.
-      await transaction(() => createPayment(auth.teacherId!, { studentId: payment.studentId, amount: payment.amount, lessonCount: payment.lessons, paidAt: `${payment.date}T12:00:00+08:00` }));
+      const body = { studentId: payment.studentId, amount: payment.amount, lessonCount: payment.lessons, paidAt: `${payment.date}T12:00:00+08:00` };
+      const { clientRequestId } = beginPendingPaymentRequest(auth.teacherId!, payment);
+      await transaction(async () => {
+        const result = await createPayment(auth.teacherId!, { ...body, clientRequestId });
+        // Keep the key through errors, closing, navigation, and remounts. A server receipt alone resolves it.
+        clearPendingPaymentRequest(auth.teacherId!, clientRequestId);
+        return result;
+      });
     },
     saveSchedule: (schedule) => {
       const current = snapshotRef.current!.data;

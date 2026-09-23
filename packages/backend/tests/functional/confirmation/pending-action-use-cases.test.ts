@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { err, ok, validationError } from '@teacher-platform/contracts';
+import { alreadyConsumed, err, ok, validationError } from '@teacher-platform/contracts';
 import { createConfirmPendingActionUseCase } from '../../../src/app/use-cases/confirm-pending-action/confirm-pending-action-use-case.js';
 import { createCancelPendingActionUseCase } from '../../../src/app/use-cases/cancel-pending-action/cancel-pending-action-use-case.js';
 import type {
@@ -48,6 +48,7 @@ function dependencies(overrides: {
   store?: Partial<PendingActionExecutionStore>;
   executor?: ConfirmableActionExecutor;
   registry?: ConfirmableActionRegistry;
+  paymentReceipt?: { summary: string; references: Array<{ type: 'Payment'; id: string }> } | null;
 } = {}) {
   const executing = pendingAction();
   const consumed = pendingAction({ status: 'consumed', consumedAt: DATABASE_NOW });
@@ -68,10 +69,13 @@ function dependencies(overrides: {
   const registry = overrides.registry ?? {
     get: vi.fn(() => ok(executor)),
   };
-  const transaction: ConfirmationTransactionPort = {
-    run: vi.fn(async (work) => work({ pendingActions: store, registry })),
+  const paymentReceipts = {
+    findPaymentCreateReceipt: vi.fn(async () => overrides.paymentReceipt ?? null),
   };
-  return { store, executor, registry, transaction };
+  const transaction: ConfirmationTransactionPort = {
+    run: vi.fn(async (work) => work({ pendingActions: store, registry, paymentReceipts })),
+  };
+  return { store, executor, registry, paymentReceipts, transaction };
 }
 
 describe('ConfirmPendingActionUseCase', () => {
@@ -129,6 +133,7 @@ describe('ConfirmPendingActionUseCase', () => {
     });
     expect(deps.registry.get).toHaveBeenCalledWith('students.updateStatus');
     expect(deps.executor.execute).toHaveBeenCalledWith({
+      pendingActionId: 'pending-1',
       teacherId: 'teacher-1',
       target: { type: 'Student', id: 'student-1' },
       parameters: { studentId: 'student-1', status: 'paused' },
@@ -157,6 +162,63 @@ describe('ConfirmPendingActionUseCase', () => {
       error: { code: 'VALIDATION_ERROR', message: '目标状态不合法', field: 'status' },
     });
     expect(deps.store.markConsumed).not.toHaveBeenCalled();
+  });
+
+  it('仅已消费 payments.create 用稳定回执重放，且不再次 claim 或执行写入 executor', async () => {
+    const consumedPayment = pendingAction({
+      actionName: 'payments.create',
+      status: 'consumed',
+      consumedAt: DATABASE_NOW,
+    });
+    const deps = dependencies({
+      store: { getOwned: vi.fn(async () => ok(consumedPayment)) },
+      paymentReceipt: {
+        summary: '已为学生创建缴费记录：金额 1200 元、课时 10 节',
+        references: [{ type: 'Payment', id: 'payment-1' }],
+      },
+    });
+    const useCase = createConfirmPendingActionUseCase({
+      actionTokenSigner: signer(), transaction: deps.transaction,
+    });
+
+    const result = await useCase.confirm({
+      teacherId: 'teacher-1', pendingActionId: 'pending-1', actionToken: 'token',
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        pendingAction: { status: 'consumed' },
+        result: { references: [{ type: 'Payment', id: 'payment-1' }] },
+      },
+    });
+    expect(deps.paymentReceipts.findPaymentCreateReceipt).toHaveBeenCalledWith({
+      teacherId: 'teacher-1', pendingActionId: 'pending-1',
+    });
+    expect(deps.store.claim).not.toHaveBeenCalled();
+    expect(deps.executor.execute).not.toHaveBeenCalled();
+    expect(deps.store.markConsumed).not.toHaveBeenCalled();
+  });
+
+  it('已消费的非 payments.create 仍由 claim 拒绝，不能读取或重放支付回执', async () => {
+    const consumedStudentUpdate = pendingAction({ status: 'consumed', consumedAt: DATABASE_NOW });
+    const deps = dependencies({
+      store: {
+        getOwned: vi.fn(async () => ok(consumedStudentUpdate)),
+        claim: vi.fn(async () => err(alreadyConsumed('待确认操作已被占用或消费'))),
+      },
+    });
+    const useCase = createConfirmPendingActionUseCase({
+      actionTokenSigner: signer(), transaction: deps.transaction,
+    });
+
+    const result = await useCase.confirm({
+      teacherId: 'teacher-1', pendingActionId: 'pending-1', actionToken: 'token',
+    });
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'ALREADY_CONSUMED' } });
+    expect(deps.paymentReceipts.findPaymentCreateReceipt).not.toHaveBeenCalled();
+    expect(deps.executor.execute).not.toHaveBeenCalled();
   });
 });
 

@@ -31,6 +31,8 @@ export interface ConfirmableActionExecutionResult {
 }
 
 export interface ConfirmableActionExecutorInput {
+  /** Stable identity of the claimed confirmation; write executors use it for idempotency. */
+  pendingActionId: string;
   teacherId: string;
   target: {
     type: PendingActionTargetType;
@@ -49,9 +51,22 @@ export interface ConfirmableActionRegistry {
   get(actionName: string): Result<ConfirmableActionExecutor, CommonError>;
 }
 
+/**
+ * payments.create 是唯一会把确认成功回执投影为新 Payment 的确认动作。
+ * PendingAction 只存状态，回执丢失后的同 token 重放须由事务内的稳定支付请求键重建，
+ * 不能重新执行写入 executor。
+ */
+export interface PaymentConfirmationReceiptStore {
+  findPaymentCreateReceipt(input: {
+    teacherId: string;
+    pendingActionId: string;
+  }): Promise<ConfirmableActionExecutionResult | null>;
+}
+
 export interface ConfirmationTransactionContext {
   pendingActions: PendingActionExecutionStore;
   registry: ConfirmableActionRegistry;
+  paymentReceipts: PaymentConfirmationReceiptStore;
 }
 
 export interface ConfirmationTransactionPort {

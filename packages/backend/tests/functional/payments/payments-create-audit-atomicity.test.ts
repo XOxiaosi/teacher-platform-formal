@@ -130,7 +130,7 @@ beforeEach(async () => {
 });
 
 describe('P29-W1 payments.create 确认原子性', () => {
-  it('raw client 确认成功：Payment 创建 + 恰好一条 ChangeLog(source:agent-confirmed) + PendingAction consumed', async () => {
+  it('raw client 确认成功：Payment、唯一 purchase 账本及各自审计与 PendingAction 同事务提交', async () => {
     const student = await createStudent();
     const conversation = await prisma.conversation.create({ data: { teacherId: TEACHER } });
     const pending = await seedPendingAction(student, conversation.id);
@@ -146,6 +146,18 @@ describe('P29-W1 payments.create 确认原子性', () => {
     expect(payments[0].studentId).toBe(student.id);
     expect(payments[0].amount).toBe(1200);
     expect(payments[0].lessonCount).toBe(10);
+    const ledgerEntries = await prisma.lessonLedgerEntry.findMany({
+      where: { teacherId: TEACHER, paymentId: payments[0].id },
+    });
+    expect(ledgerEntries).toHaveLength(1);
+    expect(ledgerEntries[0]).toMatchObject({
+      teacherId: TEACHER,
+      studentId: student.id,
+      entryType: 'purchase',
+      lessonDelta: 10,
+      amount: 1200,
+      paymentId: payments[0].id,
+    });
     const logs = await prisma.changeLog.findMany({
       where: { teacherId: TEACHER, targetId: payments[0].id, source: 'agent-confirmed' },
     });
@@ -153,6 +165,11 @@ describe('P29-W1 payments.create 确认原子性', () => {
     expect(logs[0].action).toBe('create');
     expect(logs[0].module).toBe('payments');
     expect(logs[0].targetType).toBe('Payment');
+    const ledgerLogs = await prisma.changeLog.findMany({
+      where: { teacherId: TEACHER, targetId: ledgerEntries[0].id, source: 'system' },
+    });
+    expect(ledgerLogs).toHaveLength(1);
+    expect(ledgerLogs[0]).toMatchObject({ module: 'payments', action: 'create', targetType: 'LessonLedgerEntry' });
     expect((await prisma.pendingAction.findUniqueOrThrow({ where: { id: pending.id } })).status).toBe('consumed');
   });
 
@@ -220,6 +237,7 @@ describe('P29-W1 payments.create 确认原子性', () => {
       if (!executor.ok) throw new Error('payments.create executor 未注册');
       const result = await executor.value.execute({
         teacherId: TEACHER,
+        pendingActionId: 'pending-action-outer-rollback',
         target: { type: 'Student', id: student.id },
         parameters: {
           studentId: student.id,
@@ -239,7 +257,7 @@ describe('P29-W1 payments.create 确认原子性', () => {
     })).toBe(0);
   });
 
-  it('claim 失败（已消费）不创建 Payment 且不写审计', async () => {
+  it('已消费 payments.create 重放原回执且不重复创建 Payment、purchase 或审计', async () => {
     const student = await createStudent();
     const conversation = await prisma.conversation.create({ data: { teacherId: TEACHER } });
     const pending = await seedPendingAction(student, conversation.id);
@@ -249,10 +267,16 @@ describe('P29-W1 payments.create 确认原子性', () => {
     expect(first.ok).toBe(true);
     const second = await confirmWithSigner(signer, pending.id, prisma);
 
-    expect(second).toMatchObject({ ok: false, error: { code: 'ALREADY_CONSUMED' } });
+    expect(second).toEqual(first);
     expect(await prisma.payment.count({ where: { teacherId: TEACHER } })).toBe(1);
+    expect(await prisma.lessonLedgerEntry.count({
+      where: { teacherId: TEACHER, entryType: 'purchase' },
+    })).toBe(1);
     expect(await prisma.changeLog.count({
       where: { teacherId: TEACHER, source: 'agent-confirmed' },
+    })).toBe(1);
+    expect(await prisma.changeLog.count({
+      where: { teacherId: TEACHER, source: 'system', targetType: 'LessonLedgerEntry' },
     })).toBe(1);
   });
 });

@@ -49,6 +49,7 @@ describe('批6 Payment.note 加密往返', () => {
   it('createPayment → DB note 密文，getOwnedPayment/listPayments 解密；amount/lessonCount 留明文', async () => {
     const created = await paymentService.createPayment({
       teacherId: TEACHER_A,
+      clientRequestId: 'field-placement-batch6-payment-0001',
       studentId: STUDENT_A,
       amount: 5000,
       lessonCount: 20,
@@ -78,6 +79,7 @@ describe('批6 Payment.note 加密往返', () => {
   it('updatePayment note 更新后仍密文落库、读解密；note=null 置空', async () => {
     const created = await paymentService.createPayment({
       teacherId: TEACHER_A,
+      clientRequestId: 'field-placement-batch6-payment-0002',
       studentId: STUDENT_A,
       amount: 3000,
       lessonCount: 10,
@@ -122,6 +124,7 @@ describe('批6 Payment.note 加密往返', () => {
   it('DB note 密文被篡改 → 读 INTERNAL_ERROR（SAFETY_BLOCK），不泄露明文', async () => {
     const created = await paymentService.createPayment({
       teacherId: TEACHER_A,
+      clientRequestId: 'field-placement-batch6-payment-0003',
       studentId: STUDENT_A,
       amount: 2000,
       lessonCount: 8,
@@ -151,6 +154,7 @@ describe('批6 Payment.note 加密往返', () => {
   it('owner 隔离不变：跨教师读缴费仍 NOT_FOUND', async () => {
     const created = await paymentService.createPayment({
       teacherId: TEACHER_A,
+      clientRequestId: 'field-placement-batch6-payment-0004',
       studentId: STUDENT_A,
       amount: 6000,
       lessonCount: 24,
@@ -398,6 +402,7 @@ describe('批6 ENCRYPTION_KEY 缺省行为', () => {
 
       const paymentWrite = await noKeyPayments.createPayment({
         teacherId: TEACHER_A,
+        clientRequestId: 'field-placement-batch6-no-key-0001',
         studentId: STUDENT_A,
         amount: 100,
         lessonCount: 1,

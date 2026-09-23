@@ -6,12 +6,56 @@ import { createDatabaseConfirmableActionRegistry } from './database-confirmable-
 import type {
   ConfirmationTransactionPort,
   CreateConfirmationTransactionPortOptions,
+  PaymentConfirmationReceiptStore,
 } from './types.js';
 
 class ConfirmationRollback extends Error {
   constructor(readonly result: Result<unknown, CommonError>) {
     super('confirmation transaction rollback');
   }
+}
+
+function createPaymentConfirmationReceiptStore(
+  tx: Prisma.TransactionClient,
+): PaymentConfirmationReceiptStore {
+  return {
+    async findPaymentCreateReceipt({ teacherId, pendingActionId }) {
+      const payment = await tx.payment.findUnique({
+        where: {
+          teacherId_clientRequestId: {
+            teacherId,
+            clientRequestId: `agent-confirmed:${pendingActionId}`,
+          },
+        },
+        select: { id: true, studentId: true, amount: true, lessonCount: true },
+      });
+      if (!payment) return null;
+      const ledgerEntry = await tx.lessonLedgerEntry.findUnique({
+        where: { paymentId: payment.id },
+        select: {
+          teacherId: true,
+          studentId: true,
+          entryType: true,
+          lessonDelta: true,
+          amount: true,
+          paymentId: true,
+        },
+      });
+      if (
+        !ledgerEntry
+        || ledgerEntry.teacherId !== teacherId
+        || ledgerEntry.studentId !== payment.studentId
+        || ledgerEntry.entryType !== 'purchase'
+        || ledgerEntry.lessonDelta !== payment.lessonCount
+        || ledgerEntry.amount !== payment.amount
+        || ledgerEntry.paymentId !== payment.id
+      ) return null;
+      return {
+        summary: `已为学生创建缴费记录：金额 ${payment.amount} 元、课时 ${payment.lessonCount} 节`,
+        references: [{ type: 'Payment', id: payment.id }],
+      };
+    },
+  };
 }
 
 export function createConfirmationTransactionPort(
@@ -27,6 +71,7 @@ export function createConfirmationTransactionPort(
             const result = await work({
               pendingActions: createPendingActionExecutionStore(tx),
               registry: registryFactory(tx),
+              paymentReceipts: createPaymentConfirmationReceiptStore(tx),
             });
             if (!result.ok) throw new ConfirmationRollback(result);
             return result as Result<T, CommonError>;

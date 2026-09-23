@@ -170,6 +170,7 @@ describe('API 核心教师工作流端到端', () => {
       scheduledEnd: '2030-07-20T18:00:00+08:00',
     });
     const paymentResponse = await api('POST', '/api/v1/payments', {
+      clientRequestId: 'api-core-cross-teacher-payment',
       studentId: otherStudent.id,
       amount: 1200,
       lessonCount: 8,
@@ -379,6 +380,7 @@ describe('API 核心教师工作流端到端', () => {
     expect(studentResponse.body.data.teacherId).toBe(TEACHER_ID);
 
     const paymentResponse = await api('POST', '/api/v1/payments', {
+      clientRequestId: 'api-core-payment-1',
       studentId,
       amount: 3000,
       lessonCount: 10,

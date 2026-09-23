@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConnectedWorkspace } from './ConnectedWorkspace';
 import { createDemoData } from '../preview/data';
+import { clearPendingPaymentRequests, readPendingPaymentRequest } from './payments/pending-payment';
 
 const mock = vi.hoisted(() => ({ availability: vi.fn(), load: vi.fn(), command: vi.fn(), schedule: vi.fn(), payment: vi.fn(), balance: vi.fn(), ledger: vi.fn(), update: vi.fn(), logout: vi.fn(), records: vi.fn(), generate: vi.fn(), createFeedback: vi.fn(), updateFeedback: vi.fn(), feedbackSnapshot: vi.fn(), createDraftTask: vi.fn(), listDraftTasks: vi.fn(), getDraftTask: vi.fn(), retryDraftTask: vi.fn(), updateDraftTask: vi.fn() }));
 vi.mock('../app/teacher-context', () => ({ useAuth: () => ({ teacherId: 'teacher-a', displayName: '验收老师', email: 'a@example.test', logout: mock.logout }) }));
@@ -13,9 +14,141 @@ vi.mock('../api/teaching-tasks', () => ({ getTeachingRuntimeAvailability: mock.a
 vi.mock('../connected/assistant', () => ({ AssistantWorkspace: ({ teacherId }: { teacherId: string }) => <section aria-label="正式教学助手入口"><h1>教学助手</h1><p>当前账号：{teacherId}</p></section> }));
 
 const snapshot = () => ({ data: createDemoData(), studentVersions: { s1: 'v1', s2: 'v2' }, feedbackVersions: {}, memoVersions: { m1: 'm1-v1' }, preferenceVersion: null });
-beforeEach(() => { vi.clearAllMocks(); mock.availability.mockResolvedValue({ runtimeAvailability: 'unavailable' }); location.hash = '#/students'; mock.load.mockResolvedValue(snapshot()); mock.command.mockResolvedValue({}); mock.schedule.mockResolvedValue({}); mock.balance.mockResolvedValue({ purchased: 8, attended: 1, adjustments: 2, remaining: 9 }); mock.ledger.mockResolvedValue([]); mock.listDraftTasks.mockResolvedValue({ items: [] }); });
+beforeEach(() => { vi.clearAllMocks(); clearPendingPaymentRequests('teacher-a'); mock.availability.mockResolvedValue({ runtimeAvailability: 'unavailable' }); location.hash = '#/students'; mock.load.mockResolvedValue(snapshot()); mock.command.mockResolvedValue({}); mock.schedule.mockResolvedValue({}); mock.balance.mockResolvedValue({ purchased: 8, attended: 1, adjustments: 2, remaining: 9 }); mock.ledger.mockResolvedValue([]); mock.listDraftTasks.mockResolvedValue({ items: [] }); });
 
 describe('connected workspace server-backed writes', () => {
+  async function preparePayment(amount = '200') {
+    fireEvent.click(screen.getByRole('button', { name: '登记缴费' }));
+    fireEvent.change(screen.getByLabelText('学生', { selector: 'select' }), { target: { value: 's1' } });
+    fireEvent.change(screen.getByLabelText('金额'), { target: { value: amount } });
+    fireEvent.change(screen.getByLabelText('增加课时'), { target: { value: '2' } });
+    fireEvent.click(screen.getByRole('button', { name: '下一步确认' }));
+  }
+  it('reuses the payment request after a lost receipt and starts a new key after success', async () => {
+    location.hash = '#/finance';
+    const state = snapshot(); state.data.businessDate = '2026-09-22'; mock.load.mockResolvedValue(state);
+    mock.payment.mockRejectedValueOnce(new Error('回执未收到')).mockResolvedValue({ id: 'payment-saved' });
+    render(<ConnectedWorkspace />);
+    await screen.findByRole('heading', { name: '缴费课时' });
+    await preparePayment();
+    fireEvent.click(screen.getByRole('button', { name: '确认登记' }));
+    await screen.findByText('回执未收到');
+    expect(screen.queryByText('缴费已登记，课时已更新')).not.toBeInTheDocument();
+    const first = mock.payment.mock.calls[0][1];
+    expect(first).toEqual({ studentId: 's1', amount: 200, lessonCount: 2,
+      paidAt: '2026-09-22T12:00:00+08:00', clientRequestId: expect.any(String) });
+    expect(first.clientRequestId.length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: '确认登记' }));
+    await screen.findByText('缴费已登记，课时已更新');
+    expect(mock.payment.mock.calls[1][1]).toEqual(first);
+    await preparePayment();
+    fireEvent.click(screen.getByRole('button', { name: '确认登记' }));
+    await waitFor(() => expect(mock.payment).toHaveBeenCalledTimes(3));
+    expect(mock.payment.mock.calls[2][1].clientRequestId).not.toBe(first.clientRequestId);
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+  it('keeps an unknown payment key through edits, resolves conflicts, and rotates only after a receipt', async () => {
+    location.hash = '#/finance';
+    mock.payment
+      .mockRejectedValueOnce(new Error('网络中断'))
+      .mockRejectedValueOnce(new Error('clientRequestId 已用于其他缴费内容'))
+      .mockResolvedValue({ id: 'payment-replayed' });
+    render(<ConnectedWorkspace />);
+    await screen.findByRole('heading', { name: '缴费课时' });
+    await preparePayment();
+    fireEvent.click(screen.getByRole('button', { name: '确认登记' }));
+    await screen.findByText('网络中断');
+    const key = mock.payment.mock.calls[0][1].clientRequestId;
+    fireEvent.click(screen.getByRole('button', { name: '返回修改' }));
+    fireEvent.change(screen.getByLabelText('金额'), { target: { value: '300' } });
+    fireEvent.click(screen.getByRole('button', { name: '下一步确认' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认登记' }));
+    await screen.findByText('clientRequestId 已用于其他缴费内容');
+    expect(mock.payment.mock.calls[1][1]).toEqual(expect.objectContaining({ amount: 300 }));
+    expect(mock.payment.mock.calls[1][1].clientRequestId).toBe(key);
+    fireEvent.click(screen.getByRole('button', { name: '返回修改' }));
+    fireEvent.change(screen.getByLabelText('金额'), { target: { value: '200' } });
+    fireEvent.click(screen.getByRole('button', { name: '下一步确认' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认登记' }));
+    await screen.findByText('缴费已登记，课时已更新');
+    expect(mock.payment.mock.calls[2][1]).toEqual(expect.objectContaining({ amount: 200, clientRequestId: key }));
+    await preparePayment('200');
+    fireEvent.click(screen.getByRole('button', { name: '确认登记' }));
+    await waitFor(() => expect(mock.payment).toHaveBeenCalledTimes(4));
+    expect(mock.payment.mock.calls[3][1].clientRequestId).not.toBe(key);
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+  it('keeps an unresolved payment key after closing or leaving the page and clears it only after a receipt', async () => {
+    location.hash = '#/finance';
+    mock.payment
+      .mockRejectedValueOnce(new Error('回执未知'))
+      .mockRejectedValueOnce(new Error('回执仍未知'))
+      .mockResolvedValue({ id: 'payment-replayed' });
+    render(<ConnectedWorkspace />);
+    await screen.findByRole('heading', { name: '缴费课时' });
+    await preparePayment();
+    fireEvent.click(screen.getByRole('button', { name: '确认登记' }));
+    await screen.findByText('回执未知');
+    const firstKey = mock.payment.mock.calls[0][1].clientRequestId;
+    expect(readPendingPaymentRequest('teacher-a')?.clientRequestId).toBe(firstKey);
+
+    fireEvent.click(screen.getByRole('button', { name: '关闭' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: '登记缴费' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('已恢复原登记内容');
+    expect(screen.getByLabelText('金额')).toHaveValue(200);
+    fireEvent.click(screen.getByRole('button', { name: '下一步确认' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认登记' }));
+    await screen.findByText('回执仍未知');
+    expect(mock.payment.mock.calls[1][1].clientRequestId).toBe(firstKey);
+
+    await act(async () => {
+      location.hash = '#/today';
+      dispatchEvent(new HashChangeEvent('hashchange'));
+    });
+    await act(async () => {
+      location.hash = '#/finance';
+      dispatchEvent(new HashChangeEvent('hashchange'));
+    });
+    await screen.findByRole('heading', { name: '缴费课时' });
+    fireEvent.click(screen.getByRole('button', { name: '登记缴费' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('已恢复原登记内容');
+    fireEvent.click(screen.getByRole('button', { name: '下一步确认' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认登记' }));
+    await screen.findByText('缴费已登记，课时已更新');
+
+    expect(mock.payment.mock.calls[2][1].clientRequestId).toBe(firstKey);
+    expect(readPendingPaymentRequest('teacher-a')).toBeNull();
+  });
+  it('restores an unresolved payment key after the workspace remounts', async () => {
+    location.hash = '#/finance';
+    const firstDay = snapshot(); firstDay.data.businessDate = '2026-09-22'; mock.load.mockResolvedValue(firstDay);
+    mock.payment.mockRejectedValueOnce(new Error('页面刷新前回执未知')).mockResolvedValue({ id: 'payment-replayed' });
+    const firstWorkspace = render(<ConnectedWorkspace />);
+    await screen.findByRole('heading', { name: '缴费课时' });
+    await preparePayment();
+    fireEvent.click(screen.getByRole('button', { name: '确认登记' }));
+    await screen.findByText('页面刷新前回执未知');
+    const firstKey = mock.payment.mock.calls[0][1].clientRequestId;
+    const firstPayload = mock.payment.mock.calls[0][1];
+    expect(firstPayload.paidAt).toBe('2026-09-22T12:00:00+08:00');
+    expect(readPendingPaymentRequest('teacher-a')?.clientRequestId).toBe(firstKey);
+
+    const nextDay = snapshot(); nextDay.data.businessDate = '2026-09-23'; mock.load.mockResolvedValue(nextDay);
+    firstWorkspace.unmount();
+    render(<ConnectedWorkspace />);
+    await screen.findByRole('heading', { name: '缴费课时' });
+    fireEvent.click(screen.getByRole('button', { name: '登记缴费' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('已恢复原登记内容');
+    expect(screen.getByLabelText('金额')).toHaveValue(200);
+    fireEvent.click(screen.getByRole('button', { name: '下一步确认' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认登记' }));
+    await screen.findByText('缴费已登记，课时已更新');
+
+    expect(mock.payment.mock.calls[1][1].clientRequestId).toBe(firstKey);
+    expect(mock.payment.mock.calls[1][1]).toEqual(firstPayload);
+    expect(readPendingPaymentRequest('teacher-a')).toBeNull();
+  });
   it('connects feedback generation to an explicit save with evidence and request receipt', async () => {
     location.hash = '#/feedback';
     mock.createDraftTask.mockResolvedValue({ replayed: false, task: { id: 'task-1', studentId: 's1', status: 'succeeded', version: 1, attemptCount: 1, retryable: false, request: { studentId: 's1' }, draft: { title: '课堂进展', content: '小雨主动验算，下一次继续保持。' }, generation: { lessonIds: ['lesson-1'], rationale: '使用具体课堂行为。', evidence: [{ id: 'record-1', type: 'record', occurredAt: '2026-09-14T08:00:00Z', category: 'lesson_observation', summary: '主动验算' }], windowStart: '2026-09-14T08:00:00Z', windowEnd: '2026-09-14T10:00:00Z' }, error: null, savedFeedbackId: null, createdAt: '2026-09-14T08:00:00Z', updatedAt: '2026-09-14T08:00:00Z' } });

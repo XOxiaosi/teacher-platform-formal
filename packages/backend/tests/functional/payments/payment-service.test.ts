@@ -25,7 +25,7 @@ describe('paymentService.createPayment', () => {
   it('创建缴费记录', async () => {
     const student = await createStudent('张三');
     const result = await service.createPayment({
-      teacherId: TEACHER_ID, studentId: student.id, amount: 3000, lessonCount: 20, paidAt: new Date('2025-03-01'),
+      teacherId: TEACHER_ID, clientRequestId: 'payment-service-create-0001', studentId: student.id, amount: 3000, lessonCount: 20, paidAt: new Date('2025-03-01'),
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -44,6 +44,7 @@ describe('paymentService.createPayment', () => {
 
     const result = await service.createPayment({
       teacherId: TEACHER_ID,
+      clientRequestId: 'payment-service-cross-tenant-0001',
       studentId: otherStudent.id,
       amount: 3000,
       lessonCount: 20,
@@ -60,7 +61,7 @@ describe('paymentService.createPayment', () => {
   it('创建带备注', async () => {
     const student = await createStudent('张三');
     const result = await service.createPayment({
-      teacherId: TEACHER_ID, studentId: student.id, amount: 1500, lessonCount: 10, paidAt: new Date('2025-03-01'), note: '第一次缴费',
+      teacherId: TEACHER_ID, clientRequestId: 'payment-service-note-0001', studentId: student.id, amount: 1500, lessonCount: 10, paidAt: new Date('2025-03-01'), note: '第一次缴费',
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -72,7 +73,7 @@ describe('paymentService.getPayment', () => {
   it('查询单个缴费记录', async () => {
     const student = await createStudent('张三');
     const created = await service.createPayment({
-      teacherId: TEACHER_ID, studentId: student.id, amount: 3000, lessonCount: 20, paidAt: new Date('2025-03-01'),
+      teacherId: TEACHER_ID, clientRequestId: 'payment-service-get-0001', studentId: student.id, amount: 3000, lessonCount: 20, paidAt: new Date('2025-03-01'),
     });
     if (!created.ok) return;
     const result = await service.getPayment(created.value.id);
@@ -90,8 +91,8 @@ describe('paymentService.getPayment', () => {
 describe('paymentService.listPayments', () => {
   it('按 teacherId 查询，按 paidAt 倒序', async () => {
     const student = await createStudent('张三');
-    await service.createPayment({ teacherId: TEACHER_ID, studentId: student.id, amount: 3000, lessonCount: 20, paidAt: new Date('2025-01-01') });
-    await service.createPayment({ teacherId: TEACHER_ID, studentId: student.id, amount: 1500, lessonCount: 10, paidAt: new Date('2025-03-01') });
+    await service.createPayment({ teacherId: TEACHER_ID, clientRequestId: 'payment-service-list-order-0001', studentId: student.id, amount: 3000, lessonCount: 20, paidAt: new Date('2025-01-01') });
+    await service.createPayment({ teacherId: TEACHER_ID, clientRequestId: 'payment-service-list-order-0002', studentId: student.id, amount: 1500, lessonCount: 10, paidAt: new Date('2025-03-01') });
 
     const result = await service.listPayments({ teacherId: TEACHER_ID });
     expect(result.ok).toBe(true);
@@ -104,8 +105,8 @@ describe('paymentService.listPayments', () => {
   it('按 studentId 过滤', async () => {
     const s1 = await createStudent('张三');
     const s2 = await createStudent('李四');
-    await service.createPayment({ teacherId: TEACHER_ID, studentId: s1.id, amount: 3000, lessonCount: 20, paidAt: new Date('2025-03-01') });
-    await service.createPayment({ teacherId: TEACHER_ID, studentId: s2.id, amount: 1500, lessonCount: 10, paidAt: new Date('2025-03-01') });
+    await service.createPayment({ teacherId: TEACHER_ID, clientRequestId: 'payment-service-student-filter-0001', studentId: s1.id, amount: 3000, lessonCount: 20, paidAt: new Date('2025-03-01') });
+    await service.createPayment({ teacherId: TEACHER_ID, clientRequestId: 'payment-service-student-filter-0002', studentId: s2.id, amount: 1500, lessonCount: 10, paidAt: new Date('2025-03-01') });
 
     const result = await service.listPayments({ teacherId: TEACHER_ID, studentId: s1.id });
     expect(result.ok).toBe(true);
@@ -115,10 +116,10 @@ describe('paymentService.listPayments', () => {
 
   it('同时按 paidAtFrom 和 paidAtTo 过滤', async () => {
     const student = await createStudent('张三');
-    await service.createPayment({ teacherId: TEACHER_ID, studentId: student.id, amount: 1000, lessonCount: 5, paidAt: new Date('2025-02-10T12:00:00') });
-    await service.createPayment({ teacherId: TEACHER_ID, studentId: student.id, amount: 2000, lessonCount: 10, paidAt: new Date('2025-03-10T12:00:00') });
-    await service.createPayment({ teacherId: TEACHER_ID, studentId: student.id, amount: 3000, lessonCount: 15, paidAt: new Date('2025-03-20T12:00:00') });
-    await service.createPayment({ teacherId: TEACHER_ID, studentId: student.id, amount: 4000, lessonCount: 20, paidAt: new Date('2025-04-10T12:00:00') });
+    await service.createPayment({ teacherId: TEACHER_ID, clientRequestId: 'payment-service-range-0001', studentId: student.id, amount: 1000, lessonCount: 5, paidAt: new Date('2025-02-10T12:00:00') });
+    await service.createPayment({ teacherId: TEACHER_ID, clientRequestId: 'payment-service-range-0002', studentId: student.id, amount: 2000, lessonCount: 10, paidAt: new Date('2025-03-10T12:00:00') });
+    await service.createPayment({ teacherId: TEACHER_ID, clientRequestId: 'payment-service-range-0003', studentId: student.id, amount: 3000, lessonCount: 15, paidAt: new Date('2025-03-20T12:00:00') });
+    await service.createPayment({ teacherId: TEACHER_ID, clientRequestId: 'payment-service-range-0004', studentId: student.id, amount: 4000, lessonCount: 20, paidAt: new Date('2025-04-10T12:00:00') });
 
     const result = await service.listPayments({
       teacherId: TEACHER_ID,
@@ -133,10 +134,10 @@ describe('paymentService.listPayments', () => {
 
   it('paidAtFrom 和 paidAtTo 是双边界包含关系', async () => {
     const student = await createStudent('张三');
-    await service.createPayment({ teacherId: TEACHER_ID, studentId: student.id, amount: 1000, lessonCount: 5, paidAt: new Date('2025-03-01T00:00:00') });
-    await service.createPayment({ teacherId: TEACHER_ID, studentId: student.id, amount: 2000, lessonCount: 10, paidAt: new Date('2025-03-15T12:00:00') });
-    await service.createPayment({ teacherId: TEACHER_ID, studentId: student.id, amount: 3000, lessonCount: 15, paidAt: new Date('2025-03-31T23:59:59') });
-    await service.createPayment({ teacherId: TEACHER_ID, studentId: student.id, amount: 4000, lessonCount: 20, paidAt: new Date('2025-04-01T00:00:00') });
+    await service.createPayment({ teacherId: TEACHER_ID, clientRequestId: 'payment-service-boundary-0001', studentId: student.id, amount: 1000, lessonCount: 5, paidAt: new Date('2025-03-01T00:00:00') });
+    await service.createPayment({ teacherId: TEACHER_ID, clientRequestId: 'payment-service-boundary-0002', studentId: student.id, amount: 2000, lessonCount: 10, paidAt: new Date('2025-03-15T12:00:00') });
+    await service.createPayment({ teacherId: TEACHER_ID, clientRequestId: 'payment-service-boundary-0003', studentId: student.id, amount: 3000, lessonCount: 15, paidAt: new Date('2025-03-31T23:59:59') });
+    await service.createPayment({ teacherId: TEACHER_ID, clientRequestId: 'payment-service-boundary-0004', studentId: student.id, amount: 4000, lessonCount: 20, paidAt: new Date('2025-04-01T00:00:00') });
 
     const result = await service.listPayments({
       teacherId: TEACHER_ID,
@@ -164,7 +165,7 @@ describe('paymentService.updatePayment', () => {
   it('修改缴费记录', async () => {
     const student = await createStudent('张三');
     const created = await service.createPayment({
-      teacherId: TEACHER_ID, studentId: student.id, amount: 3000, lessonCount: 20, paidAt: new Date('2025-03-01'),
+      teacherId: TEACHER_ID, clientRequestId: 'payment-service-update-0001', studentId: student.id, amount: 3000, lessonCount: 20, paidAt: new Date('2025-03-01'),
     });
     if (!created.ok) return;
     const newPaidAt = new Date('2025-04-01');
@@ -189,8 +190,8 @@ describe('paymentService.updatePayment', () => {
 describe('paymentService.sumLessonCount', () => {
   it('统计学生购买课时总数', async () => {
     const student = await createStudent('张三');
-    await service.createPayment({ teacherId: TEACHER_ID, studentId: student.id, amount: 3000, lessonCount: 20, paidAt: new Date('2025-01-01') });
-    await service.createPayment({ teacherId: TEACHER_ID, studentId: student.id, amount: 1500, lessonCount: 10, paidAt: new Date('2025-03-01') });
+    await service.createPayment({ teacherId: TEACHER_ID, clientRequestId: 'payment-service-sum-0001', studentId: student.id, amount: 3000, lessonCount: 20, paidAt: new Date('2025-01-01') });
+    await service.createPayment({ teacherId: TEACHER_ID, clientRequestId: 'payment-service-sum-0002', studentId: student.id, amount: 1500, lessonCount: 10, paidAt: new Date('2025-03-01') });
 
     const result = await service.sumLessonCount({ studentId: student.id });
     expect(result.ok).toBe(true);

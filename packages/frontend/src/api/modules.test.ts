@@ -49,6 +49,7 @@ describe('业务 API 模块', () => {
     const fetchMock = mockSuccess({ ok: 'data' });
 
     await createPayment('demo-teacher', {
+      clientRequestId: 'payment-test-0001',
       studentId: 'student-1',
       amount: 3000,
       lessonCount: 10,
@@ -57,7 +58,10 @@ describe('业务 API 模块', () => {
     await assembleDailyReview('demo-teacher', {});
     await saveRawInput('demo-teacher', { inputType: 'text', text: '张三今天讲了重点题型' });
 
-    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/payments', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/payments', expect.objectContaining({ method: 'POST',
+      body: JSON.stringify({ clientRequestId: 'payment-test-0001', studentId: 'student-1', amount: 3000,
+        lessonCount: 10, paidAt: '2025-05-01T10:00:00+08:00' }),
+    }));
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/daily-review/assemble', expect.objectContaining({
       method: 'POST',
       body: JSON.stringify({}),

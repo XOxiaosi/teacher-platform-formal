@@ -12,7 +12,14 @@ import { Input } from '@/components/ui/input';
 
 export function FinancePage({ actions }: { actions: PreviewActions }) {
   const [studentId, setStudentId] = usePreviewState(actions, 'finance.studentId', '');
-  const register = () => actions.open('登记缴费', <PaymentForm actions={actions} initialStudentId={studentId} />);
+  const pendingDraft = actions.pendingPayment ? {
+    studentId: actions.pendingPayment.studentId,
+    amount: String(actions.pendingPayment.amount),
+    lessons: String(actions.pendingPayment.lessons),
+    date: actions.pendingPayment.date,
+    operationId: actions.pendingPayment.id,
+  } : undefined;
+  const register = () => actions.open('登记缴费', <PaymentForm actions={actions} initialStudentId={studentId} initialDraft={pendingDraft} pendingRetry={!!pendingDraft} />);
   const students = actions.data.students.filter((student) => !studentId || student.id === studentId);
   const records = actions.data.payments.filter((payment) => !studentId || payment.studentId === studentId);
   return <section className="page preview-page finance-page">
@@ -28,8 +35,8 @@ export function FinancePage({ actions }: { actions: PreviewActions }) {
   </section>;
 }
 
-type PaymentDraft = { studentId: string; amount: string; lessons: string };
-function PaymentForm({ actions, initialStudentId = '', initialDraft }: { actions: PreviewActions; initialStudentId?: string; initialDraft?: PaymentDraft }) {
+type PaymentDraft = { studentId: string; amount: string; lessons: string; date?: string; operationId?: string };
+function PaymentForm({ actions, initialStudentId = '', initialDraft, pendingRetry = false }: { actions: PreviewActions; initialStudentId?: string; initialDraft?: PaymentDraft; pendingRetry?: boolean }) {
   const today = actions.data.businessDate || fallbackToday;
   const [draft, setDraft] = useState<PaymentDraft>(initialDraft || { studentId: initialStudentId, amount: '', lessons: '' });
   const [error, setError] = useState('');
@@ -38,8 +45,9 @@ function PaymentForm({ actions, initialStudentId = '', initialDraft }: { actions
     event.preventDefault();
     const student = actions.data.students.find((item) => item.id === studentId);
     if (!student || !Number.isFinite(Number(amount)) || Number(amount) <= 0 || !Number.isInteger(Number(lessons)) || Number(lessons) <= 0) { setError('请选择学生，填写有效金额和正整数课时。'); return; }
-    const payment: Payment = { id: `p-${Date.now()}`, studentId, amount: Number(amount), lessons: Number(lessons), date: today };
-    actions.open('确认登记缴费', <Confirm text={<>为 {student.name} 登记 ¥{payment.amount} / {payment.lessons} 课时。剩余课时：{student.balance} → {student.balance + payment.lessons}。</>} onCancel={() => actions.open('登记缴费', <PaymentForm actions={actions} initialDraft={draft} />)} onConfirm={() => commitAction(actions, () => actions.addPayment(payment), () => { actions.close(); actions.toast('缴费已登记，课时已更新'); })} label="确认登记" cancelLabel="返回修改" />);
+    const payment: Payment = { id: draft.operationId || `p-${crypto.randomUUID()}`, studentId, amount: Number(amount), lessons: Number(lessons), date: draft.date || today };
+    const retryDraft = { ...draft, date: payment.date, operationId: payment.id };
+    actions.open('确认登记缴费', <Confirm text={<>为 {student.name} 登记 ¥{payment.amount} / {payment.lessons} 课时。剩余课时：{student.balance} → {student.balance + payment.lessons}。</>} onCancel={() => actions.open('登记缴费', <PaymentForm actions={actions} initialDraft={retryDraft} />)} onConfirm={() => commitAction(actions, () => actions.addPayment(payment), () => { actions.close(); actions.toast('缴费已登记，课时已更新'); })} label="确认登记" cancelLabel="返回修改" />);
   };
-  return <form onSubmit={submit}><label>学生<select value={studentId} onChange={(event) => setDraft({ ...draft, studentId: event.target.value })} required><option value="">请选择</option>{actions.data.students.map((student) => <option key={student.id} value={student.id}>{student.name}</option>)}</select></label><label>金额<Input type="number" min="0.01" step="0.01" value={amount} onChange={(event) => setDraft({ ...draft, amount: event.target.value })} required /></label><label>增加课时<Input type="number" min="1" step="1" value={lessons} onChange={(event) => setDraft({ ...draft, lessons: event.target.value })} required /></label>{error && <p role="alert">{error}</p>}<div className="dialog-actions"><Button type="button" variant="outline" onClick={actions.close}>取消</Button><Button>下一步确认</Button></div></form>;
+  return <form onSubmit={submit}>{pendingRetry && <p role="status">上次缴费回执尚未确认，已恢复原登记内容。请核对后重试。</p>}<label>学生<select value={studentId} onChange={(event) => setDraft({ ...draft, studentId: event.target.value })} required><option value="">请选择</option>{actions.data.students.map((student) => <option key={student.id} value={student.id}>{student.name}</option>)}</select></label><label>金额<Input type="number" min="0.01" step="0.01" value={amount} onChange={(event) => setDraft({ ...draft, amount: event.target.value })} required /></label><label>增加课时<Input type="number" min="1" step="1" value={lessons} onChange={(event) => setDraft({ ...draft, lessons: event.target.value })} required /></label>{error && <p role="alert">{error}</p>}<div className="dialog-actions"><Button type="button" variant="outline" onClick={actions.close}>取消</Button><Button>下一步确认</Button></div></form>;
 }

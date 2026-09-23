@@ -27,6 +27,7 @@ export type {
   ConfirmableActionExecutorMap,
   ConfirmableActionRegistry,
   ConfirmationObjectReference,
+  PaymentConfirmationReceiptStore,
   ConfirmationRegistryFactory,
   ConfirmationTransactionContext,
   ConfirmationTransactionPort,

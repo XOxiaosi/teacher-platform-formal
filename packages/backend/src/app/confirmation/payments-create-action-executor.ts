@@ -120,6 +120,9 @@ export function createPaymentsCreateActionExecutor(
 
   return {
     async execute(input) {
+      if (typeof input.pendingActionId !== 'string' || !input.pendingActionId.trim()) {
+        return err(validationError('待确认操作 ID 缺失', 'pendingActionId'));
+      }
       const parsed = parseParameters(input);
       if (!parsed.ok) return parsed;
       const { studentId, amount, lessonCount, paidAt, note, expectedUpdatedAt } = parsed.value;
@@ -149,6 +152,7 @@ export function createPaymentsCreateActionExecutor(
       const payment = await tx.payment.create({
         data: {
           teacherId: input.teacherId,
+          clientRequestId: `agent-confirmed:${input.pendingActionId.trim()}`,
           studentId,
           amount,
           lessonCount,
@@ -156,6 +160,19 @@ export function createPaymentsCreateActionExecutor(
           note: note === undefined ? null : encryptFieldValue(cipher, note),
           createdAtTs: now,
           updatedAtTs: now,
+        },
+      });
+
+      // T-017：确认后的购课同时落不可变课时流水；余额不再依赖可编辑 Payment 字段。
+      const ledgerEntry = await tx.lessonLedgerEntry.create({
+        data: {
+          teacherId: input.teacherId,
+          studentId,
+          entryType: 'purchase',
+          lessonDelta: lessonCount,
+          amount,
+          paymentId: payment.id,
+          createdAtTs: now,
         },
       });
 
@@ -176,6 +193,20 @@ export function createPaymentsCreateActionExecutor(
         source: 'agent-confirmed',
       });
       if (!audit.ok) return err(internalError('变更记录写入失败'));
+
+      const ledgerAudit = await changelog.recordChange({
+        teacherId: input.teacherId,
+        module: 'payments',
+        action: 'create',
+        targetType: 'LessonLedgerEntry',
+        targetId: ledgerEntry.id,
+        before: null,
+        after: { studentId, entryType: 'purchase', lessonDelta: lessonCount, paymentId: payment.id },
+        // The teacher confirmed the Payment action; this is the deterministic
+        // ledger side effect, not a second independently-confirmed operation.
+        source: 'system',
+      });
+      if (!ledgerAudit.ok) return err(internalError('变更记录写入失败'));
 
       return ok<ConfirmableActionExecutionResult>({
         summary: `已为学生创建缴费记录：金额 ${amount} 元、课时 ${lessonCount} 节`,

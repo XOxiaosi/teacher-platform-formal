@@ -9,6 +9,7 @@ import type {
 } from './types';
 
 export interface CreatePaymentRequest {
+  clientRequestId: string;
   studentId: string;
   amount: number;
   lessonCount: number;

@@ -87,6 +87,7 @@ export type PreviewActions = {
   editCompletedSchedule?: (before: Schedule, after: Schedule) => void | Promise<void>;
   saveRule: (rule: RecurrenceRule) => void | Promise<void>; replaceRuleFrom: (ruleId: string, from: string, rule: RecurrenceRule) => void | Promise<void>; endRuleBefore?: (ruleId: string, from: string) => void | Promise<void>; setRuleEnabled: (id: string, enabled: boolean) => void | Promise<void>;
   addPayment: (payment: Payment) => void | Promise<void>;
+  pendingPayment?: Payment;
 };
 
 function getRoute() { return location.hash.replace(/^#\/?/, '').split('?')[0].split('/').filter(Boolean); }

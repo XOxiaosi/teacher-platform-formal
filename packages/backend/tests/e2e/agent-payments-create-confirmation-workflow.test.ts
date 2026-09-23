@@ -212,6 +212,7 @@ describe('Agent payments.create 可信确认 workflow（P29-W1）', () => {
     expect(confirmed.value.result.references).toEqual([{ type: 'Payment', id: expect.any(String) }]);
     const payments = await prisma.payment.findMany({ where: { teacherId: TEACHER } });
     expect(payments).toHaveLength(1);
+    expect(payments[0].clientRequestId).toBe(`agent-confirmed:${runtime.pending.id}`);
     expect(payments[0].studentId).toBe(student.id);
     expect(payments[0].amount).toBe(1200);
     expect(payments[0].lessonCount).toBe(10);
@@ -356,7 +357,7 @@ describe('Agent payments.create 可信确认 workflow（P29-W1）', () => {
     expect((await prisma.pendingAction.findUniqueOrThrow({ where: { id: runtime.pending.id } })).status).toBe('pending');
   });
 
-  it('重复确认只执行一次：第二次返回 ALREADY_CONSUMED，仍恰好一条审计', async () => {
+  it('同一确认并发或回执丢失后的重放都返回原成功结果，且不重复写 Payment、账本或审计', async () => {
     const student = await createStudent();
     const runtime = await runTool({
       id: 'call-payment-repeat',
@@ -364,13 +365,54 @@ describe('Agent payments.create 可信确认 workflow（P29-W1）', () => {
       args: { studentId: student.id, amount: 1200, lessonCount: 10, paidAt: '2026-07-21T12:00:00.000Z' },
     });
 
-    const first = await confirmPending(runtime);
-    const second = await confirmPending(runtime);
-    expect(first.ok).toBe(true);
-    expect(second).toMatchObject({ ok: false, error: { code: 'ALREADY_CONSUMED' } });
-    expect(await prisma.payment.count({ where: { teacherId: TEACHER } })).toBe(1);
+    const results = await Promise.all(Array.from({ length: 5 }, () => confirmPending(runtime)));
+    expect(results.every((result) => result.ok)).toBe(true);
+    const firstSuccess = results.find((result) => result.ok);
+    if (!firstSuccess?.ok) return;
+    const paymentReferenceIds = results.flatMap((result) => (
+      result.ok ? result.value.result.references.map((reference) => reference.id) : []
+    ));
+    expect(new Set(paymentReferenceIds)).toEqual(new Set([firstSuccess.value.result.references[0].id]));
+    const payments = await prisma.payment.findMany({ where: { teacherId: TEACHER } });
+    expect(payments).toHaveLength(1);
+    const ledgerEntries = await prisma.lessonLedgerEntry.findMany({
+      where: { teacherId: TEACHER, paymentId: payments[0].id },
+    });
+    expect(ledgerEntries).toHaveLength(1);
+    expect(ledgerEntries[0]).toMatchObject({
+      teacherId: TEACHER,
+      studentId: student.id,
+      entryType: 'purchase',
+      lessonDelta: 10,
+      amount: 1200,
+      paymentId: payments[0].id,
+    });
     expect(await prisma.changeLog.count({
       where: { teacherId: TEACHER, source: 'agent-confirmed' },
     })).toBe(1);
+    const ledgerLogs = await prisma.changeLog.findMany({
+      where: { teacherId: TEACHER, targetId: ledgerEntries[0].id, source: 'system' },
+    });
+    expect(ledgerLogs).toHaveLength(1);
+    expect(ledgerLogs[0]).toMatchObject({ module: 'payments', action: 'create', targetType: 'LessonLedgerEntry' });
+  });
+
+  it('已消费支付缺少关联 purchase 流水时不重放回执或重新写入', async () => {
+    const student = await createStudent();
+    const runtime = await runTool({
+      id: 'call-payment-receipt-ledger-missing',
+      name: 'payments.create',
+      args: { studentId: student.id, amount: 1200, lessonCount: 10, paidAt: '2026-07-21T12:00:00.000Z' },
+    });
+    const first = await confirmPending(runtime);
+    expect(first.ok).toBe(true);
+    const payment = await prisma.payment.findFirstOrThrow({ where: { teacherId: TEACHER } });
+    await prisma.lessonLedgerEntry.delete({ where: { paymentId: payment.id } });
+
+    const replay = await confirmPending(runtime);
+
+    expect(replay).toMatchObject({ ok: false, error: { code: 'INTERNAL_ERROR', message: '待确认操作执行失败' } });
+    expect(await prisma.payment.count({ where: { teacherId: TEACHER } })).toBe(1);
+    expect(await prisma.lessonLedgerEntry.count({ where: { teacherId: TEACHER } })).toBe(0);
   });
 });
