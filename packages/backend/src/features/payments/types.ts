@@ -134,6 +134,23 @@ export interface ConfirmLedgerAdjustmentInput {
   confirmationId: string;
 }
 
+/**
+ * Two-step adjustment preview. While pending, `balanceAfter` is a proposal and
+ * no ledger entry exists. An idempotent replay may return a confirmed request;
+ * then before/after are the same current authoritative balance.
+ */
+export interface PreparedLedgerAdjustmentData {
+  confirmation: LedgerAdjustmentConfirmationData;
+  balanceBefore: LessonLedgerBalance;
+  balanceAfter: LessonLedgerBalance;
+}
+
+/** A confirmed adjustment and the authoritative balance after it is committed. */
+export interface ConfirmedLedgerAdjustmentData {
+  confirmation: LedgerAdjustmentConfirmationData;
+  balance: LessonLedgerBalance;
+}
+
 export interface RecordAttendanceDeductionInput {
   teacherId: string;
   lessonId: string;
@@ -160,8 +177,8 @@ export interface LessonLedgerService {
   recordPurchase(input: RecordPurchaseLedgerInput): Promise<Result<LessonLedgerEntryData, CommonError>>;
   recordAttendanceDeduction(input: RecordAttendanceDeductionInput): Promise<Result<LessonLedgerEntryData | null, CommonError>>;
   recordLessonStatusTransition(input: RecordLessonStatusTransitionInput): Promise<Result<LessonLedgerEntryData | null, CommonError>>;
-  prepareAdjustment(input: CreateLedgerAdjustmentInput): Promise<Result<LedgerAdjustmentConfirmationData, CommonError>>;
-  confirmAdjustment(input: ConfirmLedgerAdjustmentInput): Promise<Result<LedgerAdjustmentConfirmationData, CommonError>>;
+  prepareAdjustment(input: CreateLedgerAdjustmentInput): Promise<Result<PreparedLedgerAdjustmentData, CommonError>>;
+  confirmAdjustment(input: ConfirmLedgerAdjustmentInput): Promise<Result<ConfirmedLedgerAdjustmentData, CommonError>>;
   calculateBalance(input: { teacherId: string; studentId: string }): Promise<Result<LessonLedgerBalance, CommonError>>;
 }
 

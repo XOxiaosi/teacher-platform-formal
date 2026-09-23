@@ -56,6 +56,52 @@ function parsePaymentQueryDate(value: unknown): Date | undefined {
   return new Date(`${normalized}T00:00:00.000Z`);
 }
 
+type AdjustmentRequestBody = {
+  studentId: string;
+  entryType: 'refund' | 'gift' | 'manual_adjustment';
+  lessonDelta: number;
+  reason: string;
+  clientRequestId: string;
+};
+
+function parseAdjustmentRequestBody(body: unknown): { ok: true; value: AdjustmentRequestBody } | { ok: false; error: ReturnType<typeof validationError> } {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+    return { ok: false, error: validationError('请求体必须是对象', 'body') };
+  }
+  const value = body as Record<string, unknown>;
+  if (typeof value.studentId !== 'string' || !value.studentId.trim()) {
+    return { ok: false, error: validationError('studentId 必填', 'studentId') };
+  }
+  if (value.entryType !== 'refund' && value.entryType !== 'gift' && value.entryType !== 'manual_adjustment') {
+    return { ok: false, error: validationError('不支持的账本类型', 'entryType') };
+  }
+  if (
+    typeof value.lessonDelta !== 'number'
+    || !Number.isSafeInteger(value.lessonDelta)
+    || value.lessonDelta === 0
+    || value.lessonDelta < -2_147_483_648
+    || value.lessonDelta > 2_147_483_647
+  ) {
+    return { ok: false, error: validationError('课时调整必须是非零整数', 'lessonDelta') };
+  }
+  if (typeof value.reason !== 'string' || !value.reason.trim()) {
+    return { ok: false, error: validationError('调整原因必填', 'reason') };
+  }
+  if (typeof value.clientRequestId !== 'string' || !value.clientRequestId.trim()) {
+    return { ok: false, error: validationError('clientRequestId 必填', 'clientRequestId') };
+  }
+  return {
+    ok: true,
+    value: {
+      studentId: value.studentId.trim(),
+      entryType: value.entryType,
+      lessonDelta: value.lessonDelta,
+      reason: value.reason.trim(),
+      clientRequestId: value.clientRequestId.trim(),
+    },
+  };
+}
+
 export function createPaymentRouter(dependencies: PaymentRouteDependencies): Router {
   const router = Router();
 
@@ -123,6 +169,19 @@ export function createPaymentRouter(dependencies: PaymentRouteDependencies): Rou
     sendResult(res, result, 201);
   });
 
+  // 人工影响课时余额的操作必须经过两步：先写待确认请求，再明确确认写不可变流水。
+  router.post('/lesson-ledger/adjustments', async (req, res) => {
+    const teacher = getTeacherId(req);
+    if (!teacher.ok) return sendTeacherError(res, teacher.error);
+    const body = parseAdjustmentRequestBody(req.body);
+    if (!body.ok) return sendTeacherError(res, body.error);
+    const result = await dependencies.ledger.prepareAdjustment({
+      teacherId: teacher.value,
+      ...body.value,
+    });
+    sendResult(res, result, 201);
+  });
+
   router.get('/lesson-ledger/entries', async (req, res) => {
     const teacher = getTeacherId(req);
     if (!teacher.ok) return sendTeacherError(res, teacher.error);
@@ -156,6 +215,18 @@ export function createPaymentRouter(dependencies: PaymentRouteDependencies): Rou
       studentId,
       from,
       to,
+    });
+    sendResult(res, result);
+  });
+
+  router.post('/lesson-ledger/adjustments/:confirmationId/confirm', async (req, res) => {
+    const teacher = getTeacherId(req);
+    if (!teacher.ok) return sendTeacherError(res, teacher.error);
+    const confirmationId = typeof req.params.confirmationId === 'string' ? req.params.confirmationId.trim() : '';
+    if (!confirmationId) return sendTeacherError(res, validationError('confirmationId 必填', 'confirmationId'));
+    const result = await dependencies.ledger.confirmAdjustment({
+      teacherId: teacher.value,
+      confirmationId,
     });
     sendResult(res, result);
   });

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { listLessonLedgerEntries } from './payments';
-import type { LessonLedgerEntryData } from './types';
+import { confirmLessonLedgerAdjustment, listLessonLedgerEntries, prepareLessonLedgerAdjustment } from './payments';
+import type { ConfirmLessonLedgerAdjustmentResult, LessonLedgerEntryData, PrepareLessonLedgerAdjustmentResult } from './types';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -46,5 +46,35 @@ describe('课时流水读取 API', () => {
       method: 'GET',
       credentials: 'include',
     }));
+  });
+
+  it('先以精确 payload 查看调整影响，再以 confirmation id 明确确认', async () => {
+    const prepared: PrepareLessonLedgerAdjustmentResult = {
+      confirmation: {
+        id: 'confirmation/a?', teacherId: 'teacher-a', studentId: 'student-1', entryType: 'manual_adjustment', lessonDelta: -2,
+        reason: '补录扣减', clientRequestId: 'ledger-request-1', status: 'pending', confirmedAt: null,
+        createdAt: '2026-09-23T01:00:00.000Z', updatedAt: '2026-09-23T01:00:00.000Z', entry: null,
+      },
+      balanceBefore: { purchased: 8, attended: 1, adjustments: 0, remaining: 7 },
+      balanceAfter: { purchased: 8, attended: 1, adjustments: -2, remaining: 5 },
+    };
+    const confirmed: ConfirmLessonLedgerAdjustmentResult = {
+      confirmation: { ...prepared.confirmation, status: 'confirmed', confirmedAt: '2026-09-23T01:01:00.000Z' },
+      balance: prepared.balanceAfter,
+    };
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true, data: prepared }) } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true, data: confirmed }) } as Response);
+    const body = { studentId: 'student-1', entryType: 'manual_adjustment' as const, lessonDelta: -2, reason: '补录扣减', clientRequestId: 'ledger-request-1' };
+
+    await expect(prepareLessonLedgerAdjustment('teacher-a', body)).resolves.toEqual(prepared);
+    await expect(confirmLessonLedgerAdjustment('teacher-a', 'confirmation/a?')).resolves.toEqual(confirmed);
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/lesson-ledger/adjustments', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, credentials: 'include', body: JSON.stringify(body),
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/lesson-ledger/adjustments/confirmation%2Fa%3F/confirm', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, credentials: 'include',
+    });
   });
 });

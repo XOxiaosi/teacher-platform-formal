@@ -9,6 +9,8 @@ export type {
   LessonLedgerEntryType,
   LessonLedgerService,
   LedgerAdjustmentConfirmationData,
+  PreparedLedgerAdjustmentData,
+  ConfirmedLedgerAdjustmentData,
   CreateLedgerAdjustmentInput,
   ConfirmLedgerAdjustmentInput,
   RecordAttendanceDeductionInput,

@@ -129,8 +129,8 @@ describe('createStudentProfileUseCase', () => {
       });
       expect(prepared.ok).toBe(true);
       if (!prepared.ok) return;
-      await expect(ledger.confirmAdjustment({ teacherId: TEACHER_ID, confirmationId: prepared.value.id }))
-        .resolves.toMatchObject({ ok: true, value: { status: 'confirmed', entry: { entryType, lessonDelta } } });
+      await expect(ledger.confirmAdjustment({ teacherId: TEACHER_ID, confirmationId: prepared.value.confirmation.id }))
+        .resolves.toMatchObject({ ok: true, value: { confirmation: { status: 'confirmed', entry: { entryType, lessonDelta } } } });
     }
 
     await confirmAdjustment('gift', 2, 'student-profile-ledger-gift-001');

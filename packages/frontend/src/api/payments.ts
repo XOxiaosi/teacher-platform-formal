@@ -6,6 +6,10 @@ import type {
   PaymentChanges,
   PaymentData,
   LessonLedgerEntryData,
+  LessonLedgerAdjustmentEntryType,
+  PrepareLessonLedgerAdjustmentRequest,
+  PrepareLessonLedgerAdjustmentResult,
+  ConfirmLessonLedgerAdjustmentResult,
 } from './types';
 
 export interface CreatePaymentRequest {
@@ -17,9 +21,28 @@ export interface CreatePaymentRequest {
   note?: string;
 }
 
+export type { PrepareLessonLedgerAdjustmentRequest } from './types';
+
 export function listLessonLedgerEntries(teacherId: string, params: { studentId?: string } = {}): Promise<LessonLedgerEntryData[]> {
   const query = params.studentId ? `?studentId=${encodeURIComponent(params.studentId)}` : '';
   return apiRequest(`/lesson-ledger/entries${query}`, { teacherId });
+}
+
+export function prepareLessonLedgerAdjustment(
+  teacherId: string,
+  body: PrepareLessonLedgerAdjustmentRequest,
+): Promise<PrepareLessonLedgerAdjustmentResult> {
+  return apiRequest('/lesson-ledger/adjustments', { method: 'POST', teacherId, body });
+}
+
+export function confirmLessonLedgerAdjustment(
+  teacherId: string,
+  confirmationId: string,
+): Promise<ConfirmLessonLedgerAdjustmentResult> {
+  return apiRequest(`/lesson-ledger/adjustments/${encodeURIComponent(confirmationId)}/confirm`, {
+    method: 'POST',
+    teacherId,
+  });
 }
 
 export function listPayments(teacherId: string): Promise<ListResult<PaymentData>> {

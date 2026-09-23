@@ -1,3 +1,15 @@
+import type { LessonBalance } from './lesson-ledger-types';
+
+export type {
+  ConfirmLessonLedgerAdjustmentResult,
+  LessonBalance,
+  LessonLedgerAdjustmentConfirmationData,
+  LessonLedgerAdjustmentEntryType,
+  LessonLedgerEntryData,
+  PrepareLessonLedgerAdjustmentRequest,
+  PrepareLessonLedgerAdjustmentResult,
+} from './lesson-ledger-types';
+
 export type CommonErrorCode =
   | 'NOT_FOUND'
   | 'VALIDATION_ERROR'
@@ -93,27 +105,6 @@ export interface PaymentData {
   note: string | null;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface LessonLedgerEntryData {
-  id: string;
-  teacherId: string;
-  studentId: string;
-  entryType:
-    | 'purchase'
-    | 'attendance_deduction'
-    | 'attendance_reversal'
-    | 'refund'
-    | 'gift'
-    | 'manual_adjustment';
-  lessonDelta: number;
-  amount: number | null;
-  reason: string | null;
-  paymentId: string | null;
-  lessonId: string | null;
-  adjustmentConfirmationId: string | null;
-  clientRequestId: string | null;
-  createdAt: string;
 }
 
 export interface LessonData {
@@ -216,13 +207,6 @@ export interface RescheduleLessonResult {
     original: string;
     replacement: string;
   };
-}
-
-export interface LessonBalance {
-  purchased: number;
-  attended: number;
-  adjustments: number;
-  remaining: number;
 }
 
 export interface StudentProfileView {

@@ -10,6 +10,28 @@
 .student-ledger-balance dd small { margin-left: 4px; color: var(--text-muted); font-size: 11px; font-weight: 400; }
 .student-ledger-balance-total { border-color: #b6d2c3 !important; background: #f2f8f4 !important; }
 .student-ledger-balance-total dd { color: var(--primary-active); }
+.student-ledger-adjustment { margin: 0 0 28px; padding: 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-soft); }
+.student-ledger-adjustment-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.student-ledger-adjustment-heading h3 { margin: 0; color: var(--foreground); font-size: 15px; }
+.student-ledger-adjustment-heading p { margin: 6px 0 0; color: var(--text-muted); font-size: 12px; line-height: 1.5; }
+.student-ledger-adjustment-form { display: grid; gap: 13px; margin-top: 16px; }
+.student-ledger-adjustment-form fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.student-ledger-adjustment-form legend { padding: 0; color: var(--foreground); font-size: 13px; font-weight: 600; }
+.student-ledger-choice-row { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 8px; }
+.student-ledger-choice-row label { display: inline-flex; align-items: center; gap: 6px; color: var(--foreground); font-size: 13px; }
+.student-ledger-adjustment-form > label { display: grid; gap: 6px; color: var(--foreground); font-size: 13px; font-weight: 600; }
+.student-ledger-adjustment-form input[type="number"], .student-ledger-adjustment-form textarea { box-sizing: border-box; width: 100%; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--foreground); font: inherit; font-weight: 400; }
+.student-ledger-adjustment-form input[type="number"] { height: 38px; padding: 0 10px; }
+.student-ledger-adjustment-form textarea { min-height: 74px; padding: 9px 10px; resize: vertical; }
+.student-ledger-refund-note { margin: 0; padding: 9px 10px; border-radius: 7px; background: #fff6e9; color: #855e1d; font-size: 12px; line-height: 1.6; }
+.student-ledger-adjustment-error { margin: 0; color: #8d3026; font-size: 13px; line-height: 1.5; }
+.student-ledger-adjustment-preview { margin-top: 16px; }
+.student-ledger-adjustment-preview h4 { margin: 0; color: var(--foreground); font-size: 14px; }
+.student-ledger-adjustment-preview dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin: 13px 0; }
+.student-ledger-adjustment-preview dl > div { min-width: 0; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.student-ledger-adjustment-preview dt { color: var(--text-muted); font-size: 11px; }
+.student-ledger-adjustment-preview dd { margin: 5px 0 0; overflow-wrap: anywhere; color: var(--foreground); font-size: 13px; font-weight: 600; line-height: 1.5; }
+.student-ledger-adjustment-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 9px; margin-top: 15px; }
 .student-ledger-list-heading { padding-bottom: 10px; border-bottom: 1px solid var(--border); }
 .student-ledger-list-heading span { margin: 0; }
 .student-ledger-entries { margin: 0; padding: 0; list-style: none; }
@@ -24,10 +46,15 @@
 .student-ledger-empty, .student-ledger-state { padding: 25px 0; color: var(--text-muted); font-size: 13px; }
 .student-ledger-error { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 20px; padding: 14px; border: 1px solid #e4b8b1; border-radius: 10px; background: #fff8f6; color: #8d3026; line-height: 1.6; }
 .student-ledger-error p { margin: 0; }
+.student-ledger-confirmation-notice { margin: 16px 0 0; padding: 11px 13px; border: 1px solid #b6d2c3; border-radius: 9px; background: #f2f8f4; color: #26734a; font-size: 13px; line-height: 1.6; }
 @media (max-width: 640px) {
   .student-ledger-heading { align-items: flex-start; }
   .student-ledger-balance { grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 18px 0 24px; }
   .student-ledger-balance dd { font-size: 20px; }
+  .student-ledger-adjustment { padding: 14px; }
+  .student-ledger-adjustment-preview dl { grid-template-columns: 1fr; }
+  .student-ledger-adjustment-actions { justify-content: stretch; }
+  .student-ledger-adjustment-actions .button { flex: 1 1 130px; }
   .student-ledger-entry-meta { align-items: flex-start; flex-direction: column; gap: 2px; }
   .student-ledger-entry-meta span { text-align: left; }
   .student-ledger-error { align-items: flex-start; flex-direction: column; }

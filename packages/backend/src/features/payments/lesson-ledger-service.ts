@@ -1,5 +1,5 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
-import { err, internalError, notFound, ok, validationError, versionConflict } from '@teacher-platform/contracts';
+import { err, internalError, notFound, ok, validationError, versionConflict, type CommonError, type Result } from '@teacher-platform/contracts';
 import { createDatabaseTrustedClock } from '../../shared/trusted-clock/index.js';
 import { createFieldCipherFromEnv, decryptFieldValue, encryptFieldValue, type FieldCipher } from '../../shared/field-encryption/index.js';
 import { createChangelogService } from '../../shared/changelog/index.js';
@@ -10,11 +10,18 @@ import type {
   LessonLedgerBalance,
   LessonLedgerEntryData,
   LessonLedgerService,
+  PreparedLedgerAdjustmentData,
   RecordPurchaseLedgerInput,
   RecordLessonStatusTransitionInput,
 } from './types.js';
 
 type LedgerPrismaClient = PrismaClient | Prisma.TransactionClient;
+
+class LedgerTransactionRollback<T> extends Error {
+  constructor(readonly result: Result<T, CommonError>) {
+    super('ledger transaction rollback');
+  }
+}
 
 export interface LessonLedgerServiceOptions {
   getClient: () => Promise<LedgerPrismaClient>;
@@ -181,47 +188,50 @@ export function createLessonLedgerService(
     async prepareAdjustment(input: CreateLedgerAdjustmentInput) {
       const validity = validateAdjustment(input);
       if (!validity.ok) return validity;
-      const { prisma, clock } = await client();
-      const student = await prisma.student.findFirst({ where: { id: input.studentId, teacherId: input.teacherId }, select: { id: true } });
-      if (!student) return err(notFound('学生不存在'));
-      const existing = await prisma.lessonLedgerAdjustmentConfirmation.findFirst({
-        where: { teacherId: input.teacherId, clientRequestId: input.clientRequestId }, include: { ledgerEntry: true },
-      });
-      if (existing) {
-        const same = existing.studentId === input.studentId && existing.entryType === input.entryType
-          && existing.lessonDelta === input.lessonDelta && decryptFieldValue(cipher, existing.reasonCiphertext) === input.reason;
-        return same ? ok(toConfirmation(existing, cipher)) : err(versionConflict());
-      }
-      const now = await clock.now();
-      if (!now.ok || !(now.value instanceof Date) || Number.isNaN(now.value?.getTime())) {
-        return now.ok ? err(internalError('TrustedClock返回无效时间')) : now;
-      }
+      const { prisma } = await client();
       try {
-        const created = await prisma.lessonLedgerAdjustmentConfirmation.create({
-          data: {
-            teacherId: input.teacherId, studentId: input.studentId, entryType: input.entryType,
-            lessonDelta: input.lessonDelta, reasonCiphertext: encryptFieldValue(cipher, input.reason),
-            clientRequestId: input.clientRequestId, createdAtTs: now.value, updatedAtTs: now.value,
-          }, include: { ledgerEntry: true },
+        return await transactLedger(prisma, async (tx) => {
+          const student = await tx.student.findFirst({ where: { id: input.studentId, teacherId: input.teacherId }, select: { id: true } });
+          if (!student) return err(notFound('学生不存在'));
+          const existing = await tx.lessonLedgerAdjustmentConfirmation.findFirst({
+            where: { teacherId: input.teacherId, clientRequestId: input.clientRequestId }, include: { ledgerEntry: true },
+          });
+          if (existing) {
+            if (!sameAdjustment(existing, input, cipher)) return err(versionConflict());
+            const balanceBefore = await calculateBalanceFor(tx, input.teacherId, input.studentId);
+            return ok(preparedAdjustment(existing, balanceBefore, cipher));
+          }
+          const { clock } = await clientFor(tx);
+          const now = await clock.now();
+          if (!now.ok || !(now.value instanceof Date) || Number.isNaN(now.value?.getTime())) {
+            return now.ok ? err(internalError('TrustedClock返回无效时间')) : now;
+          }
+          const created = await tx.lessonLedgerAdjustmentConfirmation.create({
+            data: {
+              teacherId: input.teacherId, studentId: input.studentId, entryType: input.entryType,
+              lessonDelta: input.lessonDelta, reasonCiphertext: encryptFieldValue(cipher, input.reason),
+              clientRequestId: input.clientRequestId, createdAtTs: now.value, updatedAtTs: now.value,
+            }, include: { ledgerEntry: true },
+          });
+          const audit = await createChangelogService(tx, cipher).recordChange({
+            teacherId: input.teacherId, module: 'payments', action: 'create', targetType: 'LessonLedgerAdjustmentConfirmation', targetId: created.id,
+            before: null, after: { studentId: input.studentId, entryType: input.entryType, lessonDelta: input.lessonDelta, status: 'pending' }, source: 'manual',
+          });
+          if (!audit.ok) return err(internalError('课时调整审计写入失败'));
+          const balanceBefore = await calculateBalanceFor(tx, input.teacherId, input.studentId);
+          return ok(preparedAdjustment(created, balanceBefore, cipher));
         });
-        const audit = await createChangelogService(prisma, cipher).recordChange({
-          teacherId: input.teacherId, module: 'payments', action: 'create', targetType: 'LessonLedgerAdjustmentConfirmation', targetId: created.id,
-          before: null, after: { studentId: input.studentId, entryType: input.entryType, lessonDelta: input.lessonDelta, status: 'pending' }, source: 'manual',
-        });
-        if (!audit.ok) return err(internalError('课时调整审计写入失败'));
-        return ok(toConfirmation(created, cipher));
       } catch (caught) {
+        if (caught instanceof LedgerTransactionRollback) throw caught;
         if (isUnique(caught)) {
           const replay = await prisma.lessonLedgerAdjustmentConfirmation.findFirst({
             where: { teacherId: input.teacherId, clientRequestId: input.clientRequestId },
             include: { ledgerEntry: true },
           });
           if (replay) {
-            const same = replay.studentId === input.studentId
-              && replay.entryType === input.entryType
-              && replay.lessonDelta === input.lessonDelta
-              && decryptFieldValue(cipher, replay.reasonCiphertext) === input.reason;
-            return same ? ok(toConfirmation(replay, cipher)) : err(versionConflict());
+            if (!sameAdjustment(replay, input, cipher)) return err(versionConflict());
+            const balanceBefore = await calculateBalanceFor(prisma, input.teacherId, input.studentId);
+            return ok(preparedAdjustment(replay, balanceBefore, cipher));
           }
           return err(versionConflict());
         }
@@ -236,7 +246,10 @@ export function createLessonLedgerService(
           where: { id: confirmationId, teacherId }, include: { ledgerEntry: true },
         });
         if (!confirmation) return err(notFound('课时调整确认不存在'));
-        if (confirmation.status === 'confirmed' && confirmation.ledgerEntry) return ok(toConfirmation(confirmation, cipher));
+        if (confirmation.status === 'confirmed' && confirmation.ledgerEntry) {
+          const balance = await calculateBalanceFor(tx, teacherId, confirmation.studentId);
+          return ok({ confirmation: toConfirmation(confirmation, cipher), balance });
+        }
         if (confirmation.status !== 'pending') return err(validationError('该课时调整不能确认', 'confirmationId'));
         const { clock } = await clientFor(tx);
         const now = await clock.now();
@@ -259,17 +272,20 @@ export function createLessonLedgerService(
         });
         if (!audit.ok) return err(internalError('课时账本审计写入失败'));
         const confirmed = await tx.lessonLedgerAdjustmentConfirmation.findFirst({ where: { id: confirmation.id, teacherId }, include: { ledgerEntry: true } });
-        return confirmed ? ok(toConfirmation(confirmed, cipher)) : err(internalError('课时调整确认读取失败'));
+        if (!confirmed) return err(internalError('课时调整确认读取失败'));
+        const balance = await calculateBalanceFor(tx, teacherId, confirmation.studentId);
+        return ok({ confirmation: toConfirmation(confirmed, cipher), balance });
       };
       try {
-        if ('$transaction' in prisma && typeof (prisma as PrismaClient).$transaction === 'function') {
-          return await (prisma as PrismaClient).$transaction(invoke);
-        }
-        return await invoke(prisma);
+        return await transactLedger(prisma, invoke);
       } catch (caught) {
+        if (caught instanceof LedgerTransactionRollback) throw caught;
         if (isUnique(caught)) {
           const replay = await prisma.lessonLedgerAdjustmentConfirmation.findFirst({ where: { id: confirmationId, teacherId }, include: { ledgerEntry: true } });
-          if (replay?.status === 'confirmed' && replay.ledgerEntry) return ok(toConfirmation(replay, cipher));
+          if (replay?.status === 'confirmed' && replay.ledgerEntry) {
+            const balance = await calculateBalanceFor(prisma, teacherId, replay.studentId);
+            return ok({ confirmation: toConfirmation(replay, cipher), balance });
+          }
           return err(versionConflict());
         }
         return err(internalError('课时调整确认失败'));
@@ -280,20 +296,7 @@ export function createLessonLedgerService(
       const { prisma } = await client();
       const student = await prisma.student.findFirst({ where: { id: studentId, teacherId }, select: { id: true } });
       if (!student) return err(notFound('学生不存在'));
-      const [entries, legacyPayments, legacyLessons] = await Promise.all([
-        prisma.lessonLedgerEntry.findMany({ where: { teacherId, studentId }, select: { entryType: true, lessonDelta: true } }),
-        prisma.payment.aggregate({ where: { teacherId, studentId, lessonLedgerEntries: { none: {} } }, _sum: { lessonCount: true } }),
-        prisma.lesson.count({ where: { teacherId, studentId, status: 'attended', lessonLedgerEntries: { none: {} } } }),
-      ]);
-      const legacyPurchased = legacyPayments._sum.lessonCount ?? 0;
-      const purchased = legacyPurchased + entries.filter((x) => x.entryType === 'purchase').reduce((sum, x) => sum + x.lessonDelta, 0);
-      const attended = legacyLessons - entries
-        .filter((x) => x.entryType === 'attendance_deduction' || x.entryType === 'attendance_reversal')
-        .reduce((sum, x) => sum + x.lessonDelta, 0);
-      const adjustments = entries
-        .filter((x) => !['purchase', 'attendance_deduction', 'attendance_reversal'].includes(x.entryType))
-        .reduce((sum, x) => sum + x.lessonDelta, 0);
-      return ok<LessonLedgerBalance>({ purchased, attended, adjustments, remaining: purchased - attended + adjustments });
+      return ok(await calculateBalanceFor(prisma, teacherId, studentId));
     },
   };
 }
@@ -302,11 +305,89 @@ async function clientFor(prisma: LedgerPrismaClient) {
   return { prisma, clock: createDatabaseTrustedClock(prisma) };
 }
 
+/**
+ * A service can be injected with an outer TransactionClient. In that case a
+ * failed Result must stay an exception so the caller cannot commit partial
+ * adjustment/audit writes. A root PrismaClient may safely translate it back
+ * to the public Result after its own transaction has rolled back.
+ */
+async function transactLedger<T>(
+  prisma: LedgerPrismaClient,
+  work: (tx: LedgerPrismaClient) => Promise<Result<T, CommonError>>,
+): Promise<Result<T, CommonError>> {
+  const opensTransaction = '$transaction' in prisma && typeof (prisma as PrismaClient).$transaction === 'function';
+  const execute = async (tx: LedgerPrismaClient) => {
+    const result = await work(tx);
+    if (!result.ok) throw new LedgerTransactionRollback(result);
+    return result;
+  };
+  try {
+    if (opensTransaction) return await (prisma as PrismaClient).$transaction(execute);
+    return await execute(prisma);
+  } catch (caught) {
+    if (caught instanceof LedgerTransactionRollback) {
+      if (!opensTransaction) throw caught;
+      return caught.result;
+    }
+    throw caught;
+  }
+}
+
+async function calculateBalanceFor(
+  prisma: LedgerPrismaClient,
+  teacherId: string,
+  studentId: string,
+): Promise<LessonLedgerBalance> {
+  const [entries, legacyPayments, legacyLessons] = await Promise.all([
+    prisma.lessonLedgerEntry.findMany({ where: { teacherId, studentId }, select: { entryType: true, lessonDelta: true } }),
+    prisma.payment.aggregate({ where: { teacherId, studentId, lessonLedgerEntries: { none: {} } }, _sum: { lessonCount: true } }),
+    prisma.lesson.count({ where: { teacherId, studentId, status: 'attended', lessonLedgerEntries: { none: {} } } }),
+  ]);
+  const legacyPurchased = legacyPayments._sum.lessonCount ?? 0;
+  const purchased = legacyPurchased + entries.filter((x) => x.entryType === 'purchase').reduce((sum, x) => sum + x.lessonDelta, 0);
+  const attended = legacyLessons - entries
+    .filter((x) => x.entryType === 'attendance_deduction' || x.entryType === 'attendance_reversal')
+    .reduce((sum, x) => sum + x.lessonDelta, 0);
+  const adjustments = entries
+    .filter((x) => !['purchase', 'attendance_deduction', 'attendance_reversal'].includes(x.entryType))
+    .reduce((sum, x) => sum + x.lessonDelta, 0);
+  return { purchased, attended, adjustments, remaining: purchased - attended + adjustments };
+}
+
+function sameAdjustment(row: any, input: CreateLedgerAdjustmentInput, cipher: FieldCipher | undefined) {
+  return row.studentId === input.studentId
+    && row.entryType === input.entryType
+    && row.lessonDelta === input.lessonDelta
+    && decryptFieldValue(cipher, row.reasonCiphertext) === input.reason;
+}
+
+function preparedAdjustment(
+  confirmation: any,
+  balanceBefore: LessonLedgerBalance,
+  cipher: FieldCipher | undefined,
+): PreparedLedgerAdjustmentData {
+  const delta = confirmation.status === 'pending' ? confirmation.lessonDelta : 0;
+  return {
+    confirmation: toConfirmation(confirmation, cipher),
+    balanceBefore,
+    balanceAfter: {
+      ...balanceBefore,
+      adjustments: balanceBefore.adjustments + delta,
+      remaining: balanceBefore.remaining + delta,
+    },
+  };
+}
+
 function validateAdjustment(input: CreateLedgerAdjustmentInput) {
   if (!input.studentId?.trim()) return err(validationError('studentId 必填', 'studentId'));
   if (!input.clientRequestId?.trim()) return err(validationError('clientRequestId 必填', 'clientRequestId'));
   if (!input.reason?.trim()) return err(validationError('调整原因必填', 'reason'));
-  if (!Number.isInteger(input.lessonDelta) || input.lessonDelta === 0) return err(validationError('课时调整必须是非零整数', 'lessonDelta'));
+  if (
+    !Number.isSafeInteger(input.lessonDelta)
+    || input.lessonDelta === 0
+    || input.lessonDelta < -2_147_483_648
+    || input.lessonDelta > 2_147_483_647
+  ) return err(validationError('课时调整必须是非零整数', 'lessonDelta'));
   if (!['refund', 'gift', 'manual_adjustment'].includes(input.entryType)) return err(validationError('不支持的账本类型', 'entryType'));
   if (input.entryType === 'refund' && input.lessonDelta >= 0) return err(validationError('退款课时必须为负数', 'lessonDelta'));
   if (input.entryType === 'gift' && input.lessonDelta <= 0) return err(validationError('赠课课时必须为正数', 'lessonDelta'));
