@@ -19,11 +19,21 @@ export async function runFormalLessonTransaction(args: {
   createInTransaction: (tx: Prisma.TransactionClient) => Promise<CreateScheduleResultOutcome>;
 }): Promise<CreateScheduleResultOutcome> {
   const { prisma, input, cipher, createInTransaction } = args;
-  try {
-    return await prisma.$transaction(createInTransaction, {
-      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-    });
-  } catch (caught) {
+  let caught: unknown;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    try {
+      return await prisma.$transaction(createInTransaction, {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      });
+    } catch (error) {
+      caught = error;
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError)
+        || error.code !== 'P2034'
+        || attempt === 3) break;
+    }
+  }
+
+  if (caught !== undefined) {
     if (caught instanceof Prisma.PrismaClientKnownRequestError
       && (caught.code === 'P2002' || caught.code === 'P2034')
       && input.clientRequestId) {
@@ -49,6 +59,8 @@ export async function runFormalLessonTransaction(args: {
     }
     throw caught;
   }
+
+  throw new Error('formal lesson transaction did not produce a result');
 }
 
 export function validateDailyReviewWindow(input: {
