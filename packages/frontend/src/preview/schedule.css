@@ -8,6 +8,13 @@
 .week-item.status-completed { border-left-color: #2e8a76; }
 .week-item.status-cancelled { border-left-color: var(--error); text-decoration: line-through; }
 .week-item.status-cancelled .schedule-status { color: var(--error); }
+.schedule-drag-help { margin: 0 0 8px; color: var(--text-muted); font-size: 12px; }
+.week-item[draggable="true"] { cursor: grab; }
+.week-item[draggable="true"]:active { cursor: grabbing; opacity: .68; }
+.week-column { transition: box-shadow .12s ease, background-color .12s ease; }
+.week-column.is-drop-target { box-shadow: inset 0 0 0 2px var(--primary); background: color-mix(in srgb, var(--primary) 8%, var(--canvas)); }
+.week-column.is-drop-forbidden { box-shadow: inset 0 0 0 2px var(--error); background: color-mix(in srgb, var(--error) 8%, var(--canvas)); }
+.schedule-reschedule-proposal { margin-bottom: 14px; }
 .schedule-list { display: grid; gap: 10px; }
 .schedule-list-card { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 16px; align-items: center; width: 100%; padding: 16px; border: 1px solid var(--line); border-left: 3px solid var(--primary); border-radius: var(--radius-md); background: var(--white); color: var(--ink); text-align: left; cursor: pointer; }
 .schedule-list-card:hover { background: var(--canvas); }

@@ -18,7 +18,30 @@ export function cancelPlannedSchedule(data: DemoData, target: Schedule): DemoDat
 }
 
 export function replaceRuleFrom(data: DemoData, ruleId: string, from: string, replacement: RecurrenceRule): DemoData {
-  return { ...data, recurrenceRules: [...data.recurrenceRules.map((item) => item.id === ruleId ? truncateRule(item, from) : item), replacement], schedules: data.schedules.map((item) => item.recurrenceRuleId === ruleId && (item.recurrenceDay || item.day) >= from ? { ...item, recurrenceRuleId: replacement.id } : item) };
+  return {
+    ...data,
+    recurrenceRules: [...data.recurrenceRules.map((item) => item.id === ruleId ? truncateRule(item, from) : item), replacement],
+    schedules: data.schedules.map((item) => {
+      if (item.recurrenceRuleId !== ruleId || (item.recurrenceDay || item.day) < from) return item;
+      // The materialized boundary occurrence becomes the first class of the
+      // replacement rule. Later exceptions retain their actual date/time and
+      // lifecycle. Reattaching even completed/cancelled exceptions suppresses a
+      // replacement projection at their original slot without altering history.
+      if (item.status === '已排期' && (item.recurrenceDay || item.day) === from) return {
+        ...item,
+        recurrenceRuleId: replacement.id,
+        recurrenceDay: replacement.startDate,
+        day: replacement.startDate,
+        start: replacement.start,
+        end: replacement.end,
+        location: replacement.location,
+        participants: [...replacement.participants],
+        format: replacement.format,
+        note: replacement.note,
+      };
+      return { ...item, recurrenceRuleId: replacement.id };
+    }),
+  };
 }
 
 export function endRuleBefore(data: DemoData, ruleId: string, from: string): DemoData {

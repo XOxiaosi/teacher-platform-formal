@@ -287,6 +287,15 @@ function scanCurrentTimeBoundary(): {
 }
 
 describe('persistent current-time source boundary', () => {
+  let currentBoundary: ReturnType<typeof scanCurrentTimeBoundary>;
+
+  beforeAll(() => {
+    // Both assertions must inspect one stable source snapshot. Keeping the
+    // repository-wide scan in the existing 30-second hook budget also avoids
+    // running the same synchronous filesystem/AST work twice under full load.
+    currentBoundary = scanCurrentTimeBoundary();
+  });
+
   it('扫描器识别括号调用并拒绝声明、解构、赋值与默认参数别名', () => {
     const direct = scanSourceText('probe-direct.ts', `
       function probe() {
@@ -311,11 +320,11 @@ describe('persistent current-time source boundary', () => {
   });
 
   it('禁止Date API别名与局部遮蔽，避免绕过直接调用扫描', () => {
-    expect(scanCurrentTimeBoundary().forbiddenBindings).toEqual([]);
+    expect(currentBoundary.forbiddenBindings).toEqual([]);
   });
 
   it('每个无参当前时间生成都被精确归入allowlist或债务ledger', () => {
-    const actual = scanCurrentTimeBoundary().fingerprints;
+    const actual = currentBoundary.fingerprints;
     const allowlistFingerprints = ALLOWLIST.map(fingerprintOf);
     const debtFingerprints = DEBT_LEDGER.map(fingerprintOf);
     const expected = [...allowlistFingerprints, ...debtFingerprints]

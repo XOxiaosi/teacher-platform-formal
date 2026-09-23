@@ -3,7 +3,7 @@ import type { DemoData, RecurrenceRule, Schedule } from './data';
 import { today as fallbackToday } from './data';
 import { commitAction } from './action-result';
 import { Confirm, type PreviewActions } from './PreviewApp';
-import { changeSummary, isoWeekday, recurrenceConflict, scheduleConflict, schedulesInRange } from './recurrence';
+import { changeSummary, isoWeekday, movedOccurrenceWeekdays, recurrenceConflict, scheduleConflict, schedulesInRange } from './recurrence';
 import { replaceRuleFrom as replaceRuleFromMutation } from './schedule-mutations';
 import { formatDate } from '../shared/date-format';
 
@@ -114,7 +114,9 @@ function ConfirmEdit({ before, after, scope, actions, onConfirm, onBack, repeat 
   const summary = changeSummary(before, after, scope);
   const days = (items: number[]) => items.map((day) => ['一', '二', '三', '四', '五', '六', '日'][day - 1]).join('、') || '未选择';
   const completed = before.status === '已完成';
-  return <><p className="dialog-copy">{completed ? '确认后不会重新扣课；原扣课记录保留。' : '请确认课程编辑范围。'}</p><dl className="schedule-detail"><div><dt>旧值</dt><dd>{values(actions, before)}{repeat && <><br />重复：每周 {days(repeat.beforeDays)} · {repeat.beforeEnd ? `至 ${formatDate(repeat.beforeEnd)}` : '无结束日期'}</>}</dd></div><div><dt>新值</dt><dd>{values(actions, after)}{repeat && <><br />重复：每周 {days(repeat.afterDays)} · {repeat.afterEnd ? `至 ${formatDate(repeat.afterEnd)}` : '无结束日期'}</>}</dd></div><div><dt>作用范围</dt><dd>{completed ? '仅本次' : summary.scope}</dd></div></dl><div className="dialog-actions"><button className="button secondary" onClick={onBack}>返回修改</button><button className="button primary" onClick={onConfirm}>确认{completed ? '保存' : `${summary.scope}修改`}</button></div></>;
+  const originalSlot = before.recurrenceDay || before.day;
+  const movedLater = scope === 'future' && after.day > originalSlot;
+  return <><p className="dialog-copy">{completed ? '确认后不会重新扣课；原扣课记录保留。' : movedLater ? `旧重复规则自 ${formatDate(originalSlot)} 停止，新规则从 ${formatDate(after.day)} 起开始。两者之间不会自动生成课程；已单独调整的课程会保留。` : '请确认课程编辑范围。'}</p><dl className="schedule-detail"><div><dt>旧值</dt><dd>{values(actions, before)}{repeat && <><br />重复：每周 {days(repeat.beforeDays)} · {repeat.beforeEnd ? `至 ${formatDate(repeat.beforeEnd)}` : '无结束日期'}</>}</dd></div><div><dt>新值</dt><dd>{values(actions, after)}{repeat && <><br />重复：每周 {days(repeat.afterDays)} · {repeat.afterEnd ? `至 ${formatDate(repeat.afterEnd)}` : '无结束日期'}</>}</dd></div><div><dt>作用范围</dt><dd>{completed ? '仅本次' : summary.scope}</dd></div></dl><div className="dialog-actions"><button className="button secondary" onClick={onBack}>返回修改</button><button className="button primary" onClick={onConfirm}>确认{completed ? '保存' : `${summary.scope}修改`}</button></div></>;
 }
 
 export function openScheduleEditor(actions: PreviewActions, schedule: Schedule, scope: Scope = 'this') {
@@ -131,7 +133,11 @@ export function EditScheduleForm({ actions, schedule, scope, draft, repeatDraft 
   const today = actions.data.businessDate || fallbackToday;
   const [form, setForm] = useState<Schedule>({ ...(draft || schedule), participants: [...(draft || schedule).participants] });
   const sourceRule = schedule.recurrenceRuleId ? actions.data.recurrenceRules.find((rule) => rule.id === schedule.recurrenceRuleId) : undefined;
-  const [ruleDays, setRuleDays] = useState(repeatDraft?.days || sourceRule?.weekdays || [] as number[]);
+  const originalSlot = schedule.recurrenceDay || schedule.day;
+  const initialRuleDays = repeatDraft?.days || (scope === 'future' && draft && sourceRule
+    ? movedOccurrenceWeekdays(sourceRule.weekdays, originalSlot, draft.day)
+    : sourceRule?.weekdays || [] as number[]);
+  const [ruleDays, setRuleDays] = useState(initialRuleDays);
   const [ruleEnd, setRuleEnd] = useState(initialRuleEnd(repeatDraft, sourceRule?.endDate));
   const [error, setError] = useState('');
   const set = <K extends keyof Schedule>(key: K, value: Schedule[K]) => setForm((old) => ({ ...old, [key]: value }));
@@ -146,20 +152,24 @@ export function EditScheduleForm({ actions, schedule, scope, draft, repeatDraft 
     const validation = scope === 'future' ? validateFields(next) : validateSchedule(actions, next);
     if (validation) return setError(validation);
     if (scope === 'future' && sourceRule) {
+      if (next.day < originalSlot) return setError('“本次及以后”不能移到原发生日之前；请改用“仅本次”。');
       if (next.day < today) return setError('本次及以后的修改日期不能早于今天。');
       if (!ruleDays.length) return setError('每周重复请至少选择一个星期。');
       if (ruleEnd && ruleEnd < next.day) return setError('结束日期不能早于新的开始日期。');
-      if (!ruleDays.includes(isoWeekday(next.day))) return setError('修改后的日期须包含在重复星期中，请调整日期或重复星期。');
     }
-    const repeat = scope === 'future' && sourceRule ? { beforeDays: sourceRule.weekdays, afterDays: ruleDays, beforeEnd: sourceRule.endDate, afterEnd: ruleEnd || undefined } : undefined;
-    actions.open('确认课程编辑', <ConfirmEdit before={schedule} after={next} scope={scope} actions={actions} repeat={repeat} onBack={() => actions.open(scope === 'future' ? '编辑本次及以后重复排期' : '编辑本次排期', <EditScheduleForm actions={actions} schedule={schedule} scope={scope} draft={next} repeatDraft={{ days: ruleDays, end: ruleEnd }} />)} onConfirm={() => {
+    const replacementDays = scope === 'future' && sourceRule && next.day !== originalSlot && ruleDays.join(',') === sourceRule.weekdays.join(',')
+      ? movedOccurrenceWeekdays(ruleDays, originalSlot, next.day)
+      : ruleDays;
+    if (scope === 'future' && sourceRule && !replacementDays.includes(isoWeekday(next.day))) return setError('修改后的日期须包含在重复星期中，请调整日期或重复星期。');
+    const repeat = scope === 'future' && sourceRule ? { beforeDays: sourceRule.weekdays, afterDays: replacementDays, beforeEnd: sourceRule.endDate, afterEnd: ruleEnd || undefined } : undefined;
+    actions.open('确认课程编辑', <ConfirmEdit before={schedule} after={next} scope={scope} actions={actions} repeat={repeat} onBack={() => actions.open(scope === 'future' ? '编辑本次及以后重复排期' : '编辑本次排期', <EditScheduleForm actions={actions} schedule={schedule} scope={scope} draft={next} repeatDraft={{ days: replacementDays, end: ruleEnd }} />)} onConfirm={() => {
       if (scope === 'future' && schedule.recurrenceRuleId) {
         const old = actions.data.recurrenceRules.find((rule) => rule.id === schedule.recurrenceRuleId);
         if (!old) return;
-        const replacement: RecurrenceRule = { ...old, id: `rr-${Date.now()}`, startDate: next.day, endDate: ruleEnd || undefined, weekdays: ruleDays, start: next.start, end: next.end, location: next.location, participants: next.participants, format: next.format, note: next.note, enabled: true };
-        const proposed = replaceRuleFromMutation(actions.data, old.id, schedule.recurrenceDay || schedule.day, replacement);
-        if (recurrenceConflict(proposed, replacement, replacement.id)) { actions.toast('该修改会与未来排期冲突，未保存。', 'warn'); actions.open('编辑本次及以后重复排期', <EditScheduleForm actions={actions} schedule={schedule} scope="future" draft={next} repeatDraft={{ days: ruleDays, end: ruleEnd }} />); return; }
-        commitAction(actions, () => actions.replaceRuleFrom(old.id, schedule.recurrenceDay || schedule.day, replacement), () => { actions.close(); actions.toast('已修改本次及以后的重复规则'); });
+        const replacement: RecurrenceRule = { ...old, id: `rr-${Date.now()}`, startDate: next.day, endDate: ruleEnd || undefined, weekdays: replacementDays, start: next.start, end: next.end, location: next.location, participants: next.participants, format: next.format, note: next.note, enabled: true };
+        const proposed = replaceRuleFromMutation(actions.data, old.id, originalSlot, replacement);
+        if (recurrenceConflict(proposed, replacement, replacement.id)) { actions.toast('该修改会与未来排期冲突，未保存。', 'warn'); actions.open('编辑本次及以后重复排期', <EditScheduleForm actions={actions} schedule={schedule} scope="future" draft={next} repeatDraft={{ days: replacementDays, end: ruleEnd }} />); return; }
+        commitAction(actions, () => actions.replaceRuleFrom(old.id, originalSlot, replacement), () => { actions.close(); actions.toast('已修改本次及以后的重复规则'); });
       } else commitAction(actions, () => actions.saveSchedule(next), () => { actions.close(); actions.toast('已保存课程修改'); });
     }} />);
   };

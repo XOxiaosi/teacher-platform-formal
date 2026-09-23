@@ -45,6 +45,34 @@ describe('preview schedule state mutations', () => {
     expect(schedulesInRange(changed, '2026-01-12', '2026-01-12')).toEqual([expect.objectContaining({ recurrenceRuleId: 'r1', start: '10:00', location: 'A' })]);
     expect(schedulesInRange(changed, '2026-01-19', '2026-01-19')).toEqual([expect.objectContaining({ recurrenceRuleId: 'r2', start: '14:00', location: 'B' })]);
   });
+  it('moves the active boundary occurrence to a later replacement start without leaving an old-slot projection', () => {
+    const anchor = scheduled({ id: 'anchor', recurrenceDay: '2026-01-12', day: '2026-01-12' });
+    const replacement = { ...rule, id: 'r2', startDate: '2026-01-14', weekdays: [3], start: '14:00', end: '15:30', location: 'B', note: '改期' };
+    const changed = replaceRuleFrom(base([anchor]), 'r1', '2026-01-12', replacement);
+    expect(changed.schedules[0]).toMatchObject({ id: 'anchor', status: '已排期', recurrenceRuleId: 'r2', recurrenceDay: '2026-01-14', day: '2026-01-14', start: '14:00', end: '15:30', location: 'B', note: '改期' });
+    expect(schedulesInRange(changed, '2026-01-12', '2026-01-12')).toEqual([]);
+    expect(schedulesInRange(changed, '2026-01-14', '2026-01-14')).toHaveLength(1);
+    expect(schedulesInRange(changed, '2026-01-14', '2026-01-14')[0]).toMatchObject({ id: 'anchor', recurrenceRuleId: 'r2', day: '2026-01-14' });
+  });
+  it('keeps an equal-boundary anchor singular and only reattaches later active exceptions', () => {
+    const anchor = scheduled({ id: 'anchor' });
+    const laterException = scheduled({ id: 'later', recurrenceDay: '2026-01-19', day: '2026-01-20', start: '13:00', end: '14:00', location: '单独调整' });
+    const replacement = { ...rule, id: 'r2', startDate: '2026-01-12', weekdays: [1], start: '11:00', end: '12:00' };
+    const changed = replaceRuleFrom(base([anchor, laterException]), 'r1', '2026-01-12', replacement);
+    expect(changed.schedules.find((item) => item.id === 'anchor')).toMatchObject({ recurrenceRuleId: 'r2', recurrenceDay: '2026-01-12', day: '2026-01-12', start: '11:00', end: '12:00' });
+    expect(changed.schedules.find((item) => item.id === 'later')).toMatchObject({ recurrenceRuleId: 'r2', recurrenceDay: '2026-01-19', day: '2026-01-20', start: '13:00', end: '14:00', location: '单独调整' });
+    expect(schedulesInRange(changed, '2026-01-12', '2026-01-12')).toHaveLength(1);
+  });
+  it('preserves completed and cancelled history while reattaching it to suppress replacement projections', () => {
+    const completed = scheduled({ id: 'done', status: '已完成' });
+    const cancelled = scheduled({ id: 'cancelled', recurrenceDay: '2026-01-19', day: '2026-01-19', status: '已取消' });
+    const changed = replaceRuleFrom(base([completed, cancelled]), 'r1', '2026-01-12', { ...rule, id: 'r2', startDate: '2026-01-12' });
+    expect(changed.schedules.find((item) => item.id === 'done')).toEqual({ ...completed, recurrenceRuleId: 'r2' });
+    expect(changed.schedules.find((item) => item.id === 'cancelled')).toEqual({ ...cancelled, recurrenceRuleId: 'r2' });
+    expect(changed.completionRecords).toEqual([]);
+    expect(schedulesInRange(changed, '2026-01-12', '2026-01-12')).toEqual([expect.objectContaining({ id: 'done', status: '已完成', recurrenceRuleId: 'r2' })]);
+    expect(schedulesInRange(changed, '2026-01-19', '2026-01-19')).toEqual([expect.objectContaining({ id: 'cancelled', status: '已取消', recurrenceRuleId: 'r2' })]);
+  });
   it('edits every completed-course field without changing the original ledger or balance', () => {
     const done = completePlannedSchedule(base(), scheduled());
     const next = { ...done.schedules[0], day: '2026-01-14', start: '13:00', end: '14:30', location: 'B', participants: ['s2'], format: '一对一' as const, note: '课后确认' };

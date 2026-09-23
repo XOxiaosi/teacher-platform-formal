@@ -307,6 +307,83 @@ describe('connected workspace server-backed writes', () => {
     expect(mock.payment).not.toHaveBeenCalled();
     expect(mock.schedule.mock.calls.some(([payload]) => payload.kind === 'complete')).toBe(false);
   });
+  it('keeps a drag-equivalent reschedule local until confirmation and does not show success after a scheduling failure', async () => {
+    location.hash = '#/schedules';
+    const state = snapshot();
+    const schedule = { ...state.data.schedules[1], day: '2026-09-22', start: '14:00', end: '15:30' };
+    state.data = { ...state.data, businessDate: '2026-09-22', schedules: [schedule], recurrenceRules: [] };
+    mock.load.mockResolvedValue(state);
+    mock.schedule.mockRejectedValueOnce(new Error('服务端冲突'));
+    render(<ConnectedWorkspace />);
+    await screen.findByRole('heading', { name: '日程安排' });
+    fireEvent.click(screen.getByRole('button', { name: /查看 14:00 至 15:30/ }));
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }));
+    fireEvent.change(screen.getByLabelText('日期'), { target: { value: '2026-09-23' } });
+    fireEvent.change(screen.getByLabelText('开始时间'), { target: { value: '10:15' } });
+    fireEvent.change(screen.getByLabelText('结束时间'), { target: { value: '11:45' } });
+    expect(mock.schedule).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '查看修改确认' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认仅本次修改' }));
+    await screen.findByText('服务端冲突');
+    expect(mock.schedule).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'save-schedule', schedule: expect.objectContaining({ id: schedule.id, day: '2026-09-23', start: '10:15', end: '11:45', status: '已排期' }),
+    }));
+    expect(mock.schedule.mock.calls.some(([payload]) => payload.kind === 'complete')).toBe(false);
+    expect(screen.queryByText('已保存课程修改')).not.toBeInTheDocument();
+  });
+  it('routes a completed drag-equivalent reschedule through the revision command without re-completing it', async () => {
+    location.hash = '#/schedules';
+    const state = snapshot();
+    const schedule = { ...state.data.schedules[0], day: '2026-09-22', start: '14:00', end: '15:30', status: '已完成' as const };
+    state.data = { ...state.data, businessDate: '2026-09-22', schedules: [schedule], recurrenceRules: [] };
+    mock.load.mockResolvedValue(state);
+    mock.schedule.mockRejectedValueOnce(new Error('修订冲突'));
+    render(<ConnectedWorkspace />);
+    await screen.findByRole('heading', { name: '日程安排' });
+    fireEvent.click(screen.getByRole('button', { name: /查看 14:00 至 15:30/ }));
+    fireEvent.click(screen.getByRole('button', { name: '编辑课程' }));
+    fireEvent.change(screen.getByLabelText('日期'), { target: { value: '2026-09-23' } });
+    fireEvent.change(screen.getByLabelText('开始时间'), { target: { value: '10:15' } });
+    fireEvent.change(screen.getByLabelText('结束时间'), { target: { value: '11:45' } });
+    fireEvent.click(screen.getByRole('button', { name: '查看修改确认' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认保存' }));
+    await screen.findByText('修订冲突');
+    expect(mock.schedule).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'edit-completed', before: schedule,
+      schedule: expect.objectContaining({ id: schedule.id, day: '2026-09-23', start: '10:15', end: '11:45', status: '已完成' }),
+    }));
+    expect(mock.schedule.mock.calls.some(([payload]) => payload.kind === 'save-schedule' || payload.kind === 'complete')).toBe(false);
+    expect(screen.queryByText('已保存课程修订；未重新扣课。')).not.toBeInTheDocument();
+  });
+  it('sends a future recurrence move with the original occurrence boundary and target replacement start', async () => {
+    location.hash = '#/schedules';
+    const originalDay = '2026-10-05';
+    const targetDay = '2026-10-07';
+    const state = snapshot();
+    state.data = {
+      ...state.data,
+      businessDate: originalDay,
+      schedules: [],
+      recurrenceRules: [{ id: 'rr-future-move', startDate: originalDay, weekdays: [1, 5], enabled: true, start: '16:30', end: '18:00', location: '工作室 B', participants: ['s2', 's3'], format: '小班', note: '原备注', updatedAt: 'rule-v1' }],
+    };
+    mock.load.mockResolvedValue(state);
+    render(<ConnectedWorkspace />);
+    await screen.findByRole('heading', { name: '日程安排' });
+    fireEvent.click(screen.getAllByRole('button', { name: /查看 16:30 至 18:00/ })[0]);
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }));
+    fireEvent.click(screen.getByRole('button', { name: '本次及以后' }));
+    fireEvent.change(screen.getByLabelText('日期'), { target: { value: targetDay } });
+    fireEvent.click(screen.getByRole('button', { name: '查看修改确认' }));
+    expect(screen.getByText(/旧重复规则自 2026年10月5日 停止，新规则从 2026年10月7日 起开始。/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '确认本次及以后修改' }));
+    await waitFor(() => expect(mock.schedule).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'replace-rule',
+      ruleId: 'rr-future-move',
+      from: originalDay,
+      expectedUpdatedAt: 'rule-v1',
+      rule: expect.objectContaining({ startDate: targetDay, weekdays: [3, 5] }),
+    })));
+  });
   it('blocks further writes when a successful save cannot reload its canonical result', async () => {
     render(<ConnectedWorkspace />); await screen.findByRole('heading', { name: '我的学生' });
     fireEvent.click(screen.getByRole('button', { name: '+ 新增学生' }));

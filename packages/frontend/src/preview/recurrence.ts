@@ -16,6 +16,19 @@ export function isoWeekday(value: string) {
   return sundayZero === 0 ? 7 : sundayZero;
 }
 
+/**
+ * Moving one recurrence occurrence changes that occurrence's weekday in the
+ * replacement rule, while preserving every other weekly slot. The source slot
+ * is deliberately removed so a drag from Monday to Wednesday does not create
+ * both a new Wednesday lesson and a continuing Monday lesson.
+ */
+export function movedOccurrenceWeekdays(days: number[], sourceDay: string, targetDay: string) {
+  if (sourceDay === targetDay) return [...days];
+  const sourceWeekday = isoWeekday(sourceDay);
+  const targetWeekday = isoWeekday(targetDay);
+  return [...new Set(days.filter((day) => day !== sourceWeekday).concat(targetWeekday))].sort((a, b) => a - b);
+}
+
 export function occursOn(rule: RecurrenceRule, day: string) {
   return rule.enabled && day >= rule.startDate && (!rule.endDate || day <= rule.endDate) && rule.weekdays.includes(isoWeekday(day));
 }

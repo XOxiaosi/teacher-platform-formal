@@ -1,9 +1,9 @@
-import { useMemo } from 'react';
+import { useMemo, useRef, useState, type DragEvent } from 'react';
 import type { RecurrenceRule, Schedule } from './data';
 import { today as fallbackToday } from './data';
 import type { PreviewActions } from './PreviewApp';
-import { dateAdd, recurrenceConflict, scheduleObjectLabel, schedulesInRange } from './recurrence';
-import { openScheduleDetails } from './ScheduleDetails';
+import { dateAdd, recurrenceConflict, scheduleConflict, scheduleObjectLabel, schedulesInRange } from './recurrence';
+import { openScheduleDetails, openScheduleRescheduleProposal } from './ScheduleDetails';
 import { NewScheduleForm, RuleEditor } from './ScheduleForm';
 import { usePreviewState } from './ui-state';
 import './schedule.css';
@@ -28,6 +28,19 @@ function weekday(value: string) {
 function clockMinutes(value: string) {
   const [hour, minute] = value.split(':').map(Number);
   return hour * 60 + minute;
+}
+
+function minutesClock(value: number) {
+  return `${String(Math.floor(value / 60)).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`;
+}
+
+/** Snap a calendar-column pointer to the product's 15-minute scheduling grid. */
+export function scheduleDropProposal(item: Schedule, day: string, pointerY: number, columnTop: number, baseStart: number): Schedule | null {
+  const duration = clockMinutes(item.end) - clockMinutes(item.start);
+  if (!Number.isFinite(pointerY) || !Number.isFinite(columnTop) || !Number.isFinite(duration)) return null;
+  const snapped = Math.round(((pointerY - columnTop) * 60 / 68) / 15) * 15 + baseStart * 60;
+  if (snapped < 0 || snapped + duration > 24 * 60) return null;
+  return { ...item, day, start: minutesClock(snapped), end: minutesClock(snapped + duration) };
 }
 
 export function dateRangeLabel(start: string, end: string) {
@@ -60,17 +73,62 @@ function statusClass(status: Schedule['status']) {
   return status === '已排期' ? 'scheduled' : status === '已完成' ? 'completed' : 'cancelled';
 }
 
-function WeekItem({ item, actions, baseStart }: { item: Schedule; actions: PreviewActions; baseStart: number }) {
+function WeekItem({ item, actions, baseStart, onDragStart, onDragEnd, onItemClick }: {
+  item: Schedule;
+  actions: PreviewActions;
+  baseStart: number;
+  onDragStart: (event: DragEvent<HTMLButtonElement>, item: Schedule) => void;
+  onDragEnd: () => void;
+  onItemClick: (item: Schedule) => void;
+}) {
   const geometry = scheduleGeometry(item.start, item.end, baseStart);
   const object = scheduleObjectLabel(actions.data, item);
   const location = item.location || '待补充地点';
-  return <Button type="button" variant="outline" className={`week-item ${geometry.compact ? 'compact' : ''} status-${statusClass(item.status)}`} style={{ top: geometry.top, height: geometry.height }} onClick={() => openScheduleDetails(actions, item)} aria-label={`查看 ${item.start} 至 ${item.end} ${object} ${location} ${statusLabel(item.status)} 排期详情`}><b>{item.start}–{item.end}</b>{!geometry.compact && <><span className="week-object">{object}</span><span>{location}</span></>}<Badge variant="secondary" className="schedule-status">{statusLabel(item.status)}</Badge></Button>;
+  const draggable = item.status !== '已取消';
+  return <Button type="button" variant="outline" className={`week-item ${geometry.compact ? 'compact' : ''} status-${statusClass(item.status)}`} style={{ top: geometry.top, height: geometry.height }} onClick={() => onItemClick(item)} draggable={draggable} onDragStart={(event) => onDragStart(event, item)} onDragEnd={onDragEnd} aria-describedby={draggable ? 'schedule-drag-help' : undefined} aria-label={`查看 ${item.start} 至 ${item.end} ${object} ${location} ${statusLabel(item.status)} 排期详情${draggable ? '；可拖动调整，或打开详情修改时间' : '；已取消课程不可拖动'}`}><b>{item.start}–{item.end}</b>{!geometry.compact && <><span className="week-object">{object}</span><span>{location}</span></>}<Badge variant="secondary" className="schedule-status">{statusLabel(item.status)}</Badge></Button>;
 }
 
-function WeekCalendar({ actions, days, schedules }: { actions: PreviewActions; days: string[]; schedules: Schedule[] }) {
+function WeekCalendar({ actions, days, schedules, allSchedules }: { actions: PreviewActions; days: string[]; schedules: Schedule[]; allSchedules: Schedule[] }) {
   const today = actions.data.businessDate || fallbackToday;
   const range = weekTimeRange(schedules);
-  return <div className="week-scroll"><div className="week-frame"><div className="week-head"><div className="week-corner">时间</div>{days.map((day) => <div className={day === today ? 'week-day is-today' : 'week-day'} key={day}>{weekday(day)}<strong>{Number(day.slice(8))}</strong>{day === today && <small>今天</small>}</div>)}</div><div className="week-body"><div className="week-times" style={{ height: range.height }}>{Array.from({ length: range.lastHour - range.firstHour + 1 }, (_, index) => <span key={index} style={{ top: `${index * 68}px` }}>{String(range.firstHour + index).padStart(2, '0')}:00</span>)}</div>{days.map((day) => <div className={day === today ? 'week-column is-today' : 'week-column'} style={{ height: range.height }} key={day}>{schedules.filter((item) => item.day === day).map((item) => <WeekItem key={item.id} item={item} actions={actions} baseStart={range.firstHour} />)}</div>)}</div></div></div>;
+  const [dragged, setDragged] = useState<Schedule | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ day: string; valid: boolean } | null>(null);
+  const suppressClickAfterDrop = useRef(false);
+  const proposalAt = (item: Schedule, day: string, event: DragEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return scheduleDropProposal(item, day, event.clientY, rect.top, range.firstHour);
+  };
+  const isValid = (proposal: Schedule | null) => Boolean(proposal && !scheduleConflict(allSchedules, proposal));
+  const startDrag = (event: DragEvent<HTMLButtonElement>, item: Schedule) => {
+    if (item.status === '已取消') return;
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', item.id);
+    setDragged(item);
+  };
+  const endDrag = () => { setDragged(null); setDropTarget(null); };
+  const dragOver = (day: string, event: DragEvent<HTMLDivElement>) => {
+    if (!dragged) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    setDropTarget({ day, valid: isValid(proposalAt(dragged, day, event)) });
+  };
+  const drop = (day: string, event: DragEvent<HTMLDivElement>) => {
+    if (!dragged) return;
+    event.preventDefault();
+    const proposal = proposalAt(dragged, day, event);
+    suppressClickAfterDrop.current = true;
+    requestAnimationFrame(() => { suppressClickAfterDrop.current = false; });
+    endDrag();
+    if (!proposal) return actions.toast('课程不能跨午夜；请在当天 00:00–24:00 内调整。', 'warn');
+    if (proposal.day === dragged.day && proposal.start === dragged.start && proposal.end === dragged.end) return actions.toast('位置未改变，未保存任何修改。');
+    if (scheduleConflict(allSchedules, proposal)) return actions.toast('目标时段与现有排期冲突，原安排未改变。', 'warn');
+    openScheduleRescheduleProposal(actions, dragged, proposal);
+  };
+  const itemClick = (item: Schedule) => {
+    if (suppressClickAfterDrop.current) { suppressClickAfterDrop.current = false; return; }
+    openScheduleDetails(actions, item);
+  };
+  return <><p id="schedule-drag-help" className="schedule-drag-help">可将待上课或已完成课程拖到周历中的日期和时段；时间会按 15 分钟对齐，原时长保持不变。也可打开详情，用日期和时间输入框调整。</p><div className="week-scroll"><div className="week-frame"><div className="week-head"><div className="week-corner">时间</div>{days.map((day) => <div className={day === today ? 'week-day is-today' : 'week-day'} key={day}>{weekday(day)}<strong>{Number(day.slice(8))}</strong>{day === today && <small>今天</small>}</div>)}</div><div className="week-body"><div className="week-times" style={{ height: range.height }}>{Array.from({ length: range.lastHour - range.firstHour + 1 }, (_, index) => <span key={index} style={{ top: `${index * 68}px` }}>{String(range.firstHour + index).padStart(2, '0')}:00</span>)}</div>{days.map((day) => <div className={`${day === today ? 'week-column is-today' : 'week-column'}${dropTarget?.day === day ? dropTarget.valid ? ' is-drop-target' : ' is-drop-forbidden' : ''}`} style={{ height: range.height }} key={day} onDragOver={(event) => dragOver(day, event)} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropTarget((current) => current?.day === day ? null : current); }} onDrop={(event) => drop(day, event)}>{schedules.filter((item) => item.day === day).map((item) => <WeekItem key={item.id} item={item} actions={actions} baseStart={range.firstHour} onDragStart={startDrag} onDragEnd={endDrag} onItemClick={itemClick} />)}</div>)}</div></div></div></>;
 }
 
 function ShortScheduleList({ actions, schedules }: { actions: PreviewActions; schedules: Schedule[] }) {
@@ -142,5 +200,5 @@ export function SchedulesPage({ actions }: { actions: PreviewActions }) {
   const schedules = schedulesInRange(actions.data, days[0], days[6]);
   const visibleSchedules = status === '全部' ? schedules : schedules.filter((item) => item.status === status);
   const statusOptions: StatusFilter[] = ['全部', '已排期', '已完成', '已取消'];
-  return <section className="page preview-page"><header className="page-header"><div><h1>日程安排</h1><p>{dateRangeLabel(days[0], days[6])}</p></div><div className="schedule-head-actions"><div className="schedule-toolbar"><Button variant="outline" size="sm" onClick={() => setWeekOffset(weekOffset - 1)}>‹ 上一周</Button><Button variant="outline" size="sm" onClick={() => setWeekOffset(0)}>本周</Button><Button variant="outline" size="sm" onClick={() => setWeekOffset(weekOffset + 1)}>下一周 ›</Button></div><div className="view-toggle" aria-label="排期视图"><Button variant="ghost" size="sm" className={view === 'week' ? 'active' : ''} onClick={() => setView('week')}>周历</Button><Button variant="ghost" size="sm" className={view === 'list' ? 'active' : ''} onClick={() => setView('list')}>列表</Button></div><Button onClick={() => actions.open('新增排期', <NewScheduleForm actions={actions} initialDay={days.includes(today) ? today : days[0]} />)}>+ 新增排期</Button></div></header><div className="status-filter" aria-label="排期状态">{statusOptions.map((option) => <Button variant="ghost" size="sm" key={option} className={status === option ? 'active' : ''} onClick={() => setStatus(option)}>{option === '已排期' ? '待上课' : option}</Button>)}</div>{view === 'week' ? <><ShortScheduleList actions={actions} schedules={visibleSchedules} /><WeekCalendar actions={actions} days={days} schedules={visibleSchedules} /></> : <ScheduleList actions={actions} schedules={visibleSchedules} />}<RuleList actions={actions} /></section>;
+  return <section className="page preview-page"><header className="page-header"><div><h1>日程安排</h1><p>{dateRangeLabel(days[0], days[6])}</p></div><div className="schedule-head-actions"><div className="schedule-toolbar"><Button variant="outline" size="sm" onClick={() => setWeekOffset(weekOffset - 1)}>‹ 上一周</Button><Button variant="outline" size="sm" onClick={() => setWeekOffset(0)}>本周</Button><Button variant="outline" size="sm" onClick={() => setWeekOffset(weekOffset + 1)}>下一周 ›</Button></div><div className="view-toggle" aria-label="排期视图"><Button variant="ghost" size="sm" className={view === 'week' ? 'active' : ''} onClick={() => setView('week')}>周历</Button><Button variant="ghost" size="sm" className={view === 'list' ? 'active' : ''} onClick={() => setView('list')}>列表</Button></div><Button onClick={() => actions.open('新增排期', <NewScheduleForm actions={actions} initialDay={days.includes(today) ? today : days[0]} />)}>+ 新增排期</Button></div></header><div className="status-filter" aria-label="排期状态">{statusOptions.map((option) => <Button variant="ghost" size="sm" key={option} className={status === option ? 'active' : ''} onClick={() => setStatus(option)}>{option === '已排期' ? '待上课' : option}</Button>)}</div>{view === 'week' ? <><ShortScheduleList actions={actions} schedules={visibleSchedules} /><WeekCalendar actions={actions} days={days} schedules={visibleSchedules} allSchedules={schedules} /></> : <ScheduleList actions={actions} schedules={visibleSchedules} />}<RuleList actions={actions} /></section>;
 }

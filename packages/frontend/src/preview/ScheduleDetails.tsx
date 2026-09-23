@@ -2,7 +2,7 @@ import { today as fallbackToday, type Schedule, type ScheduleRevision } from './
 import { commitAction } from './action-result';
 import { Confirm, type PreviewActions, studentName } from './PreviewApp';
 import { ruleFor, scheduleConflict, schedulesInRange } from './recurrence';
-import { openScheduleEditor } from './ScheduleForm';
+import { EditScheduleForm, openScheduleEditor } from './ScheduleForm';
 import { formatDate, formatDateTime } from '../shared/date-format';
 
 function participantNames(actions: PreviewActions, item: Schedule) {
@@ -71,6 +71,23 @@ function restore(actions: PreviewActions, item: Schedule) {
 function scopeChooser(actions: PreviewActions, item: Schedule, kind: 'edit' | 'cancel') {
   const verb = kind === 'edit' ? '修改' : '取消';
   actions.open(`${verb}重复排期`, <><p className="dialog-copy">请选择作用范围。默认只影响本次；批量影响需要明确确认。</p><div className="dialog-actions scope-actions"><button className="button secondary" onClick={() => kind === 'edit' ? openScheduleEditor(actions, item, 'this') : cancel(actions, item, 'this')}>仅本次</button><button className="button primary" onClick={() => kind === 'edit' ? openScheduleEditor(actions, item, 'future') : cancel(actions, item, 'future')}>本次及以后</button></div></>);
+}
+
+function proposedValues(actions: PreviewActions, item: Schedule) {
+  return <>{formatDate(item.day)} {item.start}–{item.end}；地点：{item.location || '待补充'}；参与人：{participantNames(actions, item)}；形式：{item.format}</>;
+}
+
+function openProposalEditor(actions: PreviewActions, item: Schedule, proposal: Schedule, scope: 'this' | 'future') {
+  const title = scope === 'future' ? '调整本次及以后重复排期' : item.status === '已完成' ? '调整已完成课程' : '调整本次排期';
+  actions.open(title, <><p className="dialog-copy">拖动调整尚未保存。请核对原时间和新时间；可继续通过原生日期、时间输入框微调。</p><dl className="schedule-detail schedule-reschedule-proposal"><div><dt>原时间</dt><dd>{proposedValues(actions, item)}</dd></div><div><dt>新时间</dt><dd>{proposedValues(actions, proposal)}</dd></div><div><dt>作用范围</dt><dd>{item.status === '已完成' || scope === 'this' ? '仅本次' : '本次及以后'}</dd></div></dl><EditScheduleForm actions={actions} schedule={item} scope={scope} draft={proposal} /></>);
+}
+
+/** Opens the same local draft and explicit save chain used by detail editing. */
+export function openScheduleRescheduleProposal(actions: PreviewActions, item: Schedule, proposal: Schedule) {
+  if (item.status === '已取消') return actions.toast('已取消课程不可拖动调整；请先恢复排期。', 'warn');
+  const rule = ruleFor(actions.data, item);
+  if (!rule || item.status === '已完成') return openProposalEditor(actions, item, proposal, 'this');
+  actions.open('调整重复排期', <><p className="dialog-copy">拖动调整尚未保存。重复课程请选择作用范围；默认仅影响本次。</p><dl className="schedule-detail schedule-reschedule-proposal"><div><dt>原时间</dt><dd>{proposedValues(actions, item)}</dd></div><div><dt>新时间</dt><dd>{proposedValues(actions, proposal)}</dd></div></dl><div className="dialog-actions scope-actions"><button className="button secondary" onClick={() => openProposalEditor(actions, item, proposal, 'this')}>仅本次</button><button className="button primary" onClick={() => openProposalEditor(actions, item, proposal, 'future')}>本次及以后</button></div></>);
 }
 
 export function ScheduleDetails({ actions, item }: { actions: PreviewActions; item: Schedule }) {

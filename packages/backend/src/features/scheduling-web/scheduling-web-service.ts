@@ -4,6 +4,7 @@ import { err, internalError, notFound, ok, validationError, versionConflict, typ
 import { createFieldCipherFromEnv, decryptFieldValue, encryptFieldValue, type FieldCipher } from '../../shared/field-encryption/index.js';
 import { createDatabaseTrustedClock } from '../../shared/trusted-clock/index.js';
 import { hasLessonOccurrenceConflict } from '../../shared/lesson-occurrence-conflict/index.js';
+import { replacementHasConflict } from './replacement-rule-conflict.js';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 export type WebFormat = '一对一' | '小班';
@@ -233,19 +234,62 @@ export function createSchedulingWebService(options: SchedulingWebServiceOptions)
         const old = await tx.recurrenceRule.findFirst({ where: { id: ruleId, teacherId }, include: ruleInclude }); if (!old) return err(notFound('重复规则不存在'));
         if (!matchesVersion(old, input.expectedUpdatedAt)) return err(versionConflict());
         const valid = await validateRule(tx, teacherId, input.rule); if (!valid.ok) return valid;
-        // A replacement begins on its requested cutover date.  Letting the new
-        // rule start anywhere else either creates an overlapping history or
-        // silently leaves a gap before the cutover.
-        if (input.rule.startDate !== input.fromDate) return err(validationError('替换规则开始日期必须等于替换日期', 'rule.startDate'));
+        // `fromDate` is the original occurrence O.  A dragged recurring
+        // course may land on a later day T, deliberately leaving O..T-1
+        // unprojected; moving it backward would rewrite already-defined rule
+        // history and is rejected.
+        if (input.rule.startDate < input.fromDate) return err(validationError('替换规则开始日期不能早于原课程日期', 'rule.startDate'));
         if (input.fromDate < localDay(old.startDate)) return err(validationError('替换日期不能早于原规则开始日期', 'fromDate'));
-        if (input.rule.enabled !== false && await conflictForRule(tx, teacherId, input.rule, ruleId)) return err(validationError('重复安排与现有排期冲突', 'weekdays'));
+        // Generic RuleEditor edits may start a replacement on any effective
+        // day. Only a drag that creates an O-to-T gap claims to move one
+        // concrete old occurrence, so only that path requires O to occur.
+        if (input.rule.startDate !== input.fromDate && !occurs(old, input.fromDate)) return err(validationError('替换日期必须是原重复课程发生日', 'fromDate'));
+        if (input.rule.startDate !== input.fromDate && input.rule.enabled !== false && !occurs(input.rule, input.rule.startDate)) return err(validationError('替换规则首日必须包含在重复星期中', 'rule.weekdays'));
+        // A dragged gap (O -> T) is only valid for an active materialized
+        // occurrence.  Inspect all statuses at O before selecting the active
+        // anchor so a direct replace-rule command cannot bypass the UI rule
+        // for completed/cancelled occurrences. Same-day RuleEditor edits keep
+        // their existing behavior and may edit the effective rule directly.
+        const boundary = await tx.schedule.findFirst({ where: { teacherId, recurrenceRuleId: old.id, recurrenceDay: dateOnly(input.fromDate) }, include: scheduleInclude });
+        if (input.rule.startDate !== input.fromDate && boundary?.status === 'completed') {
+          return err(validationError('已完成课程只能修改本次', 'fromDate'));
+        }
+        if (input.rule.startDate !== input.fromDate && boundary?.status === 'cancelled') {
+          return err(validationError('已取消课程不能拖动改期', 'fromDate'));
+        }
+        const anchor = boundary && (boundary.status === 'planned' || boundary.status === 'extra') ? boundary : undefined;
+        // Schedule has a (teacher, rule, recurrenceDay) uniqueness constraint.
+        // An existing materialization at T cannot be merged safely: it may be
+        // completed/cancelled, or have an independent exception payload.  Fail
+        // explicitly before changing either rule, rather than relying on a
+        // late P2002 that would be reported as an unrelated version conflict.
+        if (input.rule.startDate !== input.fromDate) {
+          const targetMaterialization = await tx.schedule.findFirst({ where: {
+            teacherId, recurrenceRuleId: old.id, recurrenceDay: dateOnly(input.rule.startDate),
+            ...(anchor ? { id: { not: anchor.id } } : {}),
+          }, select: { id: true } });
+          if (targetMaterialization) return err(validationError('目标日期已有该重复课程实例', 'rule.startDate'));
+        }
+        if (await replacementHasConflict(tx, teacherId, old.id, input.fromDate, input.rule, anchor?.id)) return err(validationError('替换后的排期会与现有排期冲突', 'rule'));
         const cutoff = addDays(input.fromDate, -1);
         const oldEnd = old.endDate ? localDay(old.endDate) : undefined;
         await tx.recurrenceRule.update({ where: { id: old.id }, data: { endDate: dateOnly(oldEnd && oldEnd < cutoff ? oldEnd : cutoff) } });
         const replacement = await tx.recurrenceRule.create({ data: ruleCreate(teacherId, input.rule, cipher, input.clientRequestId) });
-        // Keep explicit future exceptions under their replacement rule without
-        // touching completed/cancelled historical rows or their ledger links.
-        await tx.schedule.updateMany({ where: { teacherId, recurrenceRuleId: old.id, recurrenceDay: { gte: dateOnly(input.fromDate) }, status: { in: ['planned', 'extra'] } }, data: { recurrenceRuleId: replacement.id } });
+        // Every materialized slot must follow the replacement so it continues
+        // to suppress that replacement projection.  For completed/cancelled
+        // history this changes only the rule link: status, concrete fields,
+        // revisions, snapshots, ledger and payment links remain untouched.
+        await tx.schedule.updateMany({ where: {
+          teacherId, recurrenceRuleId: old.id, recurrenceDay: { gte: dateOnly(input.fromDate) },
+          ...(anchor ? { id: { not: anchor.id } } : {}),
+        }, data: { recurrenceRuleId: replacement.id } });
+        if (anchor) {
+          await tx.schedule.update({ where: { id: anchor.id }, data: {
+            ...scheduleUpdate({ day: input.rule.startDate, start: input.rule.start, end: input.rule.end, location: input.rule.location, participants: input.rule.participants, format: input.rule.format, note: input.rule.note }, cipher, teacherId),
+            recurrenceRuleId: replacement.id,
+            recurrenceDay: dateOnly(input.rule.startDate),
+          }, include: scheduleInclude });
+        }
         return buildState(tx, teacherId);
       });
     },
@@ -325,6 +369,12 @@ export function createSchedulingWebService(options: SchedulingWebServiceOptions)
         if (!matchesVersion(found.value.row, input.expectedUpdatedAt)) return err(versionConflict());
         if (found.value.row.status !== 'completed') return err(validationError('仅已完成课程可修订', 'occurrenceId'));
         const before = toSchedule(found.value.row, cipher);
+        const original = found.value.row.recurrenceRuleId && found.value.row.recurrenceDay
+          ? { ruleId: found.value.row.recurrenceRuleId, day: localDay(found.value.row.recurrenceDay) }
+          : undefined;
+        if (await conflictForOccurrence(tx, teacherId, input, found.value.row.id, original)) {
+          return err(validationError('该时段与现有排期冲突', 'time'));
+        }
         const replay = await tx.scheduleRevision.findFirst({ where: { teacherId, scheduleId: found.value.row.id, clientRequestId: input.clientRequestId } });
         if (!replay) {
           const updated = await tx.schedule.update({ where: { id: found.value.row.id }, data: { ...scheduleUpdate(input, cipher, teacherId), status: 'completed' }, include: scheduleInclude });
