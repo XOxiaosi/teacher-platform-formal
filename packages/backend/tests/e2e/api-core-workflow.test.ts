@@ -3,6 +3,7 @@ import { Readable, Writable } from 'node:stream';
 import { PrismaClient } from '@prisma/client';
 import express, { type Request } from 'express';
 import { internalError } from '@teacher-platform/contracts';
+import { COMPLETION_ENTRYPOINT_UNAVAILABLE_MESSAGE } from '../../src/app/policies/completion-entrypoint-gate.js';
 import { createApp } from '../../src/index.js';
 import { createCoreRouter } from '../../src/app/routes/core.routes.js';
 import { createChangelogService, withChangelog } from '../../src/shared/changelog/index.js';
@@ -336,7 +337,7 @@ describe('API 核心教师工作流端到端', () => {
     expect(await prisma.dailyReview.count({ where: { teacherId: TEACHER_ID } })).toBe(0);
   });
 
-  it('拒绝其他 teacher 通过 API 完成日程', async () => {
+  it('旧完课 API 不泄露归属，并且不写入日程或课次', async () => {
     const student = await prisma.student.create({
       data: { teacherId: TEACHER_ID, name: '受保护学生', grade: '高二' },
     });
@@ -358,15 +359,18 @@ describe('API 核心教师工作流端到端', () => {
       { 'x-teacher-id': OTHER_TEACHER_ID },
     );
 
-    expect(response.status).toBe(404);
-    expect(response.body.ok).toBe(false);
-    expect(response.body.error.code).toBe('NOT_FOUND');
+    expect(response).toEqual({
+      status: 400,
+      body: { ok: false, error: {
+        code: 'VALIDATION_ERROR', message: COMPLETION_ENTRYPOINT_UNAVAILABLE_MESSAGE, field: 'completion',
+      } },
+    });
     const persisted = await prisma.schedule.findUniqueOrThrow({ where: { id: schedule.id } });
     expect(persisted.status).toBe('planned');
     expect(await prisma.lesson.count({ where: { scheduleId: schedule.id } })).toBe(0);
   });
 
-  it('通过 HTTP API 完成学生、缴费、排课、完成课程、余额、档案、每日回顾，并写入 changelog', async () => {
+  it('通过 HTTP API 创建学生、缴费与排课；旧完课入口拒绝写入并保留余额，随后可生成每日回顾', async () => {
     const studentResponse = await api('POST', '/api/v1/students', {
       name: 'API学生',
       grade: '高三',
@@ -411,22 +415,26 @@ describe('API 核心教师工作流端到端', () => {
 
     const completeResponse = await api('POST', `/api/v1/schedules/${scheduleId}/complete`, {});
 
-    expect(completeResponse.status).toBe(200);
-    expect(completeResponse.body.ok).toBe(true);
-    expect(completeResponse.body.data.schedule.status).toBe('completed');
-    expect(completeResponse.body.data.lesson.status).toBe('attended');
+    expect(completeResponse).toEqual({
+      status: 400,
+      body: { ok: false, error: {
+        code: 'VALIDATION_ERROR', message: COMPLETION_ENTRYPOINT_UNAVAILABLE_MESSAGE, field: 'completion',
+      } },
+    });
+    expect((await prisma.schedule.findUniqueOrThrow({ where: { id: scheduleId } })).status).toBe('planned');
+    expect(await prisma.lesson.count({ where: { scheduleId } })).toBe(0);
 
     const balanceResponse = await api('GET', `/api/v1/students/${studentId}/balance`);
 
     expect(balanceResponse.status).toBe(200);
-    expect(balanceResponse.body).toEqual({ ok: true, data: { purchased: 10, attended: 1, adjustments: 0, remaining: 9 } });
+    expect(balanceResponse.body).toEqual({ ok: true, data: { purchased: 10, attended: 0, adjustments: 0, remaining: 10 } });
 
     const profileResponse = await api('GET', `/api/v1/students/${studentId}/profile`);
 
     expect(profileResponse.status).toBe(200);
     expect(profileResponse.body.ok).toBe(true);
     expect(profileResponse.body.data.student.id).toBe(studentId);
-    expect(profileResponse.body.data.lessonBalance).toEqual({ purchased: 10, attended: 1, adjustments: 0, remaining: 9 });
+    expect(profileResponse.body.data.lessonBalance).toEqual({ purchased: 10, attended: 0, adjustments: 0, remaining: 10 });
 
     const reviewResponse = await api('POST', '/api/v1/daily-review/assemble', {
       date: '2030-05-02',
@@ -435,7 +443,7 @@ describe('API 核心教师工作流端到端', () => {
     expect(reviewResponse.status).toBe(201);
     expect(reviewResponse.body.ok).toBe(true);
     expect(reviewResponse.body.data.review.plannedCount).toBe(1);
-    expect(reviewResponse.body.data.review.actualCount).toBe(1);
+    expect(reviewResponse.body.data.review.actualCount).toBe(0);
 
     const changelogModules = await prisma.changeLog.findMany({
       where: { teacherId: TEACHER_ID },
@@ -448,8 +456,6 @@ describe('API 核心教师工作流端到端', () => {
         { module: 'students', action: 'create' },
         { module: 'payments', action: 'create' },
         { module: 'scheduling', action: 'create' },
-        { module: 'scheduling', action: 'update' },
-        { module: 'lessons', action: 'create' },
         { module: 'daily-review', action: 'create' },
       ]),
     );

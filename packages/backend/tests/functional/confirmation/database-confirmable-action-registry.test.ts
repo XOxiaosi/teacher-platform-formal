@@ -1,6 +1,10 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { PrismaClient } from '@prisma/client';
 import { createDatabaseConfirmableActionRegistry } from '../../../src/app/confirmation/database-confirmable-action-registry.js';
+import {
+  COMPLETION_ENTRYPOINT_UNAVAILABLE_MESSAGE,
+  LESSON_STATUS_CORRECTION_REQUIRED_MESSAGE,
+} from '../../../src/app/policies/completion-entrypoint-gate.js';
 import { createIsolatedPostgres, type IsolatedPostgres } from '../../helpers/isolated-postgres.js';
 
 const TEACHER_A = 'test-database-executor-teacher-a';
@@ -53,28 +57,12 @@ beforeEach(async () => {
 describe('database ConfirmableActionRegistry', () => {
   it.each([
     {
-      actionName: 'scheduling.complete' as const,
-      targetType: 'Schedule' as const,
-      objectKey: 'schedule' as const,
-      statusField: 'status' as const,
-      targetStatus: 'completed',
-      parameters: (id: string) => ({ scheduleId: id }),
-    },
-    {
       actionName: 'scheduling.cancel' as const,
       targetType: 'Schedule' as const,
       objectKey: 'schedule' as const,
       statusField: 'status' as const,
       targetStatus: 'cancelled',
       parameters: (id: string) => ({ scheduleId: id }),
-    },
-    {
-      actionName: 'lessons.updateStatus' as const,
-      targetType: 'Lesson' as const,
-      objectKey: 'lesson' as const,
-      statusField: 'status' as const,
-      targetStatus: 'attended',
-      parameters: (id: string) => ({ lessonId: id, status: 'attended' }),
     },
     {
       actionName: 'students.updateStatus' as const,
@@ -112,6 +100,38 @@ describe('database ConfirmableActionRegistry', () => {
     expect(await prisma.changeLog.count({
       where: { teacherId: TEACHER_A, targetId: target.id },
     })).toBe(1);
+  });
+
+  it.each([
+    ['scheduling.complete', 'Schedule', 'scheduleId', COMPLETION_ENTRYPOINT_UNAVAILABLE_MESSAGE, 'completion', (id: string) => ({ scheduleId: id })],
+    ['lessons.updateStatus', 'Lesson', 'lessonId', LESSON_STATUS_CORRECTION_REQUIRED_MESSAGE, 'lessonStatus', (id: string) => ({ lessonId: id, status: 'attended' })],
+  ] as const)('%s 的旧 PendingAction executor 不改任何业务记录', async (actionName, targetType, idField, message, field, parameters) => {
+    const objects = await seedObjects();
+    const target = idField === 'scheduleId' ? objects.schedule : objects.lesson;
+    const before = {
+      schedule: (await prisma.schedule.findUniqueOrThrow({ where: { id: objects.schedule.id } })).status,
+      lesson: (await prisma.lesson.findUniqueOrThrow({ where: { id: objects.lesson.id } })).status,
+    };
+
+    const result = await prisma.$transaction(async (tx) => {
+      const registry = createDatabaseConfirmableActionRegistry(tx);
+      const executor = registry.get(actionName);
+      if (!executor.ok) return executor;
+      return executor.value.execute({
+        pendingActionId: `legacy-${actionName}`,
+        teacherId: TEACHER_A,
+        target: { type: targetType, id: target.id },
+        parameters: parameters(target.id),
+      });
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'VALIDATION_ERROR', message, field },
+    });
+    expect((await prisma.schedule.findUniqueOrThrow({ where: { id: objects.schedule.id } })).status).toBe(before.schedule);
+    expect((await prisma.lesson.findUniqueOrThrow({ where: { id: objects.lesson.id } })).status).toBe(before.lesson);
+    expect(await prisma.changeLog.count()).toBe(0);
   });
 
   it('跨 teacher 返回 NOT_FOUND，不修改对象且不写 ChangeLog', async () => {

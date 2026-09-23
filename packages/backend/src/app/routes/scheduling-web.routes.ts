@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { validationError } from '@teacher-platform/contracts';
 import { getTeacherId, sendResult, sendTeacherError } from './api-helpers.js';
 import type { SchedulingWebService, WebFields, WebRuleInput } from '../../features/scheduling-web/scheduling-web-service.js';
+import { completionEntrypointUnavailable } from '../policies/completion-entrypoint-gate.js';
 
 /**
  * The preview adapter owns no storage: every command returns a newly read
@@ -29,10 +30,7 @@ export function createSchedulingWebRouter(service: SchedulingWebService): Router
         break;
       }
       case 'complete':
-        // B02 has not defined how scheduled duration becomes billable lessons.
-        // Keep the service implementation internal until that product decision
-        // exists; an HTTP command must never infer and deduct a quantity.
-        return sendTeacherError(res, validationError('完课自动扣课等待 B02 计费规则确认', 'kind'));
+        return sendTeacherError(res, completionEntrypointUnavailable().error);
       case 'cancel': case 'restore': {
         const occurrenceId = idOf(body.before); if (!occurrenceId) return sendTeacherError(res, validationError('before.id 必填', 'before'));
         const version = expected(body, asObject(body.before));

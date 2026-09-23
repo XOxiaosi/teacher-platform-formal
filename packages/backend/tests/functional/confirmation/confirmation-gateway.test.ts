@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ok } from '@teacher-platform/contracts';
 import { createConfirmationGateway } from '../../../src/app/confirmation/confirmation-gateway.js';
+import {
+  COMPLETION_ENTRYPOINT_UNAVAILABLE_MESSAGE,
+  LESSON_STATUS_CORRECTION_REQUIRED_MESSAGE,
+} from '../../../src/app/policies/completion-entrypoint-gate.js';
 import type { CreatePendingActionInput } from '../../../src/features/pending-action/index.js';
 import type { CreateConfirmationGatewayOptions } from '../../../src/app/confirmation/types.js';
 
@@ -92,17 +96,6 @@ function dependencies(overrides: Partial<CreateConfirmationGatewayOptions> = {})
 
 const scenarios = [
   {
-    toolName: 'scheduling.complete',
-    args: { scheduleId: 'schedule-1', confirm: true, actionToken: 'malicious' },
-    expected: {
-      actionName: 'scheduling.complete',
-      target: { type: 'Schedule', id: 'schedule-1' },
-      parameters: { scheduleId: 'schedule-1' },
-      beforeSummary: '日程当前状态：planned',
-      afterSummary: '日程将更新为 completed',
-    },
-  },
-  {
     toolName: 'scheduling.cancel',
     args: { scheduleId: 'schedule-1', teacherId: 'other' },
     expected: {
@@ -111,17 +104,6 @@ const scenarios = [
       parameters: { scheduleId: 'schedule-1' },
       beforeSummary: '日程当前状态：planned',
       afterSummary: '日程将更新为 cancelled',
-    },
-  },
-  {
-    toolName: 'lessons.updateStatus',
-    args: { lessonId: 'lesson-1', status: 'attended', nested: { hidden: true } },
-    expected: {
-      actionName: 'lessons.updateStatus',
-      target: { type: 'Lesson', id: 'lesson-1' },
-      parameters: { lessonId: 'lesson-1', status: 'attended' },
-      beforeSummary: '课次当前状态：pending',
-      afterSummary: '课次将更新为 attended',
     },
   },
   {
@@ -166,6 +148,33 @@ describe('ConfirmationGateway', () => {
     });
     expect(JSON.stringify(result)).not.toContain('must-not-leak-token');
     expect(JSON.stringify(deps.captured())).not.toContain('malicious');
+  });
+
+  it.each([
+    ['scheduling.complete', COMPLETION_ENTRYPOINT_UNAVAILABLE_MESSAGE, 'completion', { scheduleId: 'schedule-1' }],
+    ['lessons.updateStatus', LESSON_STATUS_CORRECTION_REQUIRED_MESSAGE, 'lessonStatus', { lessonId: 'lesson-1', status: 'attended' }],
+  ] as const)('%s 不创建 PendingAction，返回准确的安全引导', async (toolName, message, field, args) => {
+    const deps = dependencies();
+
+    const result = await createConfirmationGateway(deps.options).requestConfirmation({
+      teacherId: TEACHER,
+      conversationId: 'conversation-1',
+      toolCallId: `closed-${toolName}`,
+      toolName,
+      args,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: 'VALIDATION_ERROR',
+        message,
+        field,
+      },
+    });
+    expect(deps.pendingActions.createPendingAction).not.toHaveBeenCalled();
+    expect(deps.options.schedules.getSchedule).not.toHaveBeenCalled();
+    expect(deps.options.lessons?.getLesson).not.toHaveBeenCalled();
   });
 
   it('未知动作与非法参数在创建 PendingAction 前失败', async () => {

@@ -148,7 +148,8 @@ export interface EditConfirmationOwnerPorts {
 export interface CreateConfirmationGatewayOptions {
   pendingActions: Pick<PendingActionService, 'createPendingAction'>;
   schedules: Pick<ScheduleService, 'getSchedule'>;
-  lessons: Pick<LessonService, 'getLesson'>;
+  /** 保留旧装配兼容；P3-15 起状态更正不再通过该网关执行。 */
+  lessons?: Pick<LessonService, 'getLesson'>;
   students: Pick<StudentService, 'getStudent'>;
   editOwners: EditConfirmationOwnerPorts;
 }

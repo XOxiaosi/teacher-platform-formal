@@ -46,16 +46,14 @@ describe('P5.2 PendingAction schema 契约红灯', () => {
 });
 
 describe('P5.2 状态工具确认边界红灯', () => {
-  it('四个高风险工具不再暴露可由模型伪造的 confirm 布尔参数', () => {
+  it('可用状态工具不再暴露可由模型伪造的 confirm 布尔参数', () => {
     expect(stateTools).not.toMatch(/\bconfirm\b/);
     expect(stateTools).not.toContain('requireConfirm');
   });
 
-  it('四个高风险工具显式声明 required confirmation policy', () => {
+  it('仍可用的两个高风险工具显式声明 required confirmation policy', () => {
     const actionNames = [
-      'scheduling.complete',
       'scheduling.cancel',
-      'lessons.updateStatus',
       'students.updateStatus',
     ];
 
@@ -65,5 +63,7 @@ describe('P5.2 状态工具确认边界红灯', () => {
       const definitionWindow = stateTools.slice(definitionStart, definitionStart + 700);
       expect(definitionWindow).toMatch(/confirmation\s*:\s*['"]required['"]/);
     }
+    expect(stateTools).not.toContain("name: 'scheduling.complete'");
+    expect(stateTools).not.toContain("name: 'lessons.updateStatus'");
   });
 });

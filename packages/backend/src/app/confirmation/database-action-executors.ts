@@ -1,9 +1,12 @@
 import type { Prisma } from '@prisma/client';
 import { err, internalError, notFound, ok, validationError } from '@teacher-platform/contracts';
-import { createLessonService, type LessonStatus } from '../../features/lessons/index.js';
 import { createScheduleService } from '../../features/scheduling/index.js';
 import { createStudentService, type StudentStatus } from '../../features/students/index.js';
 import { createChangelogService } from '../../shared/changelog/index.js';
+import {
+  completionEntrypointUnavailable,
+  lessonStatusCorrectionRequired,
+} from '../policies/completion-entrypoint-gate.js';
 import type {
   ConfirmableActionExecutionResult,
   ConfirmableActionExecutor,
@@ -22,8 +25,8 @@ function readParameters(value: unknown): Record<string, unknown> | null {
 
 function targetId(
   input: ConfirmableActionExecutorInput,
-  expectedType: 'Student' | 'Schedule' | 'Lesson',
-  idField: 'studentId' | 'scheduleId' | 'lessonId',
+  expectedType: 'Student' | 'Schedule',
+  idField: 'studentId' | 'scheduleId',
 ) {
   const parameters = readParameters(input.parameters);
   if (
@@ -37,10 +40,6 @@ function targetId(
   return ok({ id: input.target.id, parameters });
 }
 
-function lessonStatus(value: unknown): value is LessonStatus {
-  return value === 'pending' || value === 'attended' || value === 'absent';
-}
-
 function studentStatus(value: unknown): value is StudentStatus {
   return value === 'active' || value === 'paused' || value === 'finished';
 }
@@ -52,12 +51,14 @@ export function createDatabaseActionExecutors(tx: Prisma.TransactionClient): {
   studentUpdateStatus: ConfirmableActionExecutor;
 } {
   const schedules = createScheduleService(tx);
-  const lessons = createLessonService(tx);
   const students = createStudentService(tx);
   const changelog = createChangelogService(tx);
 
   const scheduleExecutor = (targetStatus: 'completed' | 'cancelled'): ConfirmableActionExecutor => ({
     async execute(input) {
+      // 兼容已落库的旧 PendingAction：确认事务会回滚 claim，使其仍可取消；
+      // 不允许它绕过当前的实际出勤与扣课影响预览门禁。
+      if (targetStatus === 'completed') return completionEntrypointUnavailable();
       const parsed = targetId(input, 'Schedule', 'scheduleId');
       if (!parsed.ok) return parsed;
       const existing = await schedules.getSchedule(parsed.value.id);
@@ -71,7 +72,7 @@ export function createDatabaseActionExecutors(tx: Prisma.TransactionClient): {
       const audit = await changelog.recordChange({
         teacherId: input.teacherId,
         module: 'scheduling',
-        action: targetStatus === 'cancelled' ? 'cancel' : 'update',
+        action: 'cancel',
         targetType: 'Schedule',
         targetId: updated.value.id,
         before: { status: existing.value.status },
@@ -80,7 +81,7 @@ export function createDatabaseActionExecutors(tx: Prisma.TransactionClient): {
       });
       if (!audit.ok) return err(internalError('变更记录写入失败'));
       return ok<ConfirmableActionExecutionResult>({
-        summary: targetStatus === 'completed' ? '日程已完成' : '日程已取消',
+        summary: '日程已取消',
         references: [{ type: 'Schedule', id: updated.value.id }],
       });
     },
@@ -91,35 +92,9 @@ export function createDatabaseActionExecutors(tx: Prisma.TransactionClient): {
     scheduleCancel: scheduleExecutor('cancelled'),
 
     lessonUpdateStatus: {
-      async execute(input) {
-        const parsed = targetId(input, 'Lesson', 'lessonId');
-        if (!parsed.ok) return parsed;
-        if (!lessonStatus(parsed.value.parameters.status)) {
-          return invalidParameters('课次目标状态不合法');
-        }
-        const existing = await lessons.getLesson(parsed.value.id);
-        if (!existing.ok) return existing;
-        if (existing.value.teacherId !== input.teacherId) return err(notFound('课次不存在'));
-        const updated = await lessons.updateLessonStatus({
-          lessonId: parsed.value.id,
-          targetStatus: parsed.value.parameters.status,
-        });
-        if (!updated.ok) return updated;
-        const audit = await changelog.recordChange({
-          teacherId: input.teacherId,
-          module: 'lessons',
-          action: 'update',
-          targetType: 'Lesson',
-          targetId: updated.value.id,
-          before: { status: existing.value.status },
-          after: { status: updated.value.status },
-          source: 'system',
-        });
-        if (!audit.ok) return err(internalError('变更记录写入失败'));
-        return ok({
-          summary: '课次状态已更新',
-          references: [{ type: 'Lesson' as const, id: updated.value.id }],
-        });
+      async execute(_input) {
+        // 旧 PendingAction 不得绕过课程详情中的出勤影响预览与二次确认。
+        return lessonStatusCorrectionRequired();
       },
     },
 

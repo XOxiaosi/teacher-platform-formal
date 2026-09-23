@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { validationError } from '@teacher-platform/contracts';
 import type { ScheduleRouteDependencies } from '../composition/types.js';
+import { completionEntrypointUnavailable } from '../policies/completion-entrypoint-gate.js';
 import {
   getTeacherId,
   parseDate,
@@ -59,12 +60,9 @@ export function createScheduleRouter(dependencies: ScheduleRouteDependencies): R
   router.post('/schedules/:scheduleId/complete', async (req, res) => {
     const teacher = getTeacherId(req);
     if (!teacher.ok) return sendTeacherError(res, teacher.error);
-    const result = await dependencies.scheduleComplete.completeSchedule({
-      teacherId: teacher.value,
-      scheduleId: req.params.scheduleId,
-      lessonStatus: req.body.lessonStatus,
-    });
-    sendResult(res, result);
+    // 旧入口没有实际出勤与扣课影响预览，不能默认全员已出勤后写入。
+    // 保留 scheduleComplete 领域用例，待新的预览/确认闭环接入。
+    return sendTeacherError(res, completionEntrypointUnavailable().error);
   });
 
   // D49: 手动删除课程 = 取消

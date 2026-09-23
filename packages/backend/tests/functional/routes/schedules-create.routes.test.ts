@@ -3,7 +3,7 @@ import { ok } from '@teacher-platform/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import type { ScheduleRouteDependencies } from '../../../src/app/composition/types.js';
 import { createScheduleRouter } from '../../../src/app/routes/schedules.routes.js';
-import type { LessonData } from '../../../src/features/lessons/types.js';
+import { COMPLETION_ENTRYPOINT_UNAVAILABLE_MESSAGE } from '../../../src/app/policies/completion-entrypoint-gate.js';
 import type { ScheduleData } from '../../../src/features/scheduling/types.js';
 
 const CREATED_AT = new Date('2030-07-01T00:00:00.000Z');
@@ -31,22 +31,6 @@ function schedule(overrides: Partial<ScheduleData> = {}): ScheduleData {
     ...overrides,
   };
 }
-
-const lesson: LessonData = {
-  id: 'lesson-1',
-  teacherId: 'teacher-a',
-  studentId: 'student-1',
-  scheduleId: 'schedule-1',
-  date: new Date('2030-08-20T01:00:00.000Z'),
-  status: 'attended',
-  progress: null,
-  studentState: null,
-  homework: null,
-  teacherNote: null,
-  sourceNoteId: null,
-  createdAt: CREATED_AT,
-  updatedAt: CREATED_AT,
-};
 
 function dependencies() {
   return {
@@ -239,19 +223,17 @@ describe('createScheduleRouter 的创建与领域响应契约', () => {
     expect(response).toEqual({ status: 200, result: { ok: true, data: { items: [meeting], total: 1 } } });
   });
 
-  it('完课、取消与恢复均保留既有完整领域响应', async () => {
+  it('旧完课入口统一拒绝且不调用写入用例；取消与恢复不受影响', async () => {
     const deps = dependencies();
     const completed = schedule({ status: 'completed' });
     const cancelled = schedule({ status: 'cancelled' });
     const restored = schedule({ status: 'planned' });
-    (deps.scheduleComplete.completeSchedule as ReturnType<typeof vi.fn>)
-      .mockResolvedValue(ok({ schedule: completed, lesson, lessons: [lesson] }));
     (deps.schedules.cancelSchedule as ReturnType<typeof vi.fn>).mockResolvedValue(ok(cancelled));
     (deps.schedules.restoreSchedule as ReturnType<typeof vi.fn>).mockResolvedValue(ok(restored));
 
     const complete = await invoke({
       dependencies: deps, method: 'post', path: '/schedules/:scheduleId/complete',
-      params: { scheduleId: completed.id }, teacherId: 'teacher-a', body: {},
+      params: { scheduleId: completed.id }, teacherId: 'teacher-a', body: { lessonStatus: 'absent' },
     });
     const cancel = await invoke({
       dependencies: deps, method: 'post', path: '/schedules/:scheduleId/cancel',
@@ -262,7 +244,11 @@ describe('createScheduleRouter 的创建与领域响应契约', () => {
       params: { scheduleId: restored.id }, teacherId: 'teacher-a', body: {},
     });
 
-    expect(complete).toEqual({ status: 200, result: { ok: true, data: { schedule: completed, lesson, lessons: [lesson] } } });
+    expect(complete).toEqual({ status: 400, result: {
+      ok: false,
+      error: { code: 'VALIDATION_ERROR', message: COMPLETION_ENTRYPOINT_UNAVAILABLE_MESSAGE, field: 'completion' },
+    } });
+    expect(deps.scheduleComplete.completeSchedule).not.toHaveBeenCalled();
     expect(cancel).toEqual({ status: 200, result: { ok: true, data: cancelled } });
     expect(restore).toEqual({ status: 200, result: { ok: true, data: restored } });
   });

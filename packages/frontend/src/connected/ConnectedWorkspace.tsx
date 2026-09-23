@@ -38,6 +38,8 @@ import {
   readPendingPaymentRequest,
 } from './payments/pending-payment';
 
+const connectedCompletionUnavailable = '完课前需核对每位学生的实际出勤、拟扣课时和余额变化；当前暂不能确认完课。';
+
 const routeParts = () => location.hash.replace(/^#\/?/, '').split('?')[0].split('/').filter(Boolean);
 
 export function ConnectedWorkspace() {
@@ -179,7 +181,7 @@ export function ConnectedWorkspace() {
       const before = current.schedules.find((item) => item.id === schedule.id) || (rule && schedule.recurrenceDay ? scheduleFromRule(rule, schedule.recurrenceDay) : undefined);
       return command(before?.status === '已取消' && schedule.status === '已排期' ? 'restore' : 'save-schedule', { schedule, before }, true);
     },
-    complete: (id, planned) => command('complete', { before: planned || snapshotRef.current!.data.schedules.find((item) => item.id === id) }, true),
+    complete: () => { toast(connectedCompletionUnavailable, 'warn'); },
     cancelSchedule: (id, planned) => command('cancel', { before: planned || snapshotRef.current!.data.schedules.find((item) => item.id === id) }, true),
     editCompletedSchedule: (before, after) => command('edit-completed', { before, schedule: after }, true),
     saveRule: (rule) => command('save-rule', { rule }, true),

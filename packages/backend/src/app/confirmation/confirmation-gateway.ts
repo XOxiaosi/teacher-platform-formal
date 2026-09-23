@@ -1,10 +1,10 @@
 import { err, notFound, ok, validationError } from '@teacher-platform/contracts';
 import type { CommonError, Result } from '@teacher-platform/contracts';
-import {
-  validateLessonTransition,
-  type LessonStatus,
-} from '../../features/lessons/index.js';
 import type { CreatePendingActionInput } from '../../features/pending-action/index.js';
+import {
+  completionEntrypointUnavailable,
+  lessonStatusCorrectionRequired,
+} from '../policies/completion-entrypoint-gate.js';
 import { parseRfc3339Instant } from '../../features/feedback/rfc3339-instant.js';
 import type { FeedbackStatus } from '../../features/feedback/index.js';
 import {
@@ -40,10 +40,6 @@ function stringField(record: Record<string, unknown> | null, field: string) {
   return typeof value === 'string' && value.trim() !== ''
     ? ok(value)
     : err(validationError(`${field} 必须是非空字符串`, field));
-}
-
-function isLessonStatus(value: string): value is LessonStatus {
-  return value === 'pending' || value === 'attended' || value === 'absent';
 }
 
 function isStudentStatus(value: string): value is StudentStatus {
@@ -139,35 +135,6 @@ async function scheduleIntent(
     parameters: { scheduleId: scheduleId.value },
     beforeSummary: `日程当前状态：${existing.value.status}`,
     afterSummary: `日程将更新为 ${targetStatus}`,
-  });
-}
-
-async function lessonIntent(
-  options: CreateConfirmationGatewayOptions,
-  input: RequestConfirmationInput,
-) {
-  const args = argsRecord(input.args);
-  const lessonId = stringField(args, 'lessonId');
-  if (!lessonId.ok) return lessonId;
-  const status = stringField(args, 'status');
-  if (!status.ok) return status;
-  if (!isLessonStatus(status.value)) {
-    return err(validationError('status 必须是 pending/attended/absent', 'status'));
-  }
-  const existing = await options.lessons.getLesson(lessonId.value);
-  if (!existing.ok) return existing;
-  if (existing.value.teacherId !== input.teacherId) return err(notFound('课次不存在'));
-  const transition = validateLessonTransition(existing.value.status as LessonStatus, status.value);
-  if (!transition.ok) return transition;
-  return createOutput(options, {
-    teacherId: input.teacherId,
-    conversationId: input.conversationId,
-    toolCallId: input.toolCallId,
-    actionName: 'lessons.updateStatus',
-    target: { type: 'Lesson', id: lessonId.value },
-    parameters: { lessonId: lessonId.value, status: status.value },
-    beforeSummary: `课次当前状态：${existing.value.status}`,
-    afterSummary: `课次将更新为 ${status.value}`,
   });
 }
 
@@ -416,11 +383,12 @@ export function createConfirmationGateway(
     async requestConfirmation(input) {
       switch (input.toolName) {
         case 'scheduling.complete':
-          return scheduleIntent(options, input, 'completed');
+          // 不能为历史工具调用创建一张未来必然失败的确认卡。
+          return completionEntrypointUnavailable();
         case 'scheduling.cancel':
           return scheduleIntent(options, input, 'cancelled');
         case 'lessons.updateStatus':
-          return lessonIntent(options, input);
+          return lessonStatusCorrectionRequired();
         case 'students.updateStatus':
           return studentIntent(options, input);
         case 'students.updateProfile':

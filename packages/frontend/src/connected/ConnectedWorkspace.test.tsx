@@ -425,4 +425,13 @@ describe('connected workspace server-backed writes', () => {
     fireEvent.click(await screen.findByRole('menuitem', { name: '刷新资料' }));
     await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
   });
+  it('keeps connected completion unavailable without sending the legacy complete command', async () => {
+    location.hash = '#/schedules';
+    render(<ConnectedWorkspace />);
+    await screen.findByRole('heading', { name: '日程安排' });
+    fireEvent.click(screen.getByRole('button', { name: /查看 14:00 至 15:30 小班 · 2 人.*排期详情/ }));
+    expect(screen.getByRole('note')).toHaveTextContent('完课前需核对每位学生的实际出勤、拟扣课时和余额变化；当前暂不能确认完课。');
+    expect(screen.queryByRole('button', { name: '完成并确认' })).not.toBeInTheDocument();
+    expect(mock.schedule).not.toHaveBeenCalledWith(expect.objectContaining({ kind: 'complete' }));
+  });
 });

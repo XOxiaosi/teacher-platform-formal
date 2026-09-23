@@ -9,6 +9,12 @@ import {
 } from '../../../shared/changelog/index.js';
 import type { FieldCipher } from '../../../shared/field-encryption/index.js';
 import { createScheduleCompleteUseCaseWithServices } from './schedule-complete-use-case.js';
+export {
+  COMPLETION_ENTRYPOINT_UNAVAILABLE_MESSAGE,
+  LESSON_STATUS_CORRECTION_REQUIRED_MESSAGE,
+  completionEntrypointUnavailable,
+  lessonStatusCorrectionRequired,
+} from '../../policies/completion-entrypoint-gate.js';
 import type {
   ScheduleCompletePrismaClient,
   ScheduleCompleteServices,

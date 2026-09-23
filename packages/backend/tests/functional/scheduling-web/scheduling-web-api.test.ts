@@ -2,6 +2,7 @@ import request from 'supertest';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { PrismaClient } from '@prisma/client';
 import { createApp } from '../../../src/index.js';
+import { COMPLETION_ENTRYPOINT_UNAVAILABLE_MESSAGE } from '../../../src/app/policies/completion-entrypoint-gate.js';
 import { acceptInvitation } from '../../helpers/invitations.js';
 
 const prisma = new PrismaClient();
@@ -69,20 +70,33 @@ describe('Scheduling Web persistent bridge', () => {
     expect(enabled.status).toBe(200); expect(enabled.body.data.recurrenceRules[0].enabled).toBe(true);
   });
 
-  it('rejects automatic completion until B02 defines the billable lesson rule and writes no lesson ledger', async () => {
+  it('complete 命令与其他入口使用同一安全错误，且不生成完课写入', async () => {
     const student = await prisma.student.create({ data: { teacherId: teacherA, name: '完课学生', grade: '高一' } });
     await prisma.payment.create({ data: {
       teacherId: teacherA, studentId: student.id, amount: 4500, lessonCount: 15,
       paidAtTs: new Date('2026-10-01T00:00:00.000Z'), note: '快照回归测试',
     } });
+    const balanceBefore = await request(app)
+      .get(`/api/v1/students/${student.id}/balance`)
+      .set('Cookie', cookieA);
+    expect(balanceBefore.status).toBe(200);
     const created = await command(cookieA, { clientRequestId: 'rule-complete-0001', kind: 'save-rule', rule: rule(student.id) });
     const synthetic = projected(created.body.data.recurrenceRules[0]);
     const complete = await command(cookieA, { clientRequestId: 'complete-0001', kind: 'complete', before: synthetic });
-    expect(complete.status).toBe(400); expect(complete.body.error.code).toBe('VALIDATION_ERROR');
+    expect(complete.status).toBe(400);
+    expect(complete.body.error).toEqual({
+      code: 'VALIDATION_ERROR', message: COMPLETION_ENTRYPOINT_UNAVAILABLE_MESSAGE, field: 'completion',
+    });
     expect(await prisma.schedule.count({ where: { teacherId: teacherA } })).toBe(0);
     expect(await prisma.lesson.count({ where: { teacherId: teacherA } })).toBe(0);
     expect(await prisma.lessonLedgerEntry.count({ where: { teacherId: teacherA } })).toBe(0);
     expect(await prisma.scheduleCompletionSnapshot.count({ where: { teacherId: teacherA } })).toBe(0);
+    expect(await prisma.schedulingWebMutationReceipt.count({ where: { teacherId: teacherA, clientRequestId: 'complete-0001' } })).toBe(0);
+    expect(await prisma.payment.count({ where: { teacherId: teacherA, studentId: student.id } })).toBe(1);
+    const balanceAfter = await request(app)
+      .get(`/api/v1/students/${student.id}/balance`)
+      .set('Cookie', cookieA);
+    expect(balanceAfter.body).toEqual(balanceBefore.body);
   });
 
   it('rejects impossible strict calendar dates for one-off schedules and weekly rules', async () => {

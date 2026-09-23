@@ -7,6 +7,10 @@ import { createLessonService } from '../../src/features/lessons/index.js';
 import { createStudentService } from '../../src/features/students/index.js';
 import { createConfirmationGateway, createConfirmationTransactionPort } from '../../src/app/confirmation/index.js';
 import { createConfirmPendingActionUseCase } from '../../src/app/use-cases/confirm-pending-action/index.js';
+import {
+  COMPLETION_ENTRYPOINT_UNAVAILABLE_MESSAGE,
+  LESSON_STATUS_CORRECTION_REQUIRED_MESSAGE,
+} from '../../src/app/policies/completion-entrypoint-gate.js';
 import { createAgentConverseUseCase } from '../../src/app/use-cases/agent-converse/index.js';
 import { createFieldCipher, loadEncryptionKey } from '../../src/shared/field-encryption/index.js';
 
@@ -137,28 +141,29 @@ beforeEach(async () => {
   await prisma.pendingAction.deleteMany();
   await prisma.conversationTurn.deleteMany();
   await prisma.conversation.deleteMany();
+  await prisma.scheduleCompletionSnapshot.deleteMany();
+  await prisma.lessonLedgerEntry.deleteMany();
   await prisma.lesson.deleteMany();
+  await prisma.payment.deleteMany();
   await prisma.schedule.deleteMany();
   await prisma.student.deleteMany();
 });
 
 describe('Agent P0 state tools trusted confirmation workflow', () => {
-  it('四个状态工具 schema 无 confirm、声明 required，direct execute 全部 fail-closed', async () => {
+  it('仅两个仍可确认的状态工具对模型可见；禁用动作不出现在 registry/list', async () => {
     const registry = createMinimalToolRegistry({ prisma });
     const stateToolNames = new Set([
-      'lessons.updateStatus',
       'scheduling.cancel',
-      'scheduling.complete',
       'students.updateStatus',
     ]);
     const definitions = registry.list().filter((tool) => stateToolNames.has(tool.name));
 
     expect(definitions.map((tool) => tool.name).sort()).toEqual([
-      'lessons.updateStatus',
       'scheduling.cancel',
-      'scheduling.complete',
       'students.updateStatus',
     ]);
+    expect(registry.list().some((tool) => tool.name === 'scheduling.complete')).toBe(false);
+    expect(registry.list().some((tool) => tool.name === 'lessons.updateStatus')).toBe(false);
     for (const definition of definitions) {
       expect(definition.sideEffect).toBe('update');
       expect(JSON.stringify(definition.parameters)).not.toContain('confirm');
@@ -174,22 +179,25 @@ describe('Agent P0 state tools trusted confirmation workflow', () => {
     }
   });
 
-  it('scheduling.complete 先 pending，HTTP 同源 confirm use-case 后才完成', async () => {
+  it('scheduling.complete 不创建 PendingAction，不允许 AI 绕过完课预览', async () => {
     const schedule = await createSchedule();
-    const runtime = await runTool({
-      id: 'call-schedule-complete',
-      name: 'scheduling.complete',
+    const runtime = createRuntime();
+    const conversation = await runtime.conversations.createConversation({ teacherId: TEACHER });
+    if (!conversation.ok) throw new Error(conversation.error.message);
+
+    const result = await runtime.gateway.requestConfirmation({
+      teacherId: TEACHER,
+      conversationId: conversation.value.id,
+      toolCallId: 'call-schedule-complete',
+      toolName: 'scheduling.complete',
       args: { scheduleId: schedule.id },
     });
 
+    expect(result).toEqual({ ok: false, error: {
+      code: 'VALIDATION_ERROR', message: COMPLETION_ENTRYPOINT_UNAVAILABLE_MESSAGE, field: 'completion',
+    } });
     expect((await prisma.schedule.findUniqueOrThrow({ where: { id: schedule.id } })).status).toBe('planned');
-    // P8 phase-3 批5：parameters 落库为密文，解密后断言
-    expect(runtime.pending.actionName).toBe('scheduling.complete');
-    expect(cipher.decryptJson<{ scheduleId: string }>(runtime.pending.parameters as unknown as string)).toEqual({
-      scheduleId: schedule.id,
-    });
-    expect((await confirmPending(runtime)).ok).toBe(true);
-    expect((await prisma.schedule.findUniqueOrThrow({ where: { id: schedule.id } })).status).toBe('completed');
+    expect(await prisma.pendingAction.count()).toBe(0);
   });
 
   it('scheduling.cancel 先 pending，确认后才取消', async () => {
@@ -205,17 +213,67 @@ describe('Agent P0 state tools trusted confirmation workflow', () => {
     expect((await prisma.schedule.findUniqueOrThrow({ where: { id: schedule.id } })).status).toBe('cancelled');
   });
 
-  it('lessons.updateStatus 先 pending，确认后才更新', async () => {
+  it('lessons.updateStatus 不创建 PendingAction，避免绕过出勤状态更正确认', async () => {
     const lesson = await createLesson();
-    const runtime = await runTool({
-      id: 'call-lesson-status',
-      name: 'lessons.updateStatus',
+    const runtime = createRuntime();
+    const conversation = await runtime.conversations.createConversation({ teacherId: TEACHER });
+    if (!conversation.ok) throw new Error(conversation.error.message);
+
+    const result = await runtime.gateway.requestConfirmation({
+      teacherId: TEACHER,
+      conversationId: conversation.value.id,
+      toolCallId: 'call-lesson-status',
+      toolName: 'lessons.updateStatus',
       args: { lessonId: lesson.id, status: 'attended' },
     });
 
+    expect(result).toEqual({ ok: false, error: {
+      code: 'VALIDATION_ERROR', message: LESSON_STATUS_CORRECTION_REQUIRED_MESSAGE, field: 'lessonStatus',
+    } });
     expect((await prisma.lesson.findUniqueOrThrow({ where: { id: lesson.id } })).status).toBe('pending');
-    expect((await confirmPending(runtime)).ok).toBe(true);
-    expect((await prisma.lesson.findUniqueOrThrow({ where: { id: lesson.id } })).status).toBe('attended');
+    expect(await prisma.pendingAction.count()).toBe(0);
+  });
+
+  it.each([
+    ['scheduling.complete', 'Schedule', COMPLETION_ENTRYPOINT_UNAVAILABLE_MESSAGE, 'completion', (id: string) => ({ scheduleId: id })],
+    ['lessons.updateStatus', 'Lesson', LESSON_STATUS_CORRECTION_REQUIRED_MESSAGE, 'lessonStatus', (id: string) => ({ lessonId: id, status: 'attended' })],
+  ] as const)('%s 的旧 pending 确认回滚 claim，且不产生完课或账本写入', async (actionName, targetType, message, field, parameters) => {
+    const target = targetType === 'Schedule' ? await createSchedule() : await createLesson();
+    const runtime = createRuntime();
+    const conversation = await runtime.conversations.createConversation({ teacherId: TEACHER });
+    if (!conversation.ok) throw new Error(conversation.error.message);
+    const created = await runtime.pendingActions.createPendingAction({
+      teacherId: TEACHER,
+      conversationId: conversation.value.id,
+      toolCallId: `legacy-${actionName}`,
+      actionName,
+      target: { type: targetType, id: target.id },
+      parameters: parameters(target.id),
+      beforeSummary: '历史待确认操作',
+      afterSummary: '历史状态写入',
+    });
+    if (!created.ok) throw new Error(created.error.message);
+
+    const result = await runtime.confirm.confirm({
+      teacherId: TEACHER,
+      pendingActionId: created.value.pendingAction.id,
+      actionToken: created.value.actionToken,
+    });
+
+    expect(result).toEqual({ ok: false, error: {
+      code: 'VALIDATION_ERROR', message, field,
+    } });
+    expect((await prisma.pendingAction.findUniqueOrThrow({ where: { id: created.value.pendingAction.id } })).status).toBe('pending');
+    expect(await prisma.changeLog.count()).toBe(0);
+    expect(await prisma.lessonLedgerEntry.count()).toBe(0);
+    expect(await prisma.scheduleCompletionSnapshot.count()).toBe(0);
+    expect(await prisma.payment.count()).toBe(0);
+    if (targetType === 'Schedule') {
+      expect((await prisma.schedule.findUniqueOrThrow({ where: { id: target.id } })).status).toBe('planned');
+      expect(await prisma.lesson.count()).toBe(0);
+    } else {
+      expect((await prisma.lesson.findUniqueOrThrow({ where: { id: target.id } })).status).toBe('pending');
+    }
   });
 
   it('students.updateStatus 丢弃恶意附加字段，pending 与 turns 均不泄露 token', async () => {
