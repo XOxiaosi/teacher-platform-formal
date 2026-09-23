@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { err, internalError, notFound, ok, validationError, versionConflict, type CommonError, type Result } from '@teacher-platform/contracts';
 import { createFieldCipherFromEnv, decryptFieldValue, encryptFieldValue, type FieldCipher } from '../../shared/field-encryption/index.js';
 import { createDatabaseTrustedClock } from '../../shared/trusted-clock/index.js';
+import { hasLessonOccurrenceConflict } from '../../shared/lesson-occurrence-conflict/index.js';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 export type WebFormat = '一对一' | '小班';
@@ -143,17 +144,10 @@ export function createSchedulingWebService(options: SchedulingWebServiceOptions)
   }
   async function conflictForOccurrence(prisma: Db, teacherId: string, value: WebFields, ignoreScheduleId?: string, ignoreRuleOccurrence?: { ruleId: string; day: string }): Promise<boolean> {
     const start = instant(value.day, value.start); const end = instant(value.day, value.end);
-    const direct = await prisma.schedule.findMany({ where: { teacherId, type: 'lesson', status: { in: ['planned', 'extra'] }, scheduledStartTs: { lt: end }, scheduledEndTs: { gt: start }, ...(ignoreScheduleId ? { id: { not: ignoreScheduleId } } : {}) } });
-    if (direct.length) return true;
-    const rules = await prisma.recurrenceRule.findMany({ where: { teacherId, enabled: true } });
-    for (const rule of rules) {
-      if (ignoreRuleOccurrence && rule.id === ignoreRuleOccurrence.ruleId && value.day === ignoreRuleOccurrence.day) continue;
-      if (occurs(rule, value.day) && overlaps(value.start, value.end, rule.startTime, rule.endTime)) {
-        const exception = await prisma.schedule.findFirst({ where: { teacherId, recurrenceRuleId: rule.id, recurrenceDay: dateOnly(value.day) }, select: { id: true } });
-        if (!exception) return true;
-      }
-    }
-    return false;
+    return hasLessonOccurrenceConflict(prisma, teacherId, { start, end }, {
+      ignoreScheduleId,
+      ignoreRuleOccurrence,
+    });
   }
   async function conflictForRule(prisma: Db, teacherId: string, value: WebRuleInput, ignoreRuleId?: string): Promise<boolean> {
     const rules = await prisma.recurrenceRule.findMany({ where: { teacherId, enabled: true, ...(ignoreRuleId ? { id: { not: ignoreRuleId } } : {}) } });

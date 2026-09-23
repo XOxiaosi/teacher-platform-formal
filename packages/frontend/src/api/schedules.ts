@@ -6,14 +6,34 @@ import type {
   ScheduleData,
 } from './types';
 
-export interface CreateScheduleRequest {
-  studentId?: string;
-  type: 'lesson' | 'prep' | 'meeting' | 'call' | 'other';
-  title: string;
+interface ScheduleCreateBase {
+  clientRequestId: string;
   scheduledStart: string;
   scheduledEnd: string;
   confidence?: 'high' | 'medium' | 'low';
 }
+
+export interface FormalLessonCreateRequest extends ScheduleCreateBase {
+  type: 'lesson';
+  participantIds: string[];
+  location: string;
+  classFormat: 'one_to_one' | 'small_group';
+  operationalNote?: string;
+  title?: never;
+  studentId?: never;
+}
+
+export interface LegacyScheduleCreateRequest extends ScheduleCreateBase {
+  type: 'prep' | 'meeting' | 'call' | 'other';
+  title: string;
+  studentId?: string;
+  participantIds?: never;
+  location?: never;
+  classFormat?: never;
+  operationalNote?: never;
+}
+
+export type CreateScheduleRequest = FormalLessonCreateRequest | LegacyScheduleCreateRequest;
 
 export interface CreateScheduleResult {
   schedule: ScheduleData;
@@ -23,6 +43,7 @@ export interface CreateScheduleResult {
 export interface CompleteScheduleResult {
   schedule: ScheduleData;
   lesson: unknown;
+  lessons?: unknown[];
 }
 
 export function listSchedules(teacherId: string): Promise<ListResult<ScheduleData>> {

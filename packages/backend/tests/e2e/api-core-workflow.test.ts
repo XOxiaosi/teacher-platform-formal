@@ -136,8 +136,11 @@ describe('API 核心教师工作流端到端', () => {
 
   it('POST /schedules 拒绝缺少时区 offset 的计划时间且零写入', async () => {
     const response = await api('POST', '/api/v1/schedules', {
+      clientRequestId: 'api-core-schedule-no-timezone-0001',
       type: 'lesson',
-      title: '缺少时区的 API 课程',
+      participantIds: ['synthetic-student'],
+      classFormat: 'one_to_one',
+      location: '线上',
       scheduledStart: '2030-07-20T16:00:00',
       scheduledEnd: '2030-07-20T18:00:00',
     });
@@ -158,9 +161,11 @@ describe('API 核心教师工作流端到端', () => {
     });
 
     const scheduleResponse = await api('POST', '/api/v1/schedules', {
-      studentId: otherStudent.id,
+      clientRequestId: 'api-core-schedule-cross-teacher-0001',
       type: 'lesson',
-      title: '跨老师 API 课程',
+      participantIds: [otherStudent.id],
+      classFormat: 'one_to_one',
+      location: '线上',
       scheduledStart: '2030-07-20T16:00:00+08:00',
       scheduledEnd: '2030-07-20T18:00:00+08:00',
     });
@@ -182,8 +187,11 @@ describe('API 核心教师工作流端到端', () => {
 
   it('POST /schedules 拒绝过去的 planned 日程且零写入', async () => {
     const response = await api('POST', '/api/v1/schedules', {
+      clientRequestId: 'api-core-schedule-past-0001',
       type: 'lesson',
-      title: '过去的 API 课程',
+      participantIds: ['synthetic-student'],
+      classFormat: 'one_to_one',
+      location: '线上',
       scheduledStart: '2026-07-20T16:00:00+08:00',
       scheduledEnd: '2026-07-20T18:00:00+08:00',
     });
@@ -212,8 +220,11 @@ describe('API 核心教师工作流端到端', () => {
       'POST',
       '/api/v1/schedules',
       {
+        clientRequestId: 'api-core-schedule-clock-failure-0001',
         type: 'lesson',
-        title: '时钟失败的 API 课程',
+        participantIds: ['synthetic-student'],
+        classFormat: 'one_to_one',
+        location: '线上',
         scheduledStart: '2030-07-20T16:00:00+08:00',
         scheduledEnd: '2030-07-20T18:00:00+08:00',
       },
@@ -380,9 +391,12 @@ describe('API 核心教师工作流端到端', () => {
     expect(paymentResponse.body.data.studentId).toBe(studentId);
 
     const scheduleResponse = await api('POST', '/api/v1/schedules', {
-      studentId,
+      clientRequestId: 'api-core-schedule-success-0001',
       type: 'lesson',
-      title: 'API学生物理课',
+      participantIds: [studentId],
+      classFormat: 'one_to_one',
+      location: '线上',
+      operationalNote: '课前确认小测纸',
       scheduledStart: '2030-05-02T19:00:00+08:00',
       scheduledEnd: '2030-05-02T20:30:00+08:00',
       confidence: 'high',

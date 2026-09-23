@@ -14,6 +14,10 @@ function isConfidence(value: unknown): value is Confidence {
   return value === 'high' || value === 'medium' || value === 'low';
 }
 
+function isClientRequestId(value: unknown): value is string {
+  return typeof value === 'string' && /^[A-Za-z0-9._:-]{8,128}$/.test(value);
+}
+
 function parseRfc3339Instant(value: unknown): InstantParseResult {
   if (typeof value !== 'string') return { ok: false, reason: 'format' };
   const parsed = new Date(value);
@@ -34,9 +38,6 @@ export function createPlannedScheduleUseCase(
 ): CreatePlannedScheduleUseCase {
   return {
     async create(input) {
-      if (typeof input.title !== 'string' || !input.title.trim()) {
-        return err(validationError('日程标题不能为空', 'title'));
-      }
       if (!isScheduleType(input.type)) {
         return err(validationError('日程类型不合法', 'type'));
       }
@@ -51,6 +52,53 @@ export function createPlannedScheduleUseCase(
       if (input.confidence !== undefined && input.confidence !== null && !isConfidence(input.confidence)) {
         return err(validationError('confidence 必须是 high/medium/low', 'confidence'));
       }
+      const formalLesson = input.type === 'lesson';
+      if (formalLesson && input.title !== undefined) {
+        return err(validationError('课程排期不接受课程名称', 'title'));
+      }
+      if (input.clientRequestId !== undefined && !isClientRequestId(input.clientRequestId)) {
+        return err(validationError('clientRequestId 格式不合法', 'clientRequestId'));
+      }
+      if (input.participantIds !== undefined && (
+        !Array.isArray(input.participantIds)
+        || input.participantIds.some((item) => typeof item !== 'string' || !item.trim() || item !== item.trim())
+      )) {
+        return err(validationError('participantIds 必须是非空字符串数组', 'participantIds'));
+      }
+      const participantIds = input.participantIds as string[] | undefined;
+      if (participantIds && new Set(participantIds).size !== participantIds.length) {
+        return err(validationError('participantIds 不能包含重复学生', 'participantIds'));
+      }
+      if (input.location !== undefined && typeof input.location !== 'string') {
+        return err(validationError('课程地点格式不合法', 'location'));
+      }
+      if (input.classFormat !== undefined && input.classFormat !== 'one_to_one' && input.classFormat !== 'small_group') {
+        return err(validationError('课程形式不合法', 'classFormat'));
+      }
+      if (input.operationalNote !== undefined && typeof input.operationalNote !== 'string') {
+        return err(validationError('课程备注格式不合法', 'operationalNote'));
+      }
+      if (formalLesson) {
+        if (!isClientRequestId(input.clientRequestId)) return err(validationError('课程必须提供 clientRequestId', 'clientRequestId'));
+        if (input.studentId !== undefined) return err(validationError('正式课程请使用 participantIds', 'studentId'));
+        if (typeof input.location !== 'string' || !input.location.trim()) return err(validationError('课程地点不能为空', 'location'));
+        if (input.classFormat !== 'one_to_one' && input.classFormat !== 'small_group') return err(validationError('课程形式不合法', 'classFormat'));
+        if (!participantIds || participantIds.length === 0) return err(validationError('课程必须选择参与人', 'participantIds'));
+        if (input.classFormat === 'one_to_one' && participantIds.length !== 1) {
+          return err(validationError('一对一课程必须且只能有一名参与人', 'participantIds'));
+        }
+        if (input.classFormat === 'small_group' && participantIds.length < 2) {
+          return err(validationError('小班课程至少需要两名参与人', 'participantIds'));
+        }
+      } else {
+        if (input.participantIds !== undefined || input.location !== undefined
+          || input.classFormat !== undefined || input.operationalNote !== undefined) {
+          return err(validationError('结构化课程字段只适用于 lesson', 'type'));
+        }
+        if (typeof input.title !== 'string' || !input.title.trim()) {
+          return err(validationError('日程标题不能为空', 'title'));
+        }
+      }
 
       const trustedNow = await deps.trustedClock.now();
       if (!trustedNow.ok) return trustedNow;
@@ -60,9 +108,14 @@ export function createPlannedScheduleUseCase(
 
       return deps.scheduling.createSchedule({
         teacherId: input.teacherId,
+        clientRequestId: isClientRequestId(input.clientRequestId) ? input.clientRequestId : undefined,
         studentId: typeof input.studentId === 'string' ? input.studentId : undefined,
+        participantIds,
         type: input.type,
-        title: input.title,
+        title: typeof input.title === 'string' ? input.title : undefined,
+        location: typeof input.location === 'string' ? input.location : undefined,
+        classFormat: input.classFormat === 'one_to_one' || input.classFormat === 'small_group' ? input.classFormat : undefined,
+        operationalNote: typeof input.operationalNote === 'string' ? input.operationalNote : undefined,
         scheduledStart: scheduledStart.value,
         scheduledEnd: scheduledEnd.value,
         confidence: isConfidence(input.confidence) ? input.confidence : undefined,

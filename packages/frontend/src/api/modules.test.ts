@@ -31,8 +31,11 @@ describe('业务 API 模块', () => {
     const fetchMock = mockSuccess({ id: 'schedule-1' });
 
     await createSchedule('demo-teacher', {
+      clientRequestId: 'schedule-test-0001',
       type: 'lesson',
-      title: '张三课程',
+      participantIds: ['student-1'],
+      location: '线上',
+      classFormat: 'one_to_one',
       scheduledStart: '2025-05-02T19:00:00+08:00',
       scheduledEnd: '2025-05-02T20:30:00+08:00',
     });

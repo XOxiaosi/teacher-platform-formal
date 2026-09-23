@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { validationError } from '@teacher-platform/contracts';
 import type { ScheduleRouteDependencies } from '../composition/types.js';
 import {
   getTeacherId,
@@ -33,11 +34,19 @@ export function createScheduleRouter(dependencies: ScheduleRouteDependencies): R
   router.post('/schedules', async (req, res) => {
     const teacher = getTeacherId(req);
     if (!teacher.ok) return sendTeacherError(res, teacher.error);
+    if (req.body?.type === 'lesson' && req.body.title !== undefined) {
+      return sendTeacherError(res, validationError('课程排期不接受课程名称', 'title'));
+    }
     const result = await dependencies.plannedSchedules.create({
       teacherId: teacher.value,
+      clientRequestId: req.body.clientRequestId,
       studentId: req.body.studentId,
+      participantIds: req.body.participantIds,
       type: req.body.type,
       title: req.body.title,
+      location: req.body.location,
+      classFormat: req.body.classFormat,
+      operationalNote: req.body.operationalNote,
       scheduledStart: req.body.scheduledStart,
       scheduledEnd: req.body.scheduledEnd,
       confidence: req.body.confidence,

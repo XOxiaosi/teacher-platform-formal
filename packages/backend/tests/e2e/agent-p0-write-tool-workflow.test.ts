@@ -119,7 +119,7 @@ describe('Agent P0 低风险写工具 workflow（Phase 4.2-A 红灯）', () => {
     expect(students[0].stageGoal).toBe('夯实力学');
   });
 
-  it('Agent 通过 scheduling.create 创建日程', async () => {
+  it('Agent 通过旧 scheduling.create 只创建非课程日程', async () => {
     const student = await createStudentFixture(TEACHER_ID, '日程学生');
     const toolRegistry = requireRegistryFactory()({
       prisma,
@@ -136,14 +136,14 @@ describe('Agent P0 低风险写工具 workflow（Phase 4.2-A 红灯）', () => {
         return {
           ok: true,
           value: {
-            content: '我来创建日程',
+            content: '我来创建备课安排',
             toolCalls: [{
               id: 'call-scheduling-create',
               name: 'scheduling.create',
               args: {
                 studentId: student.id,
-                type: 'lesson',
-                title: '物理一对一',
+                type: 'prep',
+                title: '物理备课',
                 scheduledStart: '2026-07-20T10:00:00.000Z',
                 scheduledEnd: '2026-07-20T11:30:00.000Z',
                 confidence: 'high',
@@ -156,15 +156,15 @@ describe('Agent P0 低风险写工具 workflow（Phase 4.2-A 红灯）', () => {
     });
 
     const useCase = createAgentConverseUseCase({ conversationService, aiClient, toolRegistry });
-    const result = await useCase.execute({ teacherId: TEACHER_ID, conversationId, message: '新增一节课' });
+    const result = await useCase.execute({ teacherId: TEACHER_ID, conversationId, message: '新增一个备课安排' });
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(`agent converse failed: ${result.error.code}`);
     const schedules = await prisma.schedule.findMany({ where: { teacherId: TEACHER_ID } });
     expect(schedules).toHaveLength(1);
     expect(schedules[0].studentId).toBe(student.id);
-    expect(schedules[0].title).toBe('物理一对一');
-    expect(schedules[0].type).toBe('lesson');
+    expect(schedules[0].title).toBe('物理备课');
+    expect(schedules[0].type).toBe('prep');
   });
 
   it('Agent 通过 payments.create 无 gateway 时 fail-closed（P29-W1：确认前置，不直接创建）', async () => {

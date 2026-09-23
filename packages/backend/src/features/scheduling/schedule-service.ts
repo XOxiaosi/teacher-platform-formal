@@ -16,23 +16,21 @@ import {
 import type { ScheduleService } from './types.js';
 import { validateTransition, type ScheduleStatus } from './state-machine.js';
 import { sameScheduleRequest, scheduleInclude, toScheduleData } from './schedule-data.js';
-
+import { hasLessonOccurrenceConflict } from '../../shared/lesson-occurrence-conflict/index.js';
+import { isValidDate, runFormalLessonTransaction, validateDailyReviewWindow } from './schedule-create-helpers.js';
 type SchedulePrismaClient = PrismaClient | Prisma.TransactionClient;
-
 const SCHEDULE_TYPES = ['lesson', 'prep', 'meeting', 'call', 'other'];
 const SCHEDULE_STATUSES = ['planned', 'completed', 'cancelled', 'missed', 'rescheduled', 'extra'];
 const AGENDA_SOURCE_LIMIT = 500;
 const DAILY_REVIEW_SOURCE_LIMIT = 500;
 const CLASS_FORMATS = ['one_to_one', 'small_group'] as const;
 
-function isValidDate(value: Date): boolean {
-  return value instanceof Date && !Number.isNaN(value.getTime());
-}
-
 export interface ScheduleServiceOptions {
   getClient: () => Promise<SchedulePrismaClient>;
   changelogFactory?: ChangelogFactory;
   cipher?: FieldCipher;
+  /** Internal guard for the recursive service bound to an existing transaction. */
+  insideTransaction?: boolean;
 }
 
 function isScheduleServiceOptions(
@@ -41,6 +39,10 @@ function isScheduleServiceOptions(
   return typeof value === 'object'
     && value !== null
     && typeof (value as ScheduleServiceOptions).getClient === 'function';
+}
+
+function canOpenTransaction(value: SchedulePrismaClient): value is PrismaClient {
+  return '$transaction' in value && typeof (value as PrismaClient).$transaction === 'function';
 }
 
 export function createScheduleService(
@@ -55,6 +57,8 @@ export function createScheduleService(
   const cipher = isScheduleServiceOptions(prismaOrOptions)
     ? (prismaOrOptions.cipher ?? createFieldCipherFromEnv())
     : createFieldCipherFromEnv();
+  const insideTransaction = isScheduleServiceOptions(prismaOrOptions)
+    && prismaOrOptions.insideTransaction === true;
 
   async function resolve(): Promise<{ prisma: SchedulePrismaClient; trustedClock: ReturnType<typeof createDatabaseTrustedClock> }> {
     const prisma = await getClient();
@@ -65,9 +69,35 @@ export function createScheduleService(
     async createSchedule(input) {
       const { prisma, trustedClock } = await resolve();
       const title = input.title?.trim() ?? '';
-      const formalLesson = input.type === 'lesson' && (
-        input.participantIds !== undefined || input.location !== undefined || input.classFormat !== undefined || input.clientRequestId !== undefined
-      );
+      const formalLesson = input.type === 'lesson';
+      if (formalLesson && input.title !== undefined) {
+        return err(validationError('课程排期不接受课程名称', 'title'));
+      }
+      if (!isValidDate(input.scheduledStart)) {
+        return err(validationError('开始时间不合法', 'scheduledStart'));
+      }
+      if (!isValidDate(input.scheduledEnd)) {
+        return err(validationError('结束时间不合法', 'scheduledEnd'));
+      }
+      if (formalLesson && (!input.clientRequestId || !/^[A-Za-z0-9._:-]{8,128}$/.test(input.clientRequestId))) {
+        return err(validationError('课程必须提供合法的 clientRequestId', 'clientRequestId'));
+      }
+      if (formalLesson && input.studentId !== undefined) {
+        return err(validationError('正式课程请使用 participantIds', 'studentId'));
+      }
+      if (formalLesson && !insideTransaction && canOpenTransaction(prisma)) {
+        return runFormalLessonTransaction({
+          prisma,
+          input,
+          cipher,
+          createInTransaction: async (tx) => createScheduleService({
+              getClient: async () => tx,
+              changelogFactory,
+              cipher,
+              insideTransaction: true,
+            }).createSchedule(input),
+        });
+      }
       if (!formalLesson && !title) {
         return err(validationError('日程标题不能为空', 'title'));
       }
@@ -89,6 +119,10 @@ export function createScheduleService(
       }
       if (input.scheduledEnd <= input.scheduledStart) {
         return err(validationError('结束时间必须晚于开始时间', 'scheduledEnd'));
+      }
+      if (formalLesson && input.participantIds
+        && new Set(input.participantIds).size !== input.participantIds.length) {
+        return err(validationError('participantIds 不能包含重复学生', 'participantIds'));
       }
       const participantIds = [...new Set(input.participantIds ?? (input.studentId ? [input.studentId] : []))];
       if (formalLesson) {
@@ -118,6 +152,13 @@ export function createScheduleService(
         return err(internalError('TrustedClock返回无效时间'));
       }
 
+      if (formalLesson) {
+        if (await hasLessonOccurrenceConflict(prisma, input.teacherId, {
+          start: input.scheduledStart,
+          end: input.scheduledEnd,
+        })) return err(validationError('该时段与现有排期冲突', 'scheduledStart'));
+      }
+
       let schedule;
       try {
         schedule = await prisma.schedule.create({
@@ -145,6 +186,12 @@ export function createScheduleService(
         include: scheduleInclude,
         });
       } catch (caught) {
+        // A PostgreSQL uniqueness failure aborts the transaction.  Formal
+        // replay must happen only after the outer transaction has rolled back,
+        // using the root Prisma client in the catch above.
+        if (formalLesson && caught instanceof Prisma.PrismaClientKnownRequestError && caught.code === 'P2002') {
+          throw caught;
+        }
         if (caught instanceof Prisma.PrismaClientKnownRequestError && caught.code === 'P2002' && input.clientRequestId) {
           const replay = await prisma.schedule.findFirst({ where: { teacherId: input.teacherId, clientRequestId: input.clientRequestId }, include: scheduleInclude });
           if (replay && sameScheduleRequest(replay, input, cipher)) {
@@ -153,6 +200,10 @@ export function createScheduleService(
           if (replay) return err(versionConflict());
         }
         throw caught;
+      }
+
+      if (formalLesson) {
+        return ok({ schedule: toScheduleData(schedule, cipher), conflicts: [] });
       }
 
       // 检测冲突：查询同老师同时间段附近的日程
@@ -445,21 +496,4 @@ export function createScheduleService(
       }
     },
   };
-}
-
-function validateDailyReviewWindow(input: {
-  teacherId: string;
-  windowStart: Date;
-  windowEndExclusive: Date;
-}) {
-  if (typeof input.teacherId !== 'string' || input.teacherId.trim() === '') {
-    return err(validationError('teacherId 无效', 'teacherId'));
-  }
-  if (!isValidDate(input.windowStart) || !isValidDate(input.windowEndExclusive)) {
-    return err(validationError('每日回顾时间窗口无效', 'windowStart'));
-  }
-  if (input.windowEndExclusive <= input.windowStart) {
-    return err(validationError('每日回顾结束时间必须晚于开始时间', 'windowEndExclusive'));
-  }
-  return ok(true);
 }

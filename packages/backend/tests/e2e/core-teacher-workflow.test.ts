@@ -71,9 +71,11 @@ describe('核心教师工作流端到端', () => {
 
     const createdSchedule = await schedules.createSchedule({
       teacherId: TEACHER_ID,
-      studentId: createdStudent.value.id,
+      clientRequestId: 'core-teacher-schedule-0001',
       type: 'lesson',
-      title: '端到端学生物理课',
+      participantIds: [createdStudent.value.id],
+      location: '合成教室',
+      classFormat: 'one_to_one',
       scheduledStart: new Date('2025-05-02T19:00:00+08:00'),
       scheduledEnd: new Date('2025-05-02T20:30:00+08:00'),
       confidence: 'high',
@@ -139,8 +141,8 @@ describe('核心教师工作流端到端', () => {
     expect(sentMessage.content).toContain('晚间复盘提醒｜2025-05-02');
     expect(sentMessage.content).toContain('计划日程：1 项');
     expect(sentMessage.content).toContain('实际上课：1 次');
-    expect(sentMessage.content).toContain('端到端学生物理课（completed）');
-    expect(sentMessage.content).toContain('端到端学生物理课（attended）');
+    expect(sentMessage.content).toContain('19:00-20:30 （completed）');
+    expect(sentMessage.content).toContain('19:00 （attended）');
     if (!pushed.ok) return;
     expect(pushed.value.pushRecord.status).toBe('sent');
     expect(pushed.value.pushRecord.channel).toBe('wechat-bot');

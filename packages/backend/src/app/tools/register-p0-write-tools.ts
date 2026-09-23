@@ -63,17 +63,18 @@ export function registerP0WriteTools(
     },
   );
 
-  // scheduling.create：低风险写操作，创建当前老师的日程
+  // 旧直写工具仅保留非课程日程。正式课程必须走
+  // scheduling.prepare -> 教师确认 -> scheduling-web 的结构化事务。
   registry.register(
     {
       name: 'scheduling.create',
-      description: '创建当前老师未来的计划日程；开始和结束时间必须是带 Z 或时区偏移的 RFC 3339 时间',
+      description: '创建当前老师未来的非课程计划日程；课程必须使用 scheduling.prepare 进入教师确认流程',
       sideEffect: 'create',
       parameters: {
         type: 'object',
         properties: {
           studentId: { type: 'string', description: '学生 ID，可选' },
-          type: { type: 'string', description: '日程类型：lesson/prep/meeting/call/other' },
+          type: { type: 'string', enum: ['prep', 'meeting', 'call', 'other'], description: '非课程日程类型：prep/meeting/call/other' },
           title: { type: 'string', description: '日程标题' },
           scheduledStart: { type: 'string', description: '开始时间（ISO 8601）' },
           scheduledEnd: { type: 'string', description: '结束时间（ISO 8601）' },
@@ -85,6 +86,12 @@ export function registerP0WriteTools(
     },
     async (args, context) => {
       const a = args as Record<string, unknown>;
+      if (a.type === 'lesson') {
+        return {
+          ok: false,
+          error: validationError('课程必须通过 scheduling.prepare 进入教师确认流程', 'type'),
+        };
+      }
       return plannedSchedules.create({
         teacherId: context.teacherId,
         studentId: a.studentId,

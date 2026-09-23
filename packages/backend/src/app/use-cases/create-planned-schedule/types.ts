@@ -4,9 +4,14 @@ import type { TrustedClock } from '../../../shared/trusted-clock/index.js';
 
 export interface CreatePlannedScheduleInput {
   teacherId: string;
+  clientRequestId?: unknown;
   studentId?: unknown;
+  participantIds?: unknown;
   type: unknown;
-  title: unknown;
+  title?: unknown;
+  location?: unknown;
+  classFormat?: unknown;
+  operationalNote?: unknown;
   scheduledStart: unknown;
   scheduledEnd: unknown;
   confidence?: unknown;

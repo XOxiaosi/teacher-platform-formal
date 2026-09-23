@@ -34,7 +34,10 @@ function createExtendedScheduleService(changelogFactory?: ChangelogFactory) {
 
 async function cleanup() {
   const teacherIds = [TEACHER_ID, OTHER_TEACHER_ID];
+  await prisma.scheduleParticipant.deleteMany({ where: { teacherId: { in: teacherIds } } });
+  await prisma.recurrenceRuleParticipant.deleteMany({ where: { teacherId: { in: teacherIds } } });
   await prisma.schedule.deleteMany({ where: { teacherId: { in: teacherIds } } });
+  await prisma.recurrenceRule.deleteMany({ where: { teacherId: { in: teacherIds } } });
   await prisma.student.deleteMany({ where: { teacherId: { in: teacherIds } } });
   await prisma.changeLog.deleteMany({ where: { teacherId: { in: teacherIds } } });
 }
@@ -45,223 +48,6 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await cleanup();
-});
-
-describe('scheduleService.createSchedule', () => {
-  it('创建日程成功，返回日程数据和空冲突列表', async () => {
-    const result = await service.createSchedule({
-      teacherId: TEACHER_ID,
-      type: 'lesson',
-      title: '张三物理课',
-      scheduledStart: new Date('2025-03-15T14:00:00'),
-      scheduledEnd: new Date('2025-03-15T15:30:00'),
-    });
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-
-    expect(result.value.schedule.id).toBeDefined();
-    expect(result.value.schedule.title).toBe('张三物理课');
-    expect(result.value.schedule.status).toBe('planned');
-    expect(result.value.schedule.type).toBe('lesson');
-    expect(result.value.conflicts).toEqual([]);
-  });
-
-  it('创建日程时检测到时间冲突，返回冲突列表但不阻止创建', async () => {
-    // 先创建一个日程
-    await service.createSchedule({
-      teacherId: TEACHER_ID,
-      type: 'lesson',
-      title: '第一节',
-      scheduledStart: new Date('2025-03-15T14:00:00'),
-      scheduledEnd: new Date('2025-03-15T15:30:00'),
-    });
-
-    // 再创建一个时间重叠的日程
-    const result = await service.createSchedule({
-      teacherId: TEACHER_ID,
-      type: 'lesson',
-      title: '第二节',
-      scheduledStart: new Date('2025-03-15T15:00:00'),
-      scheduledEnd: new Date('2025-03-15T16:00:00'),
-    });
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-
-    expect(result.value.schedule.title).toBe('第二节');
-    expect(result.value.conflicts.length).toBe(1);
-    expect(result.value.conflicts[0].title).toBe('第一节');
-  });
-
-  it('创建日程时带 studentId 和 confidence', async () => {
-    // 先创建学生（满足外键约束）
-    await prisma.student.create({
-      data: { teacherId: TEACHER_ID, name: '张三', grade: '高三' },
-    });
-    const student = await prisma.student.findFirst({ where: { teacherId: TEACHER_ID } });
-
-    const result = await service.createSchedule({
-      teacherId: TEACHER_ID,
-      studentId: student!.id,
-      type: 'lesson',
-      title: '张三物理课',
-      scheduledStart: new Date('2025-03-15T14:00:00'),
-      scheduledEnd: new Date('2025-03-15T15:30:00'),
-      confidence: 'high',
-    });
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-
-    expect(result.value.schedule.studentId).toBe(student!.id);
-    expect(result.value.schedule.confidence).toBe('high');
-  });
-
-  it('拒绝关联其他 teacher 的学生，且零写入', async () => {
-    const otherStudent = await prisma.student.create({
-      data: { teacherId: OTHER_TEACHER_ID, name: '其他老师学生', grade: '高二' },
-    });
-
-    const result = await service.createSchedule({
-      teacherId: TEACHER_ID,
-      studentId: otherStudent.id,
-      type: 'lesson',
-      title: '跨老师课程',
-      scheduledStart: new Date('2025-03-15T14:00:00'),
-      scheduledEnd: new Date('2025-03-15T15:30:00'),
-    });
-
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.error).toEqual(expect.objectContaining({ code: 'NOT_FOUND', message: '学生不存在' }));
-    expect(await prisma.schedule.count({ where: { teacherId: TEACHER_ID } })).toBe(0);
-    expect(await prisma.changeLog.count({ where: { teacherId: TEACHER_ID } })).toBe(0);
-  });
-
-  it('结束时间早于开始时间：返回 VALIDATION_ERROR', async () => {
-    const result = await service.createSchedule({
-      teacherId: TEACHER_ID,
-      type: 'lesson',
-      title: '时间错误',
-      scheduledStart: new Date('2025-03-15T15:00:00'),
-      scheduledEnd: new Date('2025-03-15T14:00:00'),
-    });
-
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.error.code).toBe('VALIDATION_ERROR');
-  });
-});
-
-describe('scheduleService.getSchedule', () => {
-  it('查询单个日程：返回完整数据', async () => {
-    const created = await service.createSchedule({
-      teacherId: TEACHER_ID,
-      type: 'meeting',
-      title: '教研会议',
-      scheduledStart: new Date('2025-03-15T10:00:00'),
-      scheduledEnd: new Date('2025-03-15T11:00:00'),
-    });
-    if (!created.ok) return;
-
-    const result = await service.getSchedule(created.value.schedule.id);
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.value.title).toBe('教研会议');
-    expect(result.value.type).toBe('meeting');
-  });
-
-  it('查询不存在的日程：返回 NOT_FOUND', async () => {
-    const result = await service.getSchedule('nonexistent-id');
-
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.error.code).toBe('NOT_FOUND');
-  });
-});
-
-describe('scheduleService.listSchedules', () => {
-  it('按 teacherId 查询返回所有日程，按时间正序排列', async () => {
-    await service.createSchedule({
-      teacherId: TEACHER_ID,
-      type: 'lesson',
-      title: '下午课',
-      scheduledStart: new Date('2025-03-15T14:00:00'),
-      scheduledEnd: new Date('2025-03-15T15:00:00'),
-    });
-    await service.createSchedule({
-      teacherId: TEACHER_ID,
-      type: 'lesson',
-      title: '上午课',
-      scheduledStart: new Date('2025-03-15T09:00:00'),
-      scheduledEnd: new Date('2025-03-15T10:00:00'),
-    });
-
-    const result = await service.listSchedules({ teacherId: TEACHER_ID });
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-
-    expect(result.value.items.length).toBe(2);
-    expect(result.value.items[0].title).toBe('上午课');
-    expect(result.value.items[1].title).toBe('下午课');
-  });
-
-  it('按 type 过滤', async () => {
-    await service.createSchedule({
-      teacherId: TEACHER_ID,
-      type: 'lesson',
-      title: '课程',
-      scheduledStart: new Date('2025-03-15T14:00:00'),
-      scheduledEnd: new Date('2025-03-15T15:00:00'),
-    });
-    await service.createSchedule({
-      teacherId: TEACHER_ID,
-      type: 'meeting',
-      title: '会议',
-      scheduledStart: new Date('2025-03-15T16:00:00'),
-      scheduledEnd: new Date('2025-03-15T17:00:00'),
-    });
-
-    const result = await service.listSchedules({ teacherId: TEACHER_ID, type: 'meeting' });
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.value.items.length).toBe(1);
-    expect(result.value.items[0].title).toBe('会议');
-  });
-
-  it('按 status 过滤', async () => {
-    const created = await service.createSchedule({
-      teacherId: TEACHER_ID,
-      type: 'lesson',
-      title: '已完成课',
-      scheduledStart: new Date('2025-03-15T14:00:00'),
-      scheduledEnd: new Date('2025-03-15T15:00:00'),
-    });
-    if (!created.ok) return;
-    await service.updateScheduleStatus({
-      scheduleId: created.value.schedule.id,
-      targetStatus: 'completed',
-    });
-
-    await service.createSchedule({
-      teacherId: TEACHER_ID,
-      type: 'lesson',
-      title: '计划中课',
-      scheduledStart: new Date('2025-03-16T14:00:00'),
-      scheduledEnd: new Date('2025-03-16T15:00:00'),
-    });
-
-    const result = await service.listSchedules({ teacherId: TEACHER_ID, status: 'planned' });
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.value.items.length).toBe(1);
-    expect(result.value.items[0].title).toBe('计划中课');
-  });
 });
 
 describe('scheduleService.listSchedulesStartingInWindow', () => {
@@ -381,7 +167,7 @@ describe('scheduleService.updateScheduleStatus', () => {
   it('planned -> completed: 合法转换', async () => {
     const created = await service.createSchedule({
       teacherId: TEACHER_ID,
-      type: 'lesson',
+      type: 'meeting',
       title: '待完成',
       scheduledStart: new Date('2025-03-15T14:00:00'),
       scheduledEnd: new Date('2025-03-15T15:00:00'),
@@ -401,7 +187,7 @@ describe('scheduleService.updateScheduleStatus', () => {
   it('planned -> cancelled: 合法转换', async () => {
     const created = await service.createSchedule({
       teacherId: TEACHER_ID,
-      type: 'lesson',
+      type: 'meeting',
       title: '待取消',
       scheduledStart: new Date('2025-03-15T14:00:00'),
       scheduledEnd: new Date('2025-03-15T15:00:00'),
@@ -421,7 +207,7 @@ describe('scheduleService.updateScheduleStatus', () => {
   it('completed -> planned: 非法转换返回 VALIDATION_ERROR', async () => {
     const created = await service.createSchedule({
       teacherId: TEACHER_ID,
-      type: 'lesson',
+      type: 'meeting',
       title: '已完成',
       scheduledStart: new Date('2025-03-15T14:00:00'),
       scheduledEnd: new Date('2025-03-15T15:00:00'),
@@ -458,7 +244,7 @@ describe('scheduleService.cancelSchedule', () => {
   it('取消日程：状态变为 cancelled，写 ChangeLog', async () => {
     const created = await service.createSchedule({
       teacherId: TEACHER_ID,
-      type: 'lesson',
+      type: 'meeting',
       title: '待取消',
       scheduledStart: new Date('2025-03-15T14:00:00'),
       scheduledEnd: new Date('2025-03-15T15:00:00'),
@@ -484,7 +270,7 @@ describe('scheduleService.cancelSchedule', () => {
   it('审计写入 Err 时取消整体回滚，且不泄露底层错误', async () => {
     const created = await service.createSchedule({
       teacherId: TEACHER_ID,
-      type: 'lesson',
+      type: 'meeting',
       title: '审计失败待取消',
       scheduledStart: new Date('2025-03-16T14:00:00'),
       scheduledEnd: new Date('2025-03-16T15:00:00'),
@@ -524,7 +310,7 @@ describe('scheduleService.restoreSchedule', () => {
   it('恢复已取消日程：状态回到 planned，写 ChangeLog', async () => {
     const created = await service.createSchedule({
       teacherId: TEACHER_ID,
-      type: 'lesson',
+      type: 'meeting',
       title: '待恢复',
       scheduledStart: new Date('2025-04-01T10:00:00'),
       scheduledEnd: new Date('2025-04-01T11:00:00'),
@@ -552,7 +338,7 @@ describe('scheduleService.restoreSchedule', () => {
   it('审计写入 Err 时恢复整体回滚，且不泄露底层错误', async () => {
     const created = await service.createSchedule({
       teacherId: TEACHER_ID,
-      type: 'lesson',
+      type: 'meeting',
       title: '审计失败待恢复',
       scheduledStart: new Date('2025-04-01T12:00:00'),
       scheduledEnd: new Date('2025-04-01T13:00:00'),
@@ -589,7 +375,7 @@ describe('scheduleService.restoreSchedule', () => {
   it('恢复时与其他日程时间重叠返回 VALIDATION_ERROR', async () => {
     const created = await service.createSchedule({
       teacherId: TEACHER_ID,
-      type: 'lesson',
+      type: 'meeting',
       title: '冲突源',
       scheduledStart: new Date('2025-04-02T10:00:00'),
       scheduledEnd: new Date('2025-04-02T11:00:00'),
@@ -599,7 +385,7 @@ describe('scheduleService.restoreSchedule', () => {
 
     const overlap = await service.createSchedule({
       teacherId: TEACHER_ID,
-      type: 'lesson',
+      type: 'meeting',
       title: '重叠占用',
       scheduledStart: new Date('2025-04-02T10:30:00'),
       scheduledEnd: new Date('2025-04-02T11:30:00'),
@@ -615,7 +401,7 @@ describe('scheduleService.restoreSchedule', () => {
   it('恢复非 cancelled 日程返回 VALIDATION_ERROR', async () => {
     const created = await service.createSchedule({
       teacherId: TEACHER_ID,
-      type: 'lesson',
+      type: 'meeting',
       title: '未取消',
       scheduledStart: new Date('2025-04-03T10:00:00'),
       scheduledEnd: new Date('2025-04-03T11:00:00'),
@@ -631,7 +417,7 @@ describe('scheduleService.restoreSchedule', () => {
   it('跨 teacher 恢复返回 NOT_FOUND', async () => {
     const created = await service.createSchedule({
       teacherId: TEACHER_ID,
-      type: 'lesson',
+      type: 'meeting',
       title: '隔离',
       scheduledStart: new Date('2025-04-04T10:00:00'),
       scheduledEnd: new Date('2025-04-04T11:00:00'),

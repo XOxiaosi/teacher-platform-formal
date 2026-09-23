@@ -107,7 +107,7 @@ describe('P0 低风险写工具注册契约（Phase 4.2-A 红灯）', () => {
     expect(missingGrade.error?.field).toBe('grade');
   });
 
-  it('scheduling.create 创建当前 teacher 日程并返回 conflicts 结构', async () => {
+  it('scheduling.create 创建当前 teacher 的非课程日程并返回 conflicts 结构', async () => {
     const student = await createStudentFixture(TEACHER_A, '日程学生');
     const registry = requireRegistryFactory()({
       prisma,
@@ -120,12 +120,12 @@ describe('P0 低风险写工具注册契约（Phase 4.2-A 红灯）', () => {
 
     const result = await registry.execute('scheduling.create', {
       studentId: student.id,
-      type: 'lesson',
-      title: '物理一对一',
+      type: 'prep',
+      title: '物理备课',
       scheduledStart,
       scheduledEnd,
       confidence: 'high',
-      sourceInput: '用户口述新增课程',
+      sourceInput: '用户口述新增备课安排',
     }, { teacherId: TEACHER_A });
 
     expect(result.ok).toBe(true);
@@ -133,11 +133,27 @@ describe('P0 低风险写工具注册契约（Phase 4.2-A 红灯）', () => {
     const data = result.value as { schedule: { teacherId: string; studentId: string | null; type: string; title: string; scheduledStart: Date | string; scheduledEnd: Date | string }; conflicts: unknown[] };
     expect(data.schedule.teacherId).toBe(TEACHER_A);
     expect(data.schedule.studentId).toBe(student.id);
-    expect(data.schedule.type).toBe('lesson');
-    expect(data.schedule.title).toBe('物理一对一');
+    expect(data.schedule.type).toBe('prep');
+    expect(data.schedule.title).toBe('物理备课');
     expect(new Date(data.schedule.scheduledStart).toISOString()).toBe(scheduledStart);
     expect(new Date(data.schedule.scheduledEnd).toISOString()).toBe(scheduledEnd);
     expect(Array.isArray(data.conflicts)).toBe(true);
+  });
+
+  it('scheduling.create 拒绝直写课程并指向确认流程', async () => {
+    const registry = requireRegistryFactory()({ prisma });
+    const result = await registry.execute('scheduling.create', {
+      type: 'lesson',
+      title: '不能直写的课程',
+      scheduledStart: '2030-07-20T16:00:00+08:00',
+      scheduledEnd: '2030-07-20T18:00:00+08:00',
+    }, { teacherId: TEACHER_A });
+
+    expect(result).toEqual({
+      ok: false,
+      error: expect.objectContaining({ code: 'VALIDATION_ERROR', field: 'type' }),
+    });
+    expect(await prisma.schedule.count({ where: { teacherId: TEACHER_A } })).toBe(0);
   });
 
   it('scheduling.create 接受带 +08:00 的未来时间并保存同一 instant', async () => {
@@ -149,8 +165,8 @@ describe('P0 低风险写工具注册契约（Phase 4.2-A 红灯）', () => {
     });
 
     const result = await registry.execute('scheduling.create', {
-      type: 'lesson',
-      title: '上海时区物理课',
+      type: 'meeting',
+      title: '上海时区教研会',
       scheduledStart: '2026-07-20T16:00:00+08:00',
       scheduledEnd: '2026-07-20T18:00:00+08:00',
     }, { teacherId: TEACHER_A });
@@ -164,7 +180,7 @@ describe('P0 低风险写工具注册契约（Phase 4.2-A 红灯）', () => {
 
   it('scheduling.create 缺少必要字段或非法时间返回 VALIDATION_ERROR', async () => {
     const registry = requireRegistryFactory()({ prisma });
-    const base = { type: 'lesson', title: '物理课', scheduledStart: '2026-07-20T10:00:00.000Z', scheduledEnd: '2026-07-20T11:30:00.000Z' };
+    const base = { type: 'prep', title: '物理备课', scheduledStart: '2026-07-20T10:00:00.000Z', scheduledEnd: '2026-07-20T11:30:00.000Z' };
 
     const missingTitle = await registry.execute('scheduling.create', { ...base, title: '' }, { teacherId: TEACHER_A });
     expect(missingTitle.ok).toBe(false);
@@ -211,8 +227,8 @@ describe('P0 低风险写工具注册契约（Phase 4.2-A 红灯）', () => {
     });
 
     const result = await registry.execute('scheduling.create', {
-      type: 'lesson',
-      title: '缺少时区的计划课',
+      type: 'prep',
+      title: '缺少时区的备课安排',
       scheduledStart,
       scheduledEnd,
     }, { teacherId: TEACHER_A });
@@ -231,8 +247,8 @@ describe('P0 低风险写工具注册契约（Phase 4.2-A 红灯）', () => {
     const registry = requireRegistryFactory()({ prisma, trustedClock });
 
     const result = await registry.execute('scheduling.create', {
-      type: 'lesson',
-      title: '已经过去的计划课',
+      type: 'prep',
+      title: '已经过去的备课安排',
       scheduledStart: '2026-07-20T10:00:00+08:00',
       scheduledEnd: '2026-07-20T11:00:00+08:00',
     }, { teacherId: TEACHER_A });
@@ -254,8 +270,8 @@ describe('P0 低风险写工具注册契约（Phase 4.2-A 红灯）', () => {
     const registry = requireRegistryFactory()({ prisma, trustedClock });
 
     const result = await registry.execute('scheduling.create', {
-      type: 'lesson',
-      title: '无法判断当前时间的计划课',
+      type: 'prep',
+      title: '无法判断当前时间的备课安排',
       scheduledStart: '2030-07-20T16:00:00+08:00',
       scheduledEnd: '2030-07-20T18:00:00+08:00',
     }, { teacherId: TEACHER_A });
@@ -277,8 +293,8 @@ describe('P0 低风险写工具注册契约（Phase 4.2-A 红灯）', () => {
 
     const scheduleResult = await registry.execute('scheduling.create', {
       studentId: otherStudent.id,
-      type: 'lesson',
-      title: '跨老师 Agent 课程',
+      type: 'meeting',
+      title: '跨老师关联日程',
       scheduledStart: '2030-07-20T16:00:00+08:00',
       scheduledEnd: '2030-07-20T18:00:00+08:00',
     }, { teacherId: TEACHER_A });

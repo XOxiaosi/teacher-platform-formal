@@ -76,6 +76,11 @@ export interface ScheduleData {
   parentId: string | null;
   createdAt: string;
   updatedAt: string;
+  location?: string | null;
+  classFormat?: 'one_to_one' | 'small_group' | null;
+  operationalNote?: string | null;
+  participantIds?: string[];
+  participants?: Array<{ id: string; name: string }>;
 }
 
 export interface PaymentData {
@@ -125,6 +130,11 @@ export interface LessonData {
   sourceNoteId: string | null;
   createdAt: string;
   updatedAt: string;
+  location?: string | null;
+  classFormat?: 'one_to_one' | 'small_group' | null;
+  operationalNote?: string | null;
+  participantIds?: string[];
+  participants?: Array<{ id: string; name: string }>;
 }
 
 export interface MemoData {
