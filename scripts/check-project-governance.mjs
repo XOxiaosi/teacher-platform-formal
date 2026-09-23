@@ -6,6 +6,12 @@ import { gunzipSync } from 'node:zlib';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const canonical = ['AGENTS.md', 'PRODUCT.md', 'PROJECT_LOG.md'];
+const historicalSupport = ['DECISIONS.md', 'design-qa.md', 'evidence/product/T017-ledger-contract.md'];
+const currentProductLinks = {
+  'DECISIONS.md': '[PRODUCT.md](PRODUCT.md)',
+  'design-qa.md': '[PRODUCT.md](PRODUCT.md)',
+  'evidence/product/T017-ledger-contract.md': '[PRODUCT.md](../../PRODUCT.md)',
+};
 const archiveSha = '349c11c49f7b05a40b80a92fa6546972ac49bec8de80f7deb4cc2ea74b083910';
 // Pinned at GOV-001 intake; editing the manifest alone cannot rewrite history.
 const archiveBaseline = {
@@ -22,6 +28,7 @@ const codes = (text) => text.match(/\b(?:F\d{2}|D\d{2}|B\d{2})\b/g) ?? [];
 
 export function loadGovernance(directory = root) {
   const files = Object.fromEntries(canonical.map((name) => [name, readFileSync(resolve(directory, name), 'utf8')]));
+  Object.assign(files, Object.fromEntries(historicalSupport.map((name) => [name, readFileSync(resolve(directory, name), 'utf8')])));
   const manifest = JSON.parse(readFileSync(resolve(directory, 'evidence/project-history/manifest.json'), 'utf8'));
   const archive = readFileSync(resolve(directory, 'evidence/project-history/history-20260919.json.gz'));
   if (digest(archive) !== archiveSha) throw new Error('历史压缩档案指纹不一致');
@@ -41,6 +48,21 @@ export function validateGovernance(bundle, options = {}) {
   const agents = files['AGENTS.md'] ?? '';
   const exists = options.exists ?? ((path) => existsSync(resolve(root, path)));
   for (const name of canonical) if (!files[name]) errors.push(`缺少唯一入口 ${name}`);
+  const historicalMetadata = Object.fromEntries(historicalSupport.map((name) => [name, (files[name] ?? '').split('\n').slice(0, 8).join('\n')]));
+  for (const name of historicalSupport) if (!files[name]) errors.push(`缺少历史辅助文件 ${name}`);
+  for (const [name, metadata] of Object.entries(historicalMetadata)) {
+    if (!/^> 历史状态：.*非当前/m.test(metadata)) errors.push(`${name} 缺少非当前历史状态`);
+    if (!metadata.includes(`> 现行产品入口：${currentProductLinks[name]}`)) errors.push(`${name} 缺少现行产品入口`);
+  }
+  if (/^> 状态：持续维护/m.test(historicalMetadata['DECISIONS.md'] ?? '')) {
+    errors.push('DECISIONS.md 不得在元信息中宣称持续维护');
+  }
+  if (/^# .*当前设计核验/m.test(historicalMetadata['design-qa.md'] ?? '')) {
+    errors.push('design-qa.md 不得冒充当前设计 QA');
+  }
+  if (!/本次治理时 B02 仍为待决定/.test(historicalMetadata['evidence/product/T017-ledger-contract.md'] ?? '')) {
+    errors.push('T017 必须说明 B02 仍为待决定');
+  }
   const aliases = new Set(['agent.md', 'agents.md', 'product.md', 'productlog.md']);
   for (const name of names) {
     if (!canonical.includes(name) && aliases.has(name.toLowerCase().replace(/[ _-]/g, ''))) {

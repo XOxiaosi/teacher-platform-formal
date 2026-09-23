@@ -19,6 +19,19 @@ function rejects(bundle, expected) {
 test('current documents form a consistent, restorable governance baseline', () => {
   assert.deepEqual(validateGovernance(baseline), []);
 });
+test('historical support files retain a current-product boundary', () => {
+  rejects(changed('DECISIONS.md', '> 历史状态：归档参考，非当前产品源。', '> 历史状态：归档参考。'), /DECISIONS\.md.*非当前历史状态/);
+  rejects(changed('DECISIONS.md', '> 现行产品入口：[PRODUCT.md](PRODUCT.md)；', '> 历史入口：[PRODUCT.md](PRODUCT.md)；'), /DECISIONS\.md.*现行产品入口/);
+  rejects(changed('DECISIONS.md', '> 历史状态：归档参考，非当前产品源。', '> 状态：持续维护'), /持续维护/);
+});
+test('historical QA cannot claim to be current', () => {
+  rejects(changed('design-qa.md', '# V006 全站 UI 修复 · 历史设计核验', '# V006 全站 UI 修复 · 当前设计核验'), /不得冒充当前设计 QA/);
+  rejects(changed('design-qa.md', '> 现行产品入口：[PRODUCT.md](PRODUCT.md)；', '> 历史入口：[PRODUCT.md](PRODUCT.md)；'), /design-qa\.md.*现行产品入口/);
+});
+test('T017 keeps B02 as a product decision still pending', () => {
+  rejects(changed('evidence/product/T017-ledger-contract.md', '本次治理时 B02 仍为待决定', 'B02 已确认'), /T017 必须说明 B02 仍为待决定/);
+  rejects(changed('evidence/product/T017-ledger-contract.md', '> 历史状态：实现时期的辅助契约，非当前产品需求或业务决定。', '> 历史状态：实现时期的辅助契约。'), /T017.*非当前历史状态/);
+});
 test('reject duplicate document entry points', () => {
   const bundle = structuredClone(baseline);
   bundle.names.push('agent.md', 'product log.md');
@@ -147,6 +160,9 @@ test('compressed history remains byte-verifiable and cannot be silently replaced
   const directory = mkdtempSync(join(tmpdir(), 'tpf-governance-'));
   try {
     for (const name of ['AGENTS.md', 'PRODUCT.md', 'PROJECT_LOG.md', 'README.md', 'package.json']) cpSync(name, join(directory, name));
+    cpSync('DECISIONS.md', join(directory, 'DECISIONS.md'));
+    cpSync('design-qa.md', join(directory, 'design-qa.md'));
+    cpSync('evidence/product/T017-ledger-contract.md', join(directory, 'evidence/product/T017-ledger-contract.md'));
     cpSync('evidence/project-history', join(directory, 'evidence/project-history'), { recursive: true });
     assert.deepEqual(loadGovernance(directory).files, baseline.files);
     const path = join(directory, 'evidence/project-history/history-20260919.json.gz');
