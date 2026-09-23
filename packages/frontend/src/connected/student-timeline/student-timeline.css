@@ -1,0 +1,23 @@
+.student-timeline-readback { min-width: 0; }
+.student-timeline-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.student-timeline-heading h2 { margin: 0; color: var(--foreground); }
+.student-timeline-heading button, .student-timeline-error button { border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--foreground); padding: 8px 12px; font: inherit; cursor: pointer; }
+.student-timeline-heading button:disabled, .student-timeline-error button:disabled { cursor: wait; opacity: .6; }
+.student-timeline-eyebrow { margin: 0 0 4px; color: var(--primary-active); font-size: 11px; letter-spacing: .08em; }
+.student-timeline-caption, .student-timeline-count { margin: 6px 0 0; color: var(--text-muted); font-size: 12px; line-height: 1.6; }
+.student-timeline-count { margin: 22px 0 0; }
+.student-timeline-error { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 18px; padding: 12px; border: 1px solid #e4b8b1; border-radius: 9px; background: #fff8f6; color: #8d3026; font-size: 13px; line-height: 1.6; }
+.student-timeline-state, .student-timeline-empty { padding: 25px 0; color: var(--text-muted); font-size: 13px; }
+.student-timeline-entries { margin: 14px 0 0; padding: 0; list-style: none; }
+.student-timeline-entry { padding: 16px 0; border-top: 1px solid var(--border); }
+.student-timeline-entry-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.student-timeline-entry-heading h3 { margin: 3px 0 0; color: var(--foreground); font-size: 15px; }
+.student-timeline-entry-heading time { flex-shrink: 0; color: var(--text-muted); font-size: 12px; }
+.student-timeline-entry-type { color: var(--primary-active); font-size: 11px; letter-spacing: .04em; }
+.student-timeline-summary { margin: 8px 0 0; color: var(--foreground); font-size: 13px; line-height: 1.7; white-space: pre-wrap; }
+.student-timeline-metadata, .student-timeline-communication { display: flex; flex-wrap: wrap; gap: 7px 16px; margin: 11px 0 0; }
+.student-timeline-metadata > div, .student-timeline-communication > div { display: inline-flex; gap: 5px; min-width: 0; font-size: 12px; line-height: 1.5; }
+.student-timeline-metadata dt, .student-timeline-communication dt { color: var(--text-muted); }
+.student-timeline-metadata dd, .student-timeline-communication dd { margin: 0; color: var(--foreground); overflow-wrap: anywhere; }
+.student-timeline-communication { padding-top: 10px; border-top: 1px dashed var(--border); }
+@media (max-width: 640px) { .student-timeline-heading, .student-timeline-entry-heading, .student-timeline-error { align-items: flex-start; flex-direction: column; } }
