@@ -117,7 +117,7 @@ async function assertZip(zipPath, entries) {
   for (const entry of entries) assert.deepEqual(actual.get(entry.name), await readFile(entry.sourcePath));
 }
 
-test('all 45 business models: private database A, shared database B and archive preserve only the selected teacher', async () => {
+test('all 46 business models: private database A, shared database B and archive preserve only the selected teacher', async () => {
   for (const [index, teacher] of teachers.entries()) {
     const out = join(root, `export-${index}`);
     await main(['--teacher-id', teacher, '--out', out, '--zip']);

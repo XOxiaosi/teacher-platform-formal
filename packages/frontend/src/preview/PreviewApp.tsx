@@ -13,6 +13,7 @@ import type {
   RetryFeedbackDraftTaskBody,
   UpdateFeedbackDraftTaskBody,
 } from '../contracts/feedback-draft';
+import type { LessonStatusCorrectionConfirmation, LessonStatusCorrectionPrepareRequest, LessonStatusCorrectionPrepareResult } from '../contracts/lesson-status-correction';
 
 export type Toast = { text: string; kind?: 'warn' | 'ok' } | null;
 export type FeedbackEvidenceItem = {
@@ -88,6 +89,8 @@ export type PreviewActions = {
   saveRule: (rule: RecurrenceRule) => void | Promise<void>; replaceRuleFrom: (ruleId: string, from: string, rule: RecurrenceRule) => void | Promise<void>; endRuleBefore?: (ruleId: string, from: string) => void | Promise<void>; setRuleEnabled: (id: string, enabled: boolean) => void | Promise<void>;
   addPayment: (payment: Payment) => void | Promise<void>;
   pendingPayment?: Payment;
+  prepareLessonStatusCorrection?: (request: LessonStatusCorrectionPrepareRequest) => Promise<LessonStatusCorrectionPrepareResult>;
+  confirmLessonStatusCorrection?: (confirmationId: string) => Promise<LessonStatusCorrectionConfirmation>;
 };
 
 function getRoute() { return location.hash.replace(/^#\/?/, '').split('?')[0].split('/').filter(Boolean); }

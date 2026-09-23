@@ -16,6 +16,7 @@ model Student {
   payments        Payment[]
   lessonLedgerEntries LessonLedgerEntry[]
   lessonLedgerAdjustmentConfirmations LessonLedgerAdjustmentConfirmation[]
+  lessonStatusCorrectionConfirmations LessonStatusCorrectionConfirmation[]
   completionSnapshots ScheduleCompletionSnapshot[]
   parentFeedbacks ParentFeedback[]
   feedbackDraftTasks FeedbackDraftTask[]
@@ -219,6 +220,7 @@ model Lesson {
   parentFeedbacks ParentFeedback[]
   lessonLedgerEntries LessonLedgerEntry[]
   completionSnapshots ScheduleCompletionSnapshot[]
+  lessonStatusCorrectionConfirmations LessonStatusCorrectionConfirmation[]
 
   @@index([studentId])
   @@index([studentId, status])

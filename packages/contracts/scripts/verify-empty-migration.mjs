@@ -124,7 +124,7 @@ async function verify() {
       'TeacherRegistry', 'TeacherInvitation', 'SessionStore', 'UserRequirement', 'ProviderConfig', 'ProviderUsage',
       'AdminAccount', 'AdminAuditLog', 'ChannelIdentity', 'MediaAsset', 'ChannelMessage', 'ChannelConversation',
       'CaptureEvent', 'CaptureTask', 'CaptureCandidate', 'CaptureDeletionReceipt',
-      'LessonLedgerEntry', 'LessonLedgerAdjustmentConfirmation',
+      'LessonLedgerEntry', 'LessonLedgerAdjustmentConfirmation', 'LessonStatusCorrectionConfirmation',
       'RecurrenceRule', 'RecurrenceRuleParticipant', 'ScheduleRevision', 'ScheduleCompletionSnapshot',
       'TeacherWorkspacePreference', 'WebMutationReceipt', 'SchedulingWebMutationReceipt', 'TaskRuntime', 'StepReceipt',
       '_prisma_migrations',

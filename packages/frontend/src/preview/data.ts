@@ -2,12 +2,14 @@ import type { WechatFeedback } from './wechat-feedback';
 import { createDemoWechatFeedbacks } from './wechat-feedback';
 
 export type Student = { id: string; name: string; grade: string; balance: number; notes: string[] };
+export type LessonAttendance = { lessonId: string; studentId: string; status: 'pending' | 'attended' | 'absent'; updatedAt: string };
 export type Schedule = {
   createdAt?: string; updatedAt?: string; version?: string;
   id: string; day: string; start: string; end: string; location: string;
   participants: string[]; format: '一对一' | '小班'; note: string; status: '已排期' | '已完成' | '已取消';
   /** A stored exception or materialized history for a recurring occurrence. */
   recurrenceRuleId?: string; recurrenceDay?: string;
+  attendance?: LessonAttendance[];
 };
 export type RecurrenceRule = {
   updatedAt?: string; version?: string;

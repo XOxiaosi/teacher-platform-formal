@@ -42,6 +42,7 @@ import type { UpdateLessonRecordUseCase } from '../use-cases/update-lesson-recor
 import type { UpdatePaymentUseCase } from '../use-cases/update-payment/types.js';
 import type { UpdateMemoUseCase } from '../use-cases/update-memo/types.js';
 import type { UpdateParentFeedbackContentUseCase } from '../use-cases/update-parent-feedback-content/types.js';
+import type { LessonStatusFixUseCase } from '../use-cases/lesson-status-fix/types.js';
 import type { GenerateFeedbackDraftUseCase } from '../use-cases/generate-feedback-draft/types.js';
 import type { CaptureService } from '../../features/capture/index.js';
 import type { SchedulingWebService } from '../../features/scheduling-web/index.js';
@@ -108,6 +109,7 @@ export interface SchedulingWebRouteDependencies {
 export interface PaymentRouteDependencies {
   payments: Pick<PaymentService, 'listPayments' | 'createPayment'>;
   ledger: Pick<LessonLedgerService, 'prepareAdjustment' | 'confirmAdjustment' | 'listEntries'>;
+  lessonStatusCorrections: Pick<LessonStatusFixUseCase, 'prepareLessonStatusCorrection' | 'confirmLessonStatusCorrection'>;
 }
 
 export interface DailyReviewRouteDependencies {

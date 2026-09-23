@@ -52,6 +52,7 @@ import { createUpdatePaymentUseCase } from '../use-cases/update-payment/index.js
 import { createUpdateMemoUseCase } from '../use-cases/update-memo/index.js';
 import { createUpdateParentFeedbackContentUseCase } from '../use-cases/update-parent-feedback-content/index.js';
 import { createGenerateFeedbackDraftUseCase } from '../use-cases/generate-feedback-draft/index.js';
+import { createLessonStatusFixUseCase } from '../use-cases/lesson-status-fix/index.js';
 import { createAssembleParentFeedbackContextUseCase } from '../use-cases/assemble-parent-feedback-context/index.js';
 import { createCaptureScoreFromTextUseCase } from '../use-cases/capture-score-from-text/index.js';
 import { createCommunicationService } from '../../features/student-communications/index.js';
@@ -170,6 +171,7 @@ export function createCoreRouteDependencies(
   const plannedSchedules = createPlannedScheduleUseCase({ scheduling: schedules, trustedClock });
   const payments = createPaymentService({ getClient: clientProvider.getClient, cipher: fieldCipher });
   const lessonLedger = createLessonLedgerService({ getClient: clientProvider.getClient, cipher: fieldCipher });
+  const lessonStatusCorrections = createLessonStatusFixUseCase({ getClient: clientProvider.getClient, cipher: fieldCipher });
   const scheduleComplete = createScheduleCompleteUseCase({ getClient: clientProvider.getClient, cipher: fieldCipher });
   const balanceCalc = createBalanceCalcUseCase({ getClient: clientProvider.getClient });
   const studentProfile = createStudentProfileUseCase({ getClient: clientProvider.getClient });
@@ -466,7 +468,7 @@ export function createCoreRouteDependencies(
     schedules: { schedules, plannedSchedules, scheduleComplete },
     schedulingWeb: { schedulingWeb },
     workspaceWeb,
-    payments: { payments, ledger: lessonLedger },
+    payments: { payments, ledger: lessonLedger, lessonStatusCorrections },
     dailyReview: { dailyReview },
     aiInput: { saveRawInput },
     capture: { capture },

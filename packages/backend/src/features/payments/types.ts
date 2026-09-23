@@ -90,6 +90,7 @@ export interface LessonLedgerEntryData {
   paymentId: string | null;
   lessonId: string | null;
   adjustmentConfirmationId: string | null;
+  statusCorrectionConfirmationId: string | null;
   clientRequestId: string | null;
   createdAt: Date;
 }
@@ -162,6 +163,10 @@ export interface RecordLessonStatusTransitionInput {
   lessonId: string;
   fromStatus: 'attended' | 'absent';
   toStatus: 'attended' | 'absent';
+  /** The correction confirmation owns this optional immutable entry. */
+  statusCorrectionConfirmationId?: string;
+  /** The teacher-supplied correction reason is encrypted with the entry. */
+  reason?: string;
 }
 
 export interface RecordPurchaseLedgerInput {

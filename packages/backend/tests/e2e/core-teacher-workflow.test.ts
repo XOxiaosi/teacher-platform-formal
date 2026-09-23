@@ -15,6 +15,8 @@ const prisma = new PrismaClient();
 const TEACHER_ID = 'test-teacher-e2e-core-workflow';
 
 async function cleanup() {
+  await prisma.lessonLedgerEntry.deleteMany({ where: { teacherId: TEACHER_ID } });
+  await prisma.lessonStatusCorrectionConfirmation.deleteMany({ where: { teacherId: TEACHER_ID } });
   await prisma.pushRecord.deleteMany({ where: { teacherId: TEACHER_ID } });
   await prisma.dailyReview.deleteMany({ where: { teacherId: TEACHER_ID } });
   await prisma.lesson.deleteMany({ where: { teacherId: TEACHER_ID } });
@@ -95,22 +97,34 @@ describe('核心教师工作流端到端', () => {
     expect(completed.value.lesson.status).toBe('attended');
     expect(completed.value.lesson.studentId).toBe(createdStudent.value.id);
 
-    const corrected = await lessonStatusFix.fixLessonStatus({
+    const correctionPrepared = await lessonStatusFix.prepareLessonStatusCorrection({
+      teacherId: TEACHER_ID,
       lessonId: completed.value.lesson.id,
       targetStatus: 'absent',
+      reason: '端到端考勤更正',
+      clientRequestId: 'core-status-fix-0001',
     });
+    expect(correctionPrepared.ok).toBe(true);
+    if (!correctionPrepared.ok) return;
+    const corrected = await lessonStatusFix.confirmLessonStatusCorrection({ teacherId: TEACHER_ID, confirmationId: correctionPrepared.value.confirmation.id });
     expect(corrected.ok).toBe(true);
     if (!corrected.ok) return;
     expect(corrected.value.lesson.status).toBe('absent');
-    expect(corrected.value.balance).toEqual({ purchased: 10, attended: 0, remaining: 10 });
+    expect(corrected.value.balance).toEqual({ purchased: 10, attended: 0, adjustments: 0, remaining: 10 });
 
-    const restored = await lessonStatusFix.fixLessonStatus({
+    const restorePrepared = await lessonStatusFix.prepareLessonStatusCorrection({
+      teacherId: TEACHER_ID,
       lessonId: completed.value.lesson.id,
       targetStatus: 'attended',
+      reason: '端到端考勤恢复',
+      clientRequestId: 'core-status-fix-0002',
     });
+    expect(restorePrepared.ok).toBe(true);
+    if (!restorePrepared.ok) return;
+    const restored = await lessonStatusFix.confirmLessonStatusCorrection({ teacherId: TEACHER_ID, confirmationId: restorePrepared.value.confirmation.id });
     expect(restored.ok).toBe(true);
     if (!restored.ok) return;
-    expect(restored.value.balance).toEqual({ purchased: 10, attended: 1, remaining: 9 });
+    expect(restored.value.balance).toEqual({ purchased: 10, attended: 1, adjustments: 0, remaining: 9 });
 
     const balance = await balanceCalc.calculateBalance({ teacherId: TEACHER_ID, studentId: createdStudent.value.id });
     expect(balance.ok).toBe(true);

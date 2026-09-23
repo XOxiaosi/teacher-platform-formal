@@ -170,7 +170,8 @@ export function createLessonLedgerService(
             entryType: plan.value.entryType,
             lessonDelta: plan.value.lessonDelta,
             lessonId: lesson.id,
-            reasonCiphertext: encryptFieldValue(cipher, plan.value.reason),
+            reasonCiphertext: encryptFieldValue(cipher, input.reason ?? plan.value.reason),
+            statusCorrectionConfirmationId: input.statusCorrectionConfirmationId ?? null,
             createdAtTs: now.value,
           },
         });
@@ -398,8 +399,8 @@ function isUnique(error: unknown) {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
 }
 
-function ledgerAudit(entry: { studentId: string; entryType: string; lessonDelta: number; paymentId?: string | null; lessonId?: string | null; adjustmentConfirmationId?: string | null }) {
-  return { studentId: entry.studentId, entryType: entry.entryType, lessonDelta: entry.lessonDelta, paymentId: entry.paymentId ?? null, lessonId: entry.lessonId ?? null, adjustmentConfirmationId: entry.adjustmentConfirmationId ?? null };
+function ledgerAudit(entry: { studentId: string; entryType: string; lessonDelta: number; paymentId?: string | null; lessonId?: string | null; adjustmentConfirmationId?: string | null; statusCorrectionConfirmationId?: string | null }) {
+  return { studentId: entry.studentId, entryType: entry.entryType, lessonDelta: entry.lessonDelta, paymentId: entry.paymentId ?? null, lessonId: entry.lessonId ?? null, adjustmentConfirmationId: entry.adjustmentConfirmationId ?? null, statusCorrectionConfirmationId: entry.statusCorrectionConfirmationId ?? null };
 }
 
 function attendanceTransitionPlan(input: RecordLessonStatusTransitionInput) {
@@ -413,7 +414,7 @@ function attendanceTransitionPlan(input: RecordLessonStatusTransitionInput) {
 }
 
 function toEntry(row: any, cipher: FieldCipher | undefined): LessonLedgerEntryData {
-  return { id: row.id, teacherId: row.teacherId, studentId: row.studentId, entryType: row.entryType, lessonDelta: row.lessonDelta, amount: row.amount ?? null, reason: row.reasonCiphertext == null ? null : decryptFieldValue(cipher, row.reasonCiphertext), paymentId: row.paymentId ?? null, lessonId: row.lessonId ?? null, adjustmentConfirmationId: row.adjustmentConfirmationId ?? null, clientRequestId: row.clientRequestId ?? null, createdAt: row.createdAtTs };
+  return { id: row.id, teacherId: row.teacherId, studentId: row.studentId, entryType: row.entryType, lessonDelta: row.lessonDelta, amount: row.amount ?? null, reason: row.reasonCiphertext == null ? null : decryptFieldValue(cipher, row.reasonCiphertext), paymentId: row.paymentId ?? null, lessonId: row.lessonId ?? null, adjustmentConfirmationId: row.adjustmentConfirmationId ?? null, statusCorrectionConfirmationId: row.statusCorrectionConfirmationId ?? null, clientRequestId: row.clientRequestId ?? null, createdAt: row.createdAtTs };
 }
 
 function toConfirmation(row: any, cipher: FieldCipher | undefined): LedgerAdjustmentConfirmationData {

@@ -64,6 +64,29 @@ type AdjustmentRequestBody = {
   clientRequestId: string;
 };
 
+type LessonStatusCorrectionRequestBody = {
+  lessonId: string;
+  targetStatus: 'attended' | 'absent';
+  reason: string;
+  clientRequestId: string;
+};
+
+const CLIENT_REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
+const MAX_CORRECTION_REASON_LENGTH = 500;
+
+function parseLessonStatusCorrectionRequestBody(body: unknown): { ok: true; value: LessonStatusCorrectionRequestBody } | { ok: false; error: ReturnType<typeof validationError> } {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) return { ok: false, error: validationError('请求体必须是对象', 'body') };
+  const value = body as Record<string, unknown>;
+  const lessonId = typeof value.lessonId === 'string' ? value.lessonId.trim() : '';
+  const reason = typeof value.reason === 'string' ? value.reason.trim() : '';
+  const clientRequestId = typeof value.clientRequestId === 'string' ? value.clientRequestId.trim() : '';
+  if (!lessonId) return { ok: false, error: validationError('lessonId 必填', 'lessonId') };
+  if (value.targetStatus !== 'attended' && value.targetStatus !== 'absent') return { ok: false, error: validationError('targetStatus 仅支持 attended 或 absent', 'targetStatus') };
+  if (!reason || reason.length > MAX_CORRECTION_REASON_LENGTH) return { ok: false, error: validationError('更正原因必填且不能超过 500 个字符', 'reason') };
+  if (!CLIENT_REQUEST_ID_PATTERN.test(clientRequestId)) return { ok: false, error: validationError('clientRequestId 格式无效', 'clientRequestId') };
+  return { ok: true, value: { lessonId, targetStatus: value.targetStatus, reason, clientRequestId } };
+}
+
 function parseAdjustmentRequestBody(body: unknown): { ok: true; value: AdjustmentRequestBody } | { ok: false; error: ReturnType<typeof validationError> } {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) {
     return { ok: false, error: validationError('请求体必须是对象', 'body') };
@@ -182,6 +205,17 @@ export function createPaymentRouter(dependencies: PaymentRouteDependencies): Rou
     sendResult(res, result, 201);
   });
 
+  // Attendance correction is intentionally independent from ordinary schedule
+  // editing. This endpoint only persists the pending confirmation and audit.
+  router.post('/lesson-status-corrections', async (req, res) => {
+    const teacher = getTeacherId(req);
+    if (!teacher.ok) return sendTeacherError(res, teacher.error);
+    const body = parseLessonStatusCorrectionRequestBody(req.body);
+    if (!body.ok) return sendTeacherError(res, body.error);
+    const result = await dependencies.lessonStatusCorrections.prepareLessonStatusCorrection({ teacherId: teacher.value, ...body.value });
+    sendResult(res, result, 201);
+  });
+
   router.get('/lesson-ledger/entries', async (req, res) => {
     const teacher = getTeacherId(req);
     if (!teacher.ok) return sendTeacherError(res, teacher.error);
@@ -228,6 +262,15 @@ export function createPaymentRouter(dependencies: PaymentRouteDependencies): Rou
       teacherId: teacher.value,
       confirmationId,
     });
+    sendResult(res, result);
+  });
+
+  router.post('/lesson-status-corrections/:confirmationId/confirm', async (req, res) => {
+    const teacher = getTeacherId(req);
+    if (!teacher.ok) return sendTeacherError(res, teacher.error);
+    const confirmationId = typeof req.params.confirmationId === 'string' ? req.params.confirmationId.trim() : '';
+    if (!confirmationId) return sendTeacherError(res, validationError('confirmationId 必填', 'confirmationId'));
+    const result = await dependencies.lessonStatusCorrections.confirmLessonStatusCorrection({ teacherId: teacher.value, confirmationId });
     sendResult(res, result);
   });
 

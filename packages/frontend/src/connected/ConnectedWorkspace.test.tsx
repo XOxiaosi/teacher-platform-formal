@@ -4,17 +4,18 @@ import { ConnectedWorkspace } from './ConnectedWorkspace';
 import { createDemoData } from '../preview/data';
 import { clearPendingPaymentRequests, readPendingPaymentRequest } from './payments/pending-payment';
 
-const mock = vi.hoisted(() => ({ availability: vi.fn(), load: vi.fn(), command: vi.fn(), schedule: vi.fn(), payment: vi.fn(), balance: vi.fn(), ledger: vi.fn(), update: vi.fn(), logout: vi.fn(), records: vi.fn(), generate: vi.fn(), createFeedback: vi.fn(), updateFeedback: vi.fn(), feedbackSnapshot: vi.fn(), createDraftTask: vi.fn(), listDraftTasks: vi.fn(), getDraftTask: vi.fn(), retryDraftTask: vi.fn(), updateDraftTask: vi.fn() }));
+const mock = vi.hoisted(() => ({ availability: vi.fn(), load: vi.fn(), command: vi.fn(), schedule: vi.fn(), payment: vi.fn(), balance: vi.fn(), ledger: vi.fn(), update: vi.fn(), logout: vi.fn(), records: vi.fn(), generate: vi.fn(), createFeedback: vi.fn(), updateFeedback: vi.fn(), feedbackSnapshot: vi.fn(), createDraftTask: vi.fn(), listDraftTasks: vi.fn(), getDraftTask: vi.fn(), retryDraftTask: vi.fn(), updateDraftTask: vi.fn(), prepareCorrection: vi.fn(), confirmCorrection: vi.fn() }));
 vi.mock('../app/teacher-context', () => ({ useAuth: () => ({ teacherId: 'teacher-a', displayName: '验收老师', email: 'a@example.test', logout: mock.logout }) }));
 vi.mock('./workspace-api', () => ({ loadWorkspace: mock.load, workspaceCommand: mock.command, schedulingCommand: mock.schedule }));
 vi.mock('../api/payments', () => ({ createPayment: mock.payment, listLessonLedgerEntries: mock.ledger }));
+vi.mock('../api/lesson-status-corrections', () => ({ prepareLessonStatusCorrection: mock.prepareCorrection, confirmLessonStatusCorrection: mock.confirmCorrection }));
 vi.mock('../api/students', () => ({ updateStudentProfile: mock.update, getStudentBalance: mock.balance, listStudentRecords: mock.records, reviewStudentRecord: vi.fn(), getStudentRecordSource: vi.fn() }));
 vi.mock('../api/feedback', () => ({ generateFeedbackDraft: mock.generate, createFeedback: mock.createFeedback, getFeedbackSnapshot: mock.feedbackSnapshot, updateFeedbackContent: mock.updateFeedback, createFeedbackDraftTask: mock.createDraftTask, listFeedbackDraftTasks: mock.listDraftTasks, getFeedbackDraftTask: mock.getDraftTask, retryFeedbackDraftTask: mock.retryDraftTask, updateFeedbackDraftTask: mock.updateDraftTask }));
 vi.mock('../api/teaching-tasks', () => ({ getTeachingRuntimeAvailability: mock.availability }));
 vi.mock('../connected/assistant', () => ({ AssistantWorkspace: ({ teacherId }: { teacherId: string }) => <section aria-label="正式教学助手入口"><h1>教学助手</h1><p>当前账号：{teacherId}</p></section> }));
 
 const snapshot = () => ({ data: createDemoData(), studentVersions: { s1: 'v1', s2: 'v2' }, feedbackVersions: {}, memoVersions: { m1: 'm1-v1' }, preferenceVersion: null });
-beforeEach(() => { vi.clearAllMocks(); clearPendingPaymentRequests('teacher-a'); mock.availability.mockResolvedValue({ runtimeAvailability: 'unavailable' }); location.hash = '#/students'; mock.load.mockResolvedValue(snapshot()); mock.command.mockResolvedValue({}); mock.schedule.mockResolvedValue({}); mock.balance.mockResolvedValue({ purchased: 8, attended: 1, adjustments: 2, remaining: 9 }); mock.ledger.mockResolvedValue([]); mock.listDraftTasks.mockResolvedValue({ items: [] }); });
+beforeEach(() => { vi.clearAllMocks(); clearPendingPaymentRequests('teacher-a'); mock.availability.mockResolvedValue({ runtimeAvailability: 'unavailable' }); location.hash = '#/students'; mock.load.mockResolvedValue(snapshot()); mock.command.mockResolvedValue({}); mock.schedule.mockResolvedValue({}); mock.balance.mockResolvedValue({ purchased: 8, attended: 1, adjustments: 2, remaining: 9 }); mock.ledger.mockResolvedValue([]); mock.listDraftTasks.mockResolvedValue({ items: [] }); mock.prepareCorrection.mockResolvedValue({ confirmation: { id: 'correction-1', status: 'pending', lessonId: 'lesson-1', studentId: 's1', fromStatus: 'attended', toStatus: 'absent', reason: '签到复核' }, balanceBefore: { purchased: 10, attended: 1, adjustments: 0, remaining: 9 }, balanceAfter: { purchased: 10, attended: 0, adjustments: 0, remaining: 10 }, plannedLedgerEntry: null }); mock.confirmCorrection.mockResolvedValue({ confirmation: { id: 'correction-1', status: 'confirmed' }, lesson: { id: 'lesson-1', studentId: 's1', status: 'absent', updatedAt: 'v2' }, balance: { purchased: 10, attended: 0, adjustments: 0, remaining: 10 } }); });
 
 describe('connected workspace server-backed writes', () => {
   async function preparePayment(amount = '200') {
@@ -354,6 +355,26 @@ describe('connected workspace server-backed writes', () => {
     }));
     expect(mock.schedule.mock.calls.some(([payload]) => payload.kind === 'save-schedule' || payload.kind === 'complete')).toBe(false);
     expect(screen.queryByText('已保存课程修订；未重新扣课。')).not.toBeInTheDocument();
+  });
+  it('previews attendance correction without reload and reloads only after confirmation', async () => {
+    location.hash = '#/schedules';
+    const state = snapshot();
+    const schedule = { ...state.data.schedules[0], status: '已完成' as const, attendance: [{ lessonId: 'lesson-1', studentId: 's1', status: 'attended' as const, updatedAt: 'v1' }] };
+    state.data = { ...state.data, schedules: [schedule], recurrenceRules: [] };
+    mock.load.mockResolvedValue(state);
+    render(<ConnectedWorkspace />);
+    await screen.findByRole('heading', { name: '日程安排' });
+    fireEvent.click(screen.getByRole('button', { name: /查看 09:00 至 10:30/ }));
+    fireEvent.click(screen.getByRole('button', { name: '更正李雨桐的出勤状态' }));
+    fireEvent.change(screen.getByLabelText('更正原因（必填）'), { target: { value: '签到复核' } });
+    fireEvent.click(screen.getByRole('button', { name: '查看影响预览' }));
+    await screen.findByText('9 → 10（+1）');
+    expect(mock.prepareCorrection).toHaveBeenCalledWith(expect.objectContaining({ lessonId: 'lesson-1', targetStatus: 'absent', reason: '签到复核', clientRequestId: expect.any(String) }));
+    expect(mock.load).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: '确认更正' }));
+    await waitFor(() => expect(mock.confirmCorrection).toHaveBeenCalledWith('correction-1'));
+    await waitFor(() => expect(mock.load).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText('出勤状态更正已保存')).toBeInTheDocument();
   });
   it('sends a future recurrence move with the original occurrence boundary and target replacement start', async () => {
     location.hash = '#/schedules';

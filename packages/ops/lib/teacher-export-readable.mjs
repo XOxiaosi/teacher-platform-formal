@@ -13,7 +13,7 @@ export const MEDIA_HEADER_BYTES = 37;
 export const READABLE_TEXT_FIELDS = Object.freeze({
   AINote: ['rawInput'], CaptureEvent: ['rawText'], ConversationTurn: ['content'], AgentExecution: ['reply'],
   PendingAction: ['beforeSummary', 'afterSummary'], Payment: ['note'], LessonLedgerEntry: ['reasonCiphertext'],
-  LessonLedgerAdjustmentConfirmation: ['reasonCiphertext'], Memo: ['content'], PushRecord: ['content'],
+  LessonLedgerAdjustmentConfirmation: ['reasonCiphertext'], LessonStatusCorrectionConfirmation: ['reasonCiphertext'], Memo: ['content'], PushRecord: ['content'],
   ParentFeedback: ['title', 'content', 'parentName'], FeedbackEvidence: ['summary'], StudentSourceRecord: ['rawText'], StudentRecord: ['summary'],
   AssessmentDetail: ['note'], TaskRuntime: ['title'], Lesson: ['progress', 'studentState', 'homework', 'teacherNote'],
   Schedule: ['locationCiphertext', 'operationalNoteCiphertext'], RecurrenceRule: ['locationCiphertext', 'operationalNoteCiphertext'],

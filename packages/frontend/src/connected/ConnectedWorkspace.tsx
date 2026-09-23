@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useAuth } from '../app/teacher-context';
 import { createCapture, confirmCapture } from '../api/captures';
 import { createPayment } from '../api/payments';
+import { confirmLessonStatusCorrection, prepareLessonStatusCorrection } from '../api/lesson-status-corrections';
 import { updateStudentProfile } from '../api/students';
 import {
   createFeedback,
@@ -164,6 +165,13 @@ export function ConnectedWorkspace() {
         clearPendingPaymentRequest(auth.teacherId!, clientRequestId);
         return result;
       });
+    },
+    prepareLessonStatusCorrection: async (request) => prepareLessonStatusCorrection(request),
+    confirmLessonStatusCorrection: async (confirmationId) => {
+      const intent = `lesson-status-correction:${confirmationId}`;
+      const result = await transaction(() => confirmLessonStatusCorrection(confirmationId)) as Awaited<ReturnType<typeof confirmLessonStatusCorrection>>;
+      keys.current.delete(intent);
+      return result.confirmation;
     },
     saveSchedule: (schedule) => {
       const current = snapshotRef.current!.data;

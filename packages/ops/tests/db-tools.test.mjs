@@ -67,7 +67,7 @@ test('db-health-check parseArgs：--limit / --auto-migrate', () => {
   assert.throws(() => parseHealthArgs(['--limit', 'abc']), /正整数/);
 });
 
-test('迁移部署到新库后：51 表 / 41 迁移（冒烟口径）', () => {
+test('迁移部署到新库后：52 表 / 42 迁移（冒烟口径）', () => {
   const targetUrl = withDatabase(sourceUrl, createdDb);
   runMigrateDeploy(targetUrl);
   const tables = psqlQuery(targetUrl, createdDb, "SELECT COUNT(*) FROM pg_tables WHERE schemaname='public'");
@@ -76,14 +76,14 @@ test('迁移部署到新库后：51 表 / 41 迁移（冒烟口径）', () => {
     createdDb,
     'SELECT COUNT(*) FROM "_prisma_migrations" WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL',
   );
-  assert.equal(tables[0], '51');
-  assert.equal(migrations[0], '41');
+  assert.equal(tables[0], '52');
+  assert.equal(migrations[0], '42');
 });
 
 test('db-health-check checkOneDatabase：ok / missing 分类', () => {
   const ok = checkOneDatabase(sourceUrl, maintenanceUrl, createdDb);
   assert.equal(ok.status, 'ok');
-  assert.match(ok.detail, /migrations=41/);
+  assert.match(ok.detail, /migrations=42/);
 
   const missing = checkOneDatabase(sourceUrl, maintenanceUrl, 'teacher_db_definitely_missing_000');
   assert.equal(missing.status, 'missing');

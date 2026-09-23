@@ -9,7 +9,7 @@ const ORDER = [
   'Student', 'Conversation', 'CaptureEvent', 'CaptureTask', 'CaptureCandidate', 'CaptureDeletionReceipt',
   'TaskRuntime', 'AgentExecution', 'ConversationTurn', 'StepReceipt', 'PendingAction',
   'RecurrenceRule', 'RecurrenceRuleParticipant', 'Schedule', 'ScheduleParticipant', 'ScheduleRevision',
-  'Lesson', 'Payment', 'LessonLedgerAdjustmentConfirmation', 'LessonLedgerEntry', 'ScheduleCompletionSnapshot',
+  'Lesson', 'Payment', 'LessonLedgerAdjustmentConfirmation', 'LessonStatusCorrectionConfirmation', 'LessonLedgerEntry', 'ScheduleCompletionSnapshot',
   'StudentSourceRecord', 'StudentRecord', 'AssessmentDetail', 'CommunicationDetail',
   'ParentFeedback', 'FeedbackDraftTask', 'FeedbackDraftAttempt', 'FeedbackContextSnapshot', 'FeedbackEvidence',
 ];

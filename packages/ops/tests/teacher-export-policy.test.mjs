@@ -4,12 +4,12 @@ import { Prisma } from '@prisma/client';
 import { BUSINESS_TABLES, EXPORT_POLICY, SHARED_DB_TABLES, TEACHER_DB_TABLES, validateExportPolicy, exportModelPolicy, assertExportTeacherId } from '../lib/teacher-export-policy.mjs';
 const models = Prisma.dmmf.datamodel.models;
 
-test('50 models: 39 tenant tables + 6 shared tables + public account + 4 excluded models', () => {
+test('51 models: 40 tenant tables + 6 shared tables + public account + 4 excluded models', () => {
   assert.equal(validateExportPolicy(), true);
-  assert.equal(models.length, 50);
-  assert.equal(TEACHER_DB_TABLES.length, 39);
+  assert.equal(models.length, 51);
+  assert.equal(TEACHER_DB_TABLES.length, 40);
   assert.equal(SHARED_DB_TABLES.length, 6);
-  assert.equal(BUSINESS_TABLES.length, 45);
+  assert.equal(BUSINESS_TABLES.length, 46);
   assert.deepEqual(Object.keys(EXPORT_POLICY).filter(name => EXPORT_POLICY[name].source === 'excluded').sort(), ['AdminAccount', 'AdminAuditLog', 'SessionStore', 'TeacherInvitation']);
   for (const name of BUSINESS_TABLES) assert.ok(EXPORT_POLICY[name].fields.includes('teacherId'));
 });

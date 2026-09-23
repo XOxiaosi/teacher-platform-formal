@@ -58,19 +58,19 @@ describe('D47 audit-time field matrix boundary', () => {
     expect(extractDateTimeFieldKeys(schema)).toEqual(['Probe.occurredAt', 'Probe.optionalAt']);
   });
 
-  it('手工矩阵与Prisma schema的134个DateTime字段双向完全一致', () => {
+  it('手工矩阵与Prisma schema的138个DateTime字段双向完全一致', () => {
     const schemaKeys = extractDateTimeFieldKeys(readPrismaSchema());
     const matrixKeys = D47_AUDIT_TIME_FIELD_MATRIX.map((entry) => entry.key);
     const uniqueMatrixKeys = new Set(matrixKeys);
 
-    expect(schemaKeys).toHaveLength(134);
-    expect(matrixKeys).toHaveLength(134);
+    expect(schemaKeys).toHaveLength(138);
+    expect(matrixKeys).toHaveLength(138);
     expect(uniqueMatrixKeys.size).toBe(matrixKeys.length);
     expect(schemaKeys.filter((key) => !uniqueMatrixKeys.has(key))).toEqual([]);
     expect(matrixKeys.filter((key) => !schemaKeys.includes(key))).toEqual([]);
   });
 
-  it('冻结130个instant、四个业务日期与零本地墙上时间', () => {
+  it('冻结134个instant、四个业务日期与零本地墙上时间', () => {
     const instantKeys = D47_AUDIT_TIME_FIELD_MATRIX
       .filter((entry) => entry.semantics === 'INSTANT')
       .map((entry) => entry.key);
@@ -81,16 +81,16 @@ describe('D47 audit-time field matrix boundary', () => {
       .filter((entry) => entry.semantics === 'LOCAL_WALL_TIME')
       .map((entry) => entry.key);
 
-    expect(instantKeys).toHaveLength(130);
+    expect(instantKeys).toHaveLength(134);
     expect(businessDateKeys).toEqual(['DailyReview.dateTs', 'Schedule.recurrenceDay', 'RecurrenceRule.startDate', 'RecurrenceRule.endDate']);
     expect(localWallTimeKeys).toEqual([]);
   });
 
-  it('新增17个字段逐项登记来源、用途和真实代码路径', () => {
+  it('新增21个字段逐项登记来源、用途和真实代码路径', () => {
     const evidenceKeys = D47_NEW_TIME_FIELD_EVIDENCE.map((entry) => entry.key);
     const schemaKeys = extractDateTimeFieldKeys(readPrismaSchema());
-    expect(evidenceKeys).toHaveLength(17);
-    expect(new Set(evidenceKeys).size).toBe(17);
+    expect(evidenceKeys).toHaveLength(21);
+    expect(new Set(evidenceKeys).size).toBe(21);
     for (const entry of D47_NEW_TIME_FIELD_EVIDENCE) {
       expect(schemaKeys).toContain(entry.key);
       expect(entry.purpose.length).toBeGreaterThan(4);

@@ -31,6 +31,7 @@ model LessonLedgerEntry {
   paymentId                String?  @unique
   lessonId                 String?
   adjustmentConfirmationId String?  @unique
+  statusCorrectionConfirmationId String? @unique
   clientRequestId          String?
   createdAtTs              DateTime @default(now()) @db.Timestamptz(3)
 
@@ -38,12 +39,40 @@ model LessonLedgerEntry {
   payment                  Payment?                           @relation(fields: [paymentId], references: [id], onDelete: Cascade)
   lesson                   Lesson?                            @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   adjustmentConfirmation   LessonLedgerAdjustmentConfirmation? @relation(fields: [adjustmentConfirmationId], references: [id], onDelete: Cascade)
+  statusCorrectionConfirmation LessonStatusCorrectionConfirmation? @relation(fields: [statusCorrectionConfirmationId], references: [id], onDelete: Restrict)
   completionSnapshot ScheduleCompletionSnapshot?
 
   @@unique([teacherId, clientRequestId])
   @@index([teacherId, studentId, createdAtTs])
   @@index([studentId])
   @@index([lessonId, createdAtTs])
+}
+
+// Attendance corrections are separate from ordinary schedule edits. Preparing
+// one leaves the Lesson and balance untouched; explicit confirmation may then
+// update the Lesson and append a compatible ledger entry when required.
+model LessonStatusCorrectionConfirmation {
+  id                        String   @id @default(cuid())
+  teacherId                 String
+  lessonId                  String
+  studentId                 String
+  fromStatus                String   // attended | absent
+  toStatus                  String   // attended | absent
+  reasonCiphertext          String
+  clientRequestId           String
+  status                    String   @default("pending") // pending | confirmed | expired
+  expectedLessonUpdatedAtTs DateTime @db.Timestamptz(3)
+  confirmedAtTs             DateTime? @db.Timestamptz(3)
+  createdAtTs               DateTime @default(now()) @db.Timestamptz(3)
+  updatedAtTs               DateTime @updatedAt @db.Timestamptz(3)
+
+  student     Student            @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  lesson      Lesson             @relation(fields: [lessonId], references: [id], onDelete: Restrict)
+  ledgerEntry LessonLedgerEntry?
+
+  @@unique([teacherId, clientRequestId])
+  @@index([teacherId, lessonId, expectedLessonUpdatedAtTs], map: "LessonStatusCorrectionConfirmation_teacher_lesson_version_idx")
+  @@index([teacherId, studentId, createdAtTs])
 }
 
 // 人工退款、赠课和调整必须先创建待确认请求，再由教师明确确认生成不可变流水。

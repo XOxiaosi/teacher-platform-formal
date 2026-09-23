@@ -13,6 +13,8 @@ export type WebStatus = '已排期' | '已完成' | '已取消';
 export interface WebSchedule {
   id: string; day: string; start: string; end: string; location: string;
   participants: string[]; format: WebFormat; note: string; status: WebStatus;
+  /** Materialized per-participant lesson status for formal attendance correction. */
+  attendance: Array<{ lessonId: string; studentId: string; status: 'attended' | 'absent' | 'pending'; updatedAt: string }>;
   recurrenceRuleId?: string; recurrenceDay?: string; createdAt?: string; updatedAt: string; version: string;
 }
 export interface WebRule {
@@ -53,7 +55,7 @@ export interface SchedulingWebServiceOptions {
 }
 
 const ruleInclude = { participants: { orderBy: { createdAtTs: 'asc' } } } as const;
-const scheduleInclude = { participants: { orderBy: { createdAtTs: 'asc' } } } as const;
+const scheduleInclude = { participants: { orderBy: { createdAtTs: 'asc' } }, lessons: { orderBy: { createdAtTs: 'asc' } } } as const;
 const shanghai = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23', minute: '2-digit' });
 
 export function createSchedulingWebService(options: SchedulingWebServiceOptions): SchedulingWebService {
@@ -399,6 +401,10 @@ function statusWeb(value: string): WebStatus {
   if (value === 'cancelled') return '已取消';
   throw new Error(`unsupported scheduling status: ${value}`);
 }
+function attendanceStatusWeb(value: string): WebSchedule['attendance'][number]['status'] {
+  if (value === 'attended' || value === 'absent' || value === 'pending') return value;
+  throw new Error(`unsupported lesson status: ${value}`);
+}
 function unique<T>(values: readonly T[]) { return [...new Set(values)]; }
 function validDate(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -430,7 +436,7 @@ function synthetic(value: string) { const marker = value.lastIndexOf('@'); const
 function matchesVersion(row: { updatedAtTs?: Date } | undefined, expected: string | undefined) { return !!expected && !!row?.updatedAtTs && row.updatedAtTs.toISOString() === expected; }
 function toSchedule(row: any, cipher: FieldCipher | undefined): WebSchedule {
   const updatedAt = row.updatedAtTs.toISOString();
-  return { id: row.id, day: localDay(row.scheduledStartTs), start: localTime(row.scheduledStartTs), end: localTime(row.scheduledEndTs), location: row.locationCiphertext ? decryptFieldValue(cipher, row.locationCiphertext) : '', participants: (row.participants ?? []).map((p: any) => p.studentId), format: formatWeb(row.classFormat), note: row.operationalNoteCiphertext ? decryptFieldValue(cipher, row.operationalNoteCiphertext) : '', status: statusWeb(row.status), ...(row.recurrenceRuleId ? { recurrenceRuleId: row.recurrenceRuleId } : {}), ...(row.recurrenceDay ? { recurrenceDay: localDay(row.recurrenceDay) } : {}), ...(row.createdAtTs ? { createdAt: row.createdAtTs.toISOString() } : {}), updatedAt, version: updatedAt };
+  return { id: row.id, day: localDay(row.scheduledStartTs), start: localTime(row.scheduledStartTs), end: localTime(row.scheduledEndTs), location: row.locationCiphertext ? decryptFieldValue(cipher, row.locationCiphertext) : '', participants: (row.participants ?? []).map((p: any) => p.studentId), attendance: (row.lessons ?? []).map((lesson: any) => ({ lessonId: lesson.id, studentId: lesson.studentId, status: attendanceStatusWeb(lesson.status), updatedAt: lesson.updatedAtTs.toISOString() })), format: formatWeb(row.classFormat), note: row.operationalNoteCiphertext ? decryptFieldValue(cipher, row.operationalNoteCiphertext) : '', status: statusWeb(row.status), ...(row.recurrenceRuleId ? { recurrenceRuleId: row.recurrenceRuleId } : {}), ...(row.recurrenceDay ? { recurrenceDay: localDay(row.recurrenceDay) } : {}), ...(row.createdAtTs ? { createdAt: row.createdAtTs.toISOString() } : {}), updatedAt, version: updatedAt };
 }
 function toRule(row: any, cipher: FieldCipher | undefined): WebRule { const updatedAt = row.updatedAtTs.toISOString(); return { id: row.id, startDate: localDay(row.startDate), weekdays: Array.isArray(row.weekdays) ? row.weekdays as number[] : [], ...(row.endDate ? { endDate: localDay(row.endDate) } : {}), enabled: row.enabled, start: row.startTime, end: row.endTime, location: decryptFieldValue(cipher, row.locationCiphertext), participants: (row.participants ?? []).map((p: any) => p.studentId), format: formatWeb(row.classFormat), note: row.operationalNoteCiphertext ? decryptFieldValue(cipher, row.operationalNoteCiphertext) : '', updatedAt, version: updatedAt }; }
 function ruleFields(rule: any, cipher: FieldCipher | undefined, day: string): WebFields { const dto = toRule(rule, cipher); return { day, start: dto.start, end: dto.end, location: dto.location, participants: dto.participants, format: dto.format, note: dto.note }; }

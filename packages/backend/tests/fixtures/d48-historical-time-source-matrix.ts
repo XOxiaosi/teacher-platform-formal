@@ -151,6 +151,10 @@ export const D48_HISTORICAL_TIME_SOURCE_MATRIX: readonly D48HistoricalTimeSource
   { key: 'LessonLedgerAdjustmentConfirmation.confirmedAtTs', rowCount: 0, source: 'N_A', invariant: 'N_A', anomaly: null, migrationConversion: 'NONE' },
   { key: 'LessonLedgerAdjustmentConfirmation.createdAtTs', rowCount: 0, source: 'N_A', invariant: 'N_A', anomaly: null, migrationConversion: 'NONE' },
   { key: 'LessonLedgerAdjustmentConfirmation.updatedAtTs', rowCount: 0, source: 'N_A', invariant: 'N_A', anomaly: null, migrationConversion: 'NONE' },
+  { key: 'LessonStatusCorrectionConfirmation.expectedLessonUpdatedAtTs', rowCount: 0, source: 'N_A', invariant: 'N_A', anomaly: null, migrationConversion: 'NONE' },
+  { key: 'LessonStatusCorrectionConfirmation.confirmedAtTs', rowCount: 0, source: 'N_A', invariant: 'N_A', anomaly: null, migrationConversion: 'NONE' },
+  { key: 'LessonStatusCorrectionConfirmation.createdAtTs', rowCount: 0, source: 'N_A', invariant: 'N_A', anomaly: null, migrationConversion: 'NONE' },
+  { key: 'LessonStatusCorrectionConfirmation.updatedAtTs', rowCount: 0, source: 'N_A', invariant: 'N_A', anomaly: null, migrationConversion: 'NONE' },
   // T-016/T-017/T-020 新增字段：recurrenceDay 是既有 Schedule 上的业务日期列，
   // 迁移前无历史值；其余字段均属于迁移后新表，同样没有历史数据。
   { key: 'Schedule.recurrenceDay', rowCount: 0, source: 'BUSINESS_DATE', invariant: 'N_A', anomaly: null, migrationConversion: 'NONE' },
