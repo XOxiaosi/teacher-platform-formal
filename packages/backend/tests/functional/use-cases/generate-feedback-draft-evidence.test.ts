@@ -3,12 +3,28 @@ import type { PrismaClient } from '@prisma/client';
 import { createGenerateFeedbackDraftUseCase } from '../../../src/app/use-cases/generate-feedback-draft/generate-feedback-draft-use-case.js';
 import { createAssembleParentFeedbackContextUseCase } from '../../../src/app/use-cases/assemble-parent-feedback-context/assemble-parent-feedback-context-use-case.js';
 import { createFieldCipherFromEnv, encryptFieldValue, encryptJsonFieldValue } from '../../../src/shared/field-encryption/index.js';
-import { prisma, TEACHER_A, createStudentFixture, createLessonFixture, createMockAiClient } from './generate-feedback-draft-use-case.fixtures.js';
+import {
+  prisma,
+  TEACHER_A,
+  TEST_RUNTIME_IDENTITY,
+  createStudentFixture,
+  createLessonFixture,
+  createMockRuntimeDriver,
+  runtimeSuccess,
+} from './generate-feedback-draft-use-case.fixtures.js';
 const cipher = createFieldCipherFromEnv();
 const response = { ok: true as const, value: { content: '标题：学习进展\n内容：今天能独立完成三道计算题，下次继续练习验算。\n所以这样写：根据已确认事实说明下一步。' } };
-function setup(chat = createMockAiClient(response)) {
+function setup(runtimeDriver = createMockRuntimeDriver(response)) {
   const context = createAssembleParentFeedbackContextUseCase({ prisma, cipher });
-  return { chat, useCase: createGenerateFeedbackDraftUseCase({ prisma, cipher, aiClient: chat, context }) };
+  const generated = createGenerateFeedbackDraftUseCase({ prisma, cipher, runtimeDriver, context });
+  return {
+    runtimeDriver,
+    useCase: {
+      execute(input: Parameters<typeof generated.execute>[0]) {
+        return generated.execute({ ...input, runtime: input.runtime ?? TEST_RUNTIME_IDENTITY });
+      },
+    },
+  };
 }
 async function fixture() {
   const student = await createStudentFixture(TEACHER_A, '合成学生');
@@ -26,12 +42,12 @@ describe('A05 generation uses only current server evidence', () => {
     const { student, lesson, record } = await fixture();
     await prisma.lesson.update({ where: { id: lesson.id }, data: { progress: '内部课堂评语', teacherNote: '绝不外发备注' } });
     await makeRecord(student.id, '无关时间窗记录');
-    const { chat, useCase } = setup();
+    const { runtimeDriver, useCase } = setup();
     const result = await useCase.execute({ teacherId: TEACHER_A, studentId: student.id, lessonIds: [lesson.id] });
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.message);
     expect(result.value.evidence.map(item => item.id)).toEqual([record.id]);
-    const prompt = JSON.stringify(vi.mocked(chat.chat).mock.calls[0][0]);
+    const prompt = vi.mocked(runtimeDriver.run).mock.calls[0][0].message;
     expect(prompt).toContain('已确认三道计算题');
     for (const text of ['内部课堂评语', '绝不外发备注', '无关时间窗记录']) expect(prompt).not.toContain(text);
   });
@@ -41,10 +57,10 @@ describe('A05 generation uses only current server evidence', () => {
     if (visibility === 'missing') await prisma.studentRecord.delete({ where: { id: record.id } });
     else await prisma.studentRecord.update({ where: { id: record.id }, data: { visibility } });
     await makeRecord(student.id, '不可替代所选课次的其他记录');
-    const { chat, useCase } = setup();
+    const { runtimeDriver, useCase } = setup();
     const result = await useCase.execute({ teacherId: TEACHER_A, studentId: student.id, lessonIds: [lesson.id] });
     expect(result.ok).toBe(false);
-    expect(chat.chat).not.toHaveBeenCalled();
+    expect(runtimeDriver.run).not.toHaveBeenCalled();
   });
 
   it('explicit old lesson includes its confirmed facts beyond default window with encrypted association', async () => {
@@ -52,27 +68,27 @@ describe('A05 generation uses only current server evidence', () => {
     await prisma.studentRecord.update({ where: { id: record.id }, data: { occurredAtTs: new Date('2020-01-01T00:00:00Z'),
       summary: encryptFieldValue(cipher, '可分享的历史课次事实'),
       structuredData: encryptJsonFieldValue(cipher, { lessonId: lesson.id }) } });
-    const { useCase, chat } = setup();
+    const { useCase, runtimeDriver } = setup();
     const result = await useCase.execute({ teacherId: TEACHER_A, studentId: student.id, lessonIds: [lesson.id] });
     expect(result.ok).toBe(true);
-    expect(JSON.stringify(vi.mocked(chat.chat).mock.calls[0][0])).toContain('可分享的历史课次事实');
-    expect(JSON.stringify(vi.mocked(chat.chat).mock.calls[0][0])).not.toContain('enc:v1');
+    expect(vi.mocked(runtimeDriver.run).mock.calls[0][0].message).toContain('可分享的历史课次事实');
+    expect(vi.mocked(runtimeDriver.run).mock.calls[0][0].message).not.toContain('enc:v1');
   });
 
   it.each(['summary', 'visibility', 'reviewStatus', 'delete', 'association', 'child'] as const)('rejects %s change during model generation', async change => {
     const { student, lesson, record } = await fixture();
-    const chat = createMockAiClient(response);
-    vi.mocked(chat.chat).mockImplementation(async () => {
+    const runtimeDriver = createMockRuntimeDriver(response);
+    vi.mocked(runtimeDriver.run).mockImplementation(async () => {
       if (change === 'delete') await prisma.studentRecord.delete({ where: { id: record.id } });
       else if (change === 'child') await prisma.communicationDetail.create({ data: { teacherId: TEACHER_A, studentRecordId: record.id,
         direction: 'two_way', parentConcerns: ['新增关注'] } });
       else await prisma.studentRecord.update({ where: { id: record.id }, data: change === 'summary' ? { summary: '事实已更正' }
         : change === 'visibility' ? { visibility: 'internal_only' }
           : change === 'reviewStatus' ? { reviewStatus: 'superseded' } : { structuredData: { lessonId: 'another-lesson' } } });
-      return response;
+      return runtimeSuccess(response.value.content);
     });
     try {
-      const { useCase } = setup(chat);
+      const { useCase } = setup(runtimeDriver);
       const result = await useCase.execute({ teacherId: TEACHER_A, studentId: student.id, lessonIds: [lesson.id] });
       expect(result.ok).toBe(false);
       if (!result.ok) expect(result.error.code).toBe('VERSION_CONFLICT');
@@ -86,17 +102,22 @@ describe('A05 generation uses only current server evidence', () => {
   it('pre-model revalidation rejects modified context before any model attempt', async () => {
     const { student, lesson, record } = await fixture();
     const context = createAssembleParentFeedbackContextUseCase({ prisma, cipher });
-    const chat = createMockAiClient(response);
+    const runtimeDriver = createMockRuntimeDriver(response);
     const execute = context.execute.bind(context);
     context.execute = async input => {
       const assembled = await execute(input);
       await prisma.studentRecord.update({ where: { id: record.id }, data: { summary: '组装后更正' } });
       return assembled;
     };
-    const useCase = createGenerateFeedbackDraftUseCase({ prisma, cipher, aiClient: chat, context });
-    const result = await useCase.execute({ teacherId: TEACHER_A, studentId: student.id, lessonIds: [lesson.id] });
+    const useCase = createGenerateFeedbackDraftUseCase({ prisma, cipher, runtimeDriver, context });
+    const result = await useCase.execute({
+      teacherId: TEACHER_A,
+      studentId: student.id,
+      lessonIds: [lesson.id],
+      runtime: TEST_RUNTIME_IDENTITY,
+    });
     expect(result.ok).toBe(false);
-    expect(chat.chat).not.toHaveBeenCalled();
+    expect(runtimeDriver.run).not.toHaveBeenCalled();
   });
 
   it('decrypts student identity but excludes historic feedback and unconfirmed profile facts', async () => {
@@ -105,16 +126,16 @@ describe('A05 generation uses only current server evidence', () => {
       grade: encryptFieldValue(cipher, '五年级'), stageGoal: encryptFieldValue(cipher, '未确认画像目标') } });
     await prisma.parentFeedback.create({ data: { teacherId: TEACHER_A, studentId: student.id, title: '旧反馈生成事实',
       content: '历史生成内容不能成为事实', status: 'sent', sentAtTs: new Date('2020-01-01T00:00:00Z') } });
-    const { chat, useCase } = setup();
+    const { runtimeDriver, useCase } = setup();
     expect((await useCase.execute({ teacherId: TEACHER_A, studentId: student.id })).ok).toBe(true);
-    const prompt = JSON.stringify(vi.mocked(chat.chat).mock.calls[0][0]);
+    const prompt = vi.mocked(runtimeDriver.run).mock.calls[0][0].message;
     expect(prompt).toContain('加密姓名'); expect(prompt).toContain('五年级');
     for (const text of ['未确认画像目标', '历史生成内容不能成为事实', '旧反馈生成事实', 'enc:v1']) expect(prompt).not.toContain(text);
   });
 
   it.each(['', '标题：空内容\n内容：\n所以这样写：无正文', '标题：只有标题'])('rejects incomplete model content %j', async content => {
     const { student } = await fixture();
-    const { useCase } = setup(createMockAiClient({ ok: true, value: { content } }));
+    const { useCase } = setup(createMockRuntimeDriver({ ok: true, value: { content } }));
     const result = await useCase.execute({ teacherId: TEACHER_A, studentId: student.id });
     expect(result.ok).toBe(false);
     expect(await prisma.parentFeedback.count({ where: { studentId: student.id } })).toBe(0);
@@ -143,9 +164,9 @@ describe('A05 generation uses only current server evidence', () => {
     const { student, lesson, record } = await fixture();
     await prisma.studentRecord.update({ where: { id: record.id }, data: {
       structuredData: { lessonId: 'different-lesson', scheduleId: lesson.scheduleId } } });
-    const { chat, useCase } = setup();
+    const { runtimeDriver, useCase } = setup();
     expect((await useCase.execute({ teacherId: TEACHER_A, studentId: student.id, lessonIds: [lesson.id] })).ok).toBe(false);
-    expect(chat.chat).not.toHaveBeenCalled();
+    expect(runtimeDriver.run).not.toHaveBeenCalled();
   });
 
 });

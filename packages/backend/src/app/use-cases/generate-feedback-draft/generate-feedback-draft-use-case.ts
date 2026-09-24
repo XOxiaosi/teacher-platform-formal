@@ -1,7 +1,6 @@
 import { err, internalError, notFound, ok, validationError, type CommonError, type Result } from '@teacher-platform/contracts';
 import { createFieldCipherFromEnv, decryptFieldValue } from '../../../shared/field-encryption/index.js';
 import { resolveFeedbackEvidence } from '../../../features/feedback/feedback-evidence-resolver.js';
-import type { ChatMessage } from '../../../shared/ai-client/types.js';
 import { dshTeachingSessionId } from '../../teaching-runtime/dsh-runtime-driver.js';
 import type { FeedbackEvidenceItem } from '../assemble-parent-feedback-context/types.js';
 import type {
@@ -12,6 +11,8 @@ import type {
   FeedbackParentType,
   FeedbackFocus,
 } from './types.js';
+
+type DraftMessage = { role: 'system' | 'user'; content: string };
 
 interface StudentRecord {
   id: string;
@@ -38,11 +39,8 @@ export function createGenerateFeedbackDraftUseCase(
   options: CreateGenerateFeedbackDraftUseCaseOptions,
 ): GenerateFeedbackDraftUseCase {
   const getClient = options.getClient ?? (async () => options.prisma);
-  const { aiClient, runtimeDriver, context } = options;
+  const { runtimeDriver, context } = options;
   const cipher = options.cipher ?? createFieldCipherFromEnv();
-  if (Boolean(aiClient) === Boolean(runtimeDriver)) {
-    throw new Error('Feedback draft generation requires exactly one model runtime');
-  }
 
   return {
     async execute(input: GenerateFeedbackDraftInput) {
@@ -79,7 +77,7 @@ export function createGenerateFeedbackDraftUseCase(
         historyFeedback: [],
       });
 
-      const response = await runDraftModel({ messages, input, aiClient, runtimeDriver });
+      const response = await runDraftModel({ messages, input, runtimeDriver });
       if (!response.ok) return response;
 
       const current = await resolveFeedbackEvidence({ client: prisma, teacherId: input.teacherId, studentId: input.studentId,
@@ -107,44 +105,39 @@ export function createGenerateFeedbackDraftUseCase(
 }
 
 async function runDraftModel(input: {
-  messages: ChatMessage[];
+  messages: Array<{ role: 'system' | 'user'; content: string }>;
   input: GenerateFeedbackDraftInput;
-  aiClient: CreateGenerateFeedbackDraftUseCaseOptions['aiClient'];
   runtimeDriver: CreateGenerateFeedbackDraftUseCaseOptions['runtimeDriver'];
 }): Promise<Result<string, CommonError>> {
-  if (input.runtimeDriver) {
-    if (!input.input.runtime) return err(validationError('反馈草稿缺少 DSH 执行身份', 'runtime'));
-    const response = await input.runtimeDriver.run({
+  if (!input.input.runtime) return err(validationError('反馈草稿缺少 DSH 执行身份', 'runtime'));
+  const response = await input.runtimeDriver.run({
+    teacherId: input.input.teacherId,
+    taskId: input.input.runtime.taskId,
+    executionId: input.input.runtime.executionId,
+    message: input.messages.map(message => `${message.role === 'system' ? '系统规范' : '本次材料'}：\n${message.content}`).join('\n\n'),
+    sessionRef: input.input.runtime.resume ? dshTeachingSessionId({
       teacherId: input.input.teacherId,
       taskId: input.input.runtime.taskId,
-      executionId: input.input.runtime.executionId,
-      message: input.messages.map(message => `${message.role === 'system' ? '系统规范' : '本次材料'}：\n${message.content}`).join('\n\n'),
-      sessionRef: input.input.runtime.resume ? dshTeachingSessionId({
-        teacherId: input.input.teacherId,
-        taskId: input.input.runtime.taskId,
-        contextEpoch: input.input.runtime.contextEpoch,
-      }) : null,
       contextEpoch: input.input.runtime.contextEpoch,
-      checkpoint: null,
-      history: [],
-      tools: {
-        definitions: [],
-        async execute() { return err(validationError('反馈草稿生成不开放工具调用', 'tool')); },
-      },
-      signal: new AbortController().signal,
-    });
-    if (!response.ok) {
-      return err(response.error.retryable
-        ? internalError(response.error.message)
-        : validationError(response.error.message, response.error.field));
-    }
-    if (response.value.status !== 'succeeded') {
-      return err(validationError('现有材料不足以生成反馈，请补充记录后重试', 'evidence'));
-    }
-    return ok(response.value.reply);
+    }) : null,
+    contextEpoch: input.input.runtime.contextEpoch,
+    checkpoint: null,
+    history: [],
+    tools: {
+      definitions: [],
+      async execute() { return err(validationError('反馈草稿生成不开放工具调用', 'tool')); },
+    },
+    signal: new AbortController().signal,
+  });
+  if (!response.ok) {
+    return err(response.error.retryable
+      ? internalError(response.error.message)
+      : validationError(response.error.message, response.error.field));
   }
-  const response = await input.aiClient!.chat(input.messages, []);
-  return response.ok ? ok(response.value.content) : err(internalError('反馈生成暂未完成，请稍后重试'));
+  if (response.value.status !== 'succeeded') {
+    return err(validationError('现有材料不足以生成反馈，请补充记录后重试', 'evidence'));
+  }
+  return ok(response.value.reply);
 }
 
 function formatEvidenceItem(item: FeedbackEvidenceItem): string {
@@ -257,7 +250,7 @@ function buildMessages(input: {
   parentType?: FeedbackParentType;
   focus?: FeedbackFocus;
   historyFeedback: HistoryFeedbackItem[];
-}): ChatMessage[] {
+}): DraftMessage[] {
   const lessonText = input.lessons
     .map((lesson, index) => [
       `第 ${index + 1} 节课`,

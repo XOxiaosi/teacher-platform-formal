@@ -3,9 +3,9 @@ import { PrismaClient } from '@prisma/client';
 import { ok } from '@teacher-platform/contracts';
 import { createAssembleParentFeedbackContextUseCase } from '../../src/app/use-cases/assemble-parent-feedback-context/assemble-parent-feedback-context-use-case.js';
 import { createGenerateFeedbackDraftUseCase } from '../../src/app/use-cases/generate-feedback-draft/generate-feedback-draft-use-case.js';
+import type { TeachingRuntimeDriver } from '../../src/app/teaching-runtime/runtime-driver.js';
 import { createFeedbackService } from '../../src/features/feedback/index.js';
 import { createFieldCipherFromEnv, encryptFieldValue } from '../../src/shared/field-encryption/index.js';
-import type { AiClient, ChatMessage, ChatToolDefinition } from '../../src/shared/ai-client/types.js';
 
 const prisma = new PrismaClient();
 const cipher = createFieldCipherFromEnv();
@@ -61,13 +61,18 @@ async function fixture() {
   return { student, lesson, record };
 }
 
-function fakeAiClient() {
+function fakeRuntimeDriver(): TeachingRuntimeDriver {
   return {
-    run: vi.fn(async () => ok({})),
-    chat: vi.fn(async (_messages: ChatMessage[], _tools: ChatToolDefinition[]) => ok({
-      content: '标题：本次课堂的主动验算\n内容：本次课小明独立完成三道计算题，并主动检查了每一步。接下来继续练习验算。\n所以这样写：用具体课堂行为让家长看见可延续的进展。',
+    availability: 'test',
+    runtimeVersion: 'dsh-v1',
+    run: vi.fn(async () => ok({
+      reply: '标题：本次课堂的主动验算\n内容：本次课小明独立完成三道计算题，并主动检查了每一步。接下来继续练习验算。\n所以这样写：用具体课堂行为让家长看见可延续的进展。',
+      sessionRef: 'teaching-a05-test',
+      status: 'succeeded' as const,
+      checkpoint: null,
+      cost: { modelCalls: 1, inputTokens: 100, outputTokens: 40, toolCalls: 0, synthetic: true },
     })),
-  } as unknown as AiClient;
+  };
 }
 
 beforeEach(cleanup);
@@ -79,11 +84,17 @@ afterAll(async () => {
 describe('A05 反馈草稿端到端保存闭环', () => {
   it('查询当前课次依据 → 生成待核对草稿 → 显式保存 → 编辑并确认 → 可读回依据快照', async () => {
     const { student, lesson, record } = await fixture();
-    const aiClient = fakeAiClient();
+    const runtimeDriver = fakeRuntimeDriver();
     const context = createAssembleParentFeedbackContextUseCase({ prisma, cipher });
-    const generator = createGenerateFeedbackDraftUseCase({ prisma, cipher, aiClient, context });
+    const generator = createGenerateFeedbackDraftUseCase({ prisma, cipher, runtimeDriver, context });
 
-    const draft = await generator.execute({ teacherId: TEACHER, studentId: student.id, lessonIds: [lesson.id], focus: 'highlight' });
+    const draft = await generator.execute({
+      teacherId: TEACHER,
+      studentId: student.id,
+      lessonIds: [lesson.id],
+      focus: 'highlight',
+      runtime: { taskId: 'a05-task-1', executionId: 'a05-execution-1', contextEpoch: 0 },
+    });
     expect(draft.ok).toBe(true);
     if (!draft.ok) return;
     expect(draft.value.source).toBe('ai');
@@ -141,8 +152,13 @@ describe('A05 反馈草稿端到端保存闭环', () => {
   it('生成后依据版本变化会阻止保存，且不写入反馈', async () => {
     const { student, lesson, record } = await fixture();
     const context = createAssembleParentFeedbackContextUseCase({ prisma, cipher });
-    const generator = createGenerateFeedbackDraftUseCase({ prisma, cipher, aiClient: fakeAiClient(), context });
-    const draft = await generator.execute({ teacherId: TEACHER, studentId: student.id, lessonIds: [lesson.id] });
+    const generator = createGenerateFeedbackDraftUseCase({ prisma, cipher, runtimeDriver: fakeRuntimeDriver(), context });
+    const draft = await generator.execute({
+      teacherId: TEACHER,
+      studentId: student.id,
+      lessonIds: [lesson.id],
+      runtime: { taskId: 'a05-task-2', executionId: 'a05-execution-2', contextEpoch: 0 },
+    });
     expect(draft.ok).toBe(true);
     if (!draft.ok) return;
     await prisma.studentRecord.update({ where: { id: record.id }, data: { summary: encryptFieldValue(cipher, '依据已经发生变化') } });

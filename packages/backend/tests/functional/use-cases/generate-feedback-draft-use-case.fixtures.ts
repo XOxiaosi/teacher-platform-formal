@@ -1,8 +1,7 @@
 import { beforeEach, afterEach, vi } from 'vitest';
 import { PrismaClient } from '@prisma/client';
-import type { AiClient, ChatMessage, ChatResponse, ChatToolDefinition } from '../../../src/shared/ai-client/types.js';
-import type { CommonError, Result } from '@teacher-platform/contracts';
-import type { TeachingRuntimeDriver } from '../../../src/app/teaching-runtime/runtime-driver.js';
+import { err, ok, type CommonError, type Result } from '@teacher-platform/contracts';
+import type { TeachingRuntimeDriver, TeachingRuntimeOutput } from '../../../src/app/teaching-runtime/runtime-driver.js';
 import { createAssembleParentFeedbackContextUseCase } from '../../../src/app/use-cases/assemble-parent-feedback-context/assemble-parent-feedback-context-use-case.js';
 export let createGenerateFeedbackDraftUseCase: unknown;
 
@@ -72,24 +71,48 @@ export function requireUseCaseFactory() {
   }
   return createGenerateFeedbackDraftUseCase as (options: {
     prisma: PrismaClient;
-    aiClient?: AiClient;
-    runtimeDriver?: TeachingRuntimeDriver;
+    runtimeDriver: TeachingRuntimeDriver;
     context: ReturnType<typeof createAssembleParentFeedbackContextUseCase>;
   }) => GenerateFeedbackDraftUseCase;
 }
 
 
-export function createMockAiClient(chatResult: Result<ChatResponse, CommonError>): AiClient {
-  return {
-    run: vi.fn().mockResolvedValue({ ok: true, value: {} }),
-    chat: vi.fn(async (_messages: ChatMessage[], _tools: ChatToolDefinition[]) => chatResult),
-  };
+export type MockFeedbackRuntimeDriver = TeachingRuntimeDriver & {
+  run: ReturnType<typeof vi.fn<TeachingRuntimeDriver['run']>>;
+};
+
+export const TEST_RUNTIME_IDENTITY = {
+  taskId: 'feedback-test-task',
+  executionId: 'feedback-test-execution',
+  contextEpoch: 0,
+} as const;
+
+export function runtimeSuccess(content: string): Result<TeachingRuntimeOutput, never> {
+  return ok({
+    reply: content,
+    sessionRef: 'teaching-feedback-test',
+    status: 'succeeded',
+    checkpoint: null,
+    cost: { modelCalls: 1, inputTokens: 100, outputTokens: 40, toolCalls: 0, synthetic: true },
+  });
+}
+
+export function createMockRuntimeDriver(result: Result<{ content: string }, CommonError>): MockFeedbackRuntimeDriver {
+  const run = vi.fn<TeachingRuntimeDriver['run']>(async () => result.ok
+    ? runtimeSuccess(result.value.content)
+    : err({ ...result.error, retryable: true }));
+  return { availability: 'test', runtimeVersion: 'dsh-v1', run };
 }
 
 
-export function buildUseCase(aiClient: AiClient) {
+export function buildUseCase(runtimeDriver: TeachingRuntimeDriver) {
   const context = createAssembleParentFeedbackContextUseCase({ prisma });
-  return requireUseCaseFactory()({ prisma, aiClient, context });
+  const useCase = requireUseCaseFactory()({ prisma, runtimeDriver, context });
+  return {
+    execute(input: Parameters<GenerateFeedbackDraftUseCase['execute']>[0]) {
+      return useCase.execute({ ...input, runtime: input.runtime ?? TEST_RUNTIME_IDENTITY });
+    },
+  } satisfies GenerateFeedbackDraftUseCase;
 }
 
 

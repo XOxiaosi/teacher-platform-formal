@@ -1,9 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ok } from '@teacher-platform/contracts';
-import type { ChatMessage } from '../../../src/shared/ai-client/types.js';
 import { createAssembleParentFeedbackContextUseCase } from '../../../src/app/use-cases/assemble-parent-feedback-context/assemble-parent-feedback-context-use-case.js';
 import type { TeachingRuntimeDriver } from '../../../src/app/teaching-runtime/runtime-driver.js';
-import { prisma, TEACHER_A, TEACHER_B, requireUseCaseFactory, createMockAiClient, buildUseCase, createStudentFixture, createLessonFixture, createAssessmentRecord } from './generate-feedback-draft-use-case.fixtures.js';
+import { prisma, TEACHER_A, TEACHER_B, requireUseCaseFactory, createMockRuntimeDriver, buildUseCase, createStudentFixture, createLessonFixture, createAssessmentRecord } from './generate-feedback-draft-use-case.fixtures.js';
 describe("generate-feedback-draft use-case", () => {
 
 
@@ -13,7 +12,7 @@ describe("generate-feedback-draft use-case", () => {
   });
 
 
-  it('根据学生与指定课程调用 aiClient.chat 生成反馈草稿，不创建 ParentFeedback 记录', async () => {
+  it('根据学生与指定课程调用 runtimeDriver.run 生成反馈草稿，不创建 ParentFeedback 记录', async () => {
     const student = await createStudentFixture(TEACHER_A, '张三');
     const lesson = await createLessonFixture({
       teacherId: TEACHER_A,
@@ -22,14 +21,14 @@ describe("generate-feedback-draft use-case", () => {
       studentState: '课堂专注，计算细节仍需巩固',
       homework: '完成力学专题第 3 讲',
     });
-    const aiClient = createMockAiClient({
+    const runtimeDriver = createMockRuntimeDriver({
       ok: true,
       value: {
         content: '标题：张三本周物理学习反馈\n内容：张三本周课堂专注度较好，牛顿第二定律综合题有明显进步。建议继续巩固计算细节。\n所以这样写：用课堂专注+具体知识点进步给家长确定感。',
       },
     });
 
-    const useCase = buildUseCase(aiClient);
+    const useCase = buildUseCase(runtimeDriver);
     const result = await useCase.execute({
       teacherId: TEACHER_A,
       studentId: student.id,
@@ -48,13 +47,10 @@ describe("generate-feedback-draft use-case", () => {
     expect(result.value.evidence).toBeDefined();
     expect(result.value.windowStart).toBeDefined();
     expect(result.value.windowEnd).toBeDefined();
-    expect(aiClient.chat).toHaveBeenCalledWith(
-      expect.arrayContaining([
-        expect.objectContaining({ role: 'system' }),
-        expect.objectContaining({ role: 'user', content: expect.stringContaining('张三') }),
-      ]),
-      [],
-    );
+    expect(runtimeDriver.run).toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.stringMatching(/系统规范：[\s\S]*本次材料：[\s\S]*张三/),
+      tools: expect.objectContaining({ definitions: [] }),
+    }));
 
     const savedCount = await prisma.parentFeedback.count({ where: { teacherId: TEACHER_A } });
     expect(savedCount).toBe(0);
@@ -118,12 +114,12 @@ describe("generate-feedback-draft use-case", () => {
       progress: '完成一次函数图像与性质练习',
       studentState: '图像平移仍需巩固',
     });
-    const aiClient = createMockAiClient({
+    const runtimeDriver = createMockRuntimeDriver({
       ok: true,
       value: { content: '标题：吴十本周学习反馈\n内容：吴十完成了一次函数图像与性质练习，图像平移仍需巩固，接下来针对性训练。\n所以这样写：抓住图像平移这个点，给家长明确的下一步。' },
     });
 
-    const useCase = buildUseCase(aiClient);
+    const useCase = buildUseCase(runtimeDriver);
     await useCase.execute({
       teacherId: TEACHER_A,
       studentId: student.id,
@@ -131,11 +127,8 @@ describe("generate-feedback-draft use-case", () => {
       tone: 'warm',
     });
 
-    expect(aiClient.chat).toHaveBeenCalledTimes(1);
-    const messages = vi.mocked(aiClient.chat).mock.calls[0][0] as ChatMessage[];
-    const systemMessage = messages.find((message) => message.role === 'system');
-    expect(systemMessage).toBeDefined();
-    const content = systemMessage!.content;
+    expect(runtimeDriver.run).toHaveBeenCalledTimes(1);
+    const content = vi.mocked(runtimeDriver.run).mock.calls[0][0].message.split('\n\n本次材料：')[0];
 
     // 移除"物理老师"等科目硬编码
     expect(content).not.toContain('物理老师');
@@ -174,12 +167,12 @@ describe("generate-feedback-draft use-case", () => {
   it('未传 lessonIds 时使用该学生最近课程生成草稿', async () => {
     const student = await createStudentFixture(TEACHER_A, '李四');
     await createLessonFixture({ teacherId: TEACHER_A, studentId: student.id, progress: '电场基础概念复习', dateTs: new Date(Date.now() - 2 * 24 * 3600 * 1000) });
-    const aiClient = createMockAiClient({
+    const runtimeDriver = createMockRuntimeDriver({
       ok: true,
       value: { content: '标题：李四近期物理学习反馈\n内容：李四近期完成了电场基础概念复习。\n所以这样写：概述近期学习内容，让家长知道进度。' },
     });
 
-    const useCase = buildUseCase(aiClient);
+    const useCase = buildUseCase(runtimeDriver);
     const result = await useCase.execute({ teacherId: TEACHER_A, studentId: student.id });
 
     expect(result.ok).toBe(true);
@@ -191,8 +184,8 @@ describe("generate-feedback-draft use-case", () => {
 
   it('学生不存在或跨 teacher 返回 NOT_FOUND', async () => {
     const student = await createStudentFixture(TEACHER_A, '王五');
-    const aiClient = createMockAiClient({ ok: true, value: { content: '标题：x\n内容：y\n所以这样写：z' } });
-    const useCase = buildUseCase(aiClient);
+    const runtimeDriver = createMockRuntimeDriver({ ok: true, value: { content: '标题：x\n内容：y\n所以这样写：z' } });
+    const useCase = buildUseCase(runtimeDriver);
 
     const missing = await useCase.execute({ teacherId: TEACHER_A, studentId: 'nonexistent-id' });
     expect(missing.ok).toBe(false);
@@ -210,8 +203,8 @@ describe("generate-feedback-draft use-case", () => {
     const studentA = await createStudentFixture(TEACHER_A, '赵六');
     const studentB = await createStudentFixture(TEACHER_B, '钱七');
     const lessonB = await createLessonFixture({ teacherId: TEACHER_B, studentId: studentB.id, progress: 'B 的课程' });
-    const aiClient = createMockAiClient({ ok: true, value: { content: '标题：x\n内容：y\n所以这样写：z' } });
-    const useCase = buildUseCase(aiClient);
+    const runtimeDriver = createMockRuntimeDriver({ ok: true, value: { content: '标题：x\n内容：y\n所以这样写：z' } });
+    const useCase = buildUseCase(runtimeDriver);
 
     const missing = await useCase.execute({ teacherId: TEACHER_A, studentId: studentA.id, lessonIds: ['nonexistent-id'] });
     expect(missing.ok).toBe(false);
@@ -227,8 +220,8 @@ describe("generate-feedback-draft use-case", () => {
 
   it('无任何记录也无课程时返回 VALIDATION_ERROR', async () => {
     const student = await createStudentFixture(TEACHER_A, '孙八');
-    const aiClient = createMockAiClient({ ok: true, value: { content: '标题：x\n内容：y\n所以这样写：z' } });
-    const useCase = buildUseCase(aiClient);
+    const runtimeDriver = createMockRuntimeDriver({ ok: true, value: { content: '标题：x\n内容：y\n所以这样写：z' } });
+    const useCase = buildUseCase(runtimeDriver);
 
     const result = await useCase.execute({ teacherId: TEACHER_A, studentId: student.id });
 
@@ -236,18 +229,18 @@ describe("generate-feedback-draft use-case", () => {
     if (result.ok) return;
     expect(result.error.code).toBe('VALIDATION_ERROR');
     expect(result.error.field).toBe('evidence');
-    expect(aiClient.chat).not.toHaveBeenCalled();
+    expect(runtimeDriver.run).not.toHaveBeenCalled();
   });
 
 
-  it('aiClient.chat 失败时返回 INTERNAL_ERROR，不创建 ParentFeedback 记录', async () => {
+  it('runtimeDriver.run 失败时返回 INTERNAL_ERROR，不创建 ParentFeedback 记录', async () => {
     const student = await createStudentFixture(TEACHER_A, '周九');
     const lesson = await createLessonFixture({ teacherId: TEACHER_A, studentId: student.id, progress: '磁场专题练习' });
-    const aiClient = createMockAiClient({
+    const runtimeDriver = createMockRuntimeDriver({
       ok: false,
       error: { code: 'INTERNAL_ERROR', message: '模型调用失败' },
     });
-    const useCase = buildUseCase(aiClient);
+    const useCase = buildUseCase(runtimeDriver);
 
     const result = await useCase.execute({ teacherId: TEACHER_A, studentId: student.id, lessonIds: [lesson.id] });
 
@@ -282,11 +275,11 @@ describe("generate-feedback-draft use-case", () => {
       dateTs: new Date(now.getTime() - 2 * 24 * 3600 * 1000),
     });
 
-    const aiClient = createMockAiClient({
+    const runtimeDriver = createMockRuntimeDriver({
       ok: true,
       value: { content: '标题：郑十学习反馈\n内容：郑十近期有进步。\n所以这样写：点出进步给家长信心。' },
     });
-    const useCase = buildUseCase(aiClient);
+    const useCase = buildUseCase(runtimeDriver);
     const result = await useCase.execute({ teacherId: TEACHER_A, studentId: student.id });
 
     expect(result.ok).toBe(true);
@@ -303,11 +296,8 @@ describe("generate-feedback-draft use-case", () => {
     expect(assessment!.examName).toBe('期中考试');
 
     // user prompt 包含成绩信息
-    expect(aiClient.chat).toHaveBeenCalledTimes(1);
-    const messages = vi.mocked(aiClient.chat).mock.calls[0][0] as ChatMessage[];
-    const userMessage = messages.find((m) => m.role === 'user');
-    expect(userMessage).toBeDefined();
-    const userContent = userMessage!.content;
+    expect(runtimeDriver.run).toHaveBeenCalledTimes(1);
+    const userContent = vi.mocked(runtimeDriver.run).mock.calls[0][0].message;
     expect(userContent).toContain('学生可信记录');
     expect(userContent).toContain('物理');
     expect(userContent).toContain('85');
@@ -329,18 +319,18 @@ describe("generate-feedback-draft use-case", () => {
       fullScore: 100,
     });
 
-    const aiClient = createMockAiClient({
+    const runtimeDriver = createMockRuntimeDriver({
       ok: true,
       value: { content: '标题：王十一学习反馈\n内容：王十一数学表现不错。\n所以这样写：用具体分数说话，给家长确定感。' },
     });
-    const useCase = buildUseCase(aiClient);
+    const useCase = buildUseCase(runtimeDriver);
     const result = await useCase.execute({ teacherId: TEACHER_A, studentId: student.id });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.lessonIds).toHaveLength(0);
     expect(result.value.evidence.some((e) => e.type === 'assessment')).toBe(true);
-    expect(aiClient.chat).toHaveBeenCalledTimes(1);
+    expect(runtimeDriver.run).toHaveBeenCalledTimes(1);
   });
 
 
@@ -353,20 +343,19 @@ describe("generate-feedback-draft use-case", () => {
       studentId: student.id,
       progress: '函数综合训练',
     });
-    const aiClient = createMockAiClient({
+    const runtimeDriver = createMockRuntimeDriver({
       ok: true,
       value: { content: '标题：林十二学习反馈\n内容：林十二函数综合训练有进步。\n所以这样写：抓住函数训练给家长确定感。' },
     });
 
-    const useCase = buildUseCase(aiClient);
+    const useCase = buildUseCase(runtimeDriver);
     await useCase.execute({
       teacherId: TEACHER_A,
       studentId: student.id,
       lessonIds: [lesson.id],
     });
 
-    const messages = vi.mocked(aiClient.chat).mock.calls[0][0] as ChatMessage[];
-    const userContent = messages.find((m) => m.role === 'user')!.content;
+    const userContent = vi.mocked(runtimeDriver.run).mock.calls[0][0].message;
     expect(userContent).toContain('班型：');
     expect(userContent).toContain('未指定，按默认推');
     expect(userContent).toContain('家长类型：');
