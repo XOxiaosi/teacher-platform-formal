@@ -11,8 +11,6 @@ import type {
   FeedbackDraftTask,
   FeedbackDraftTaskReceipt,
   FeedbackEvidenceItem,
-  GenerateFeedbackDraftRequest,
-  GenerateFeedbackDraftResult,
   RetryFeedbackDraftTaskBody,
   UpdateFeedbackDraftTaskBody,
 } from '../contracts/feedback-draft';
@@ -24,8 +22,6 @@ export type {
   FeedbackDraftTaskRequest,
   FeedbackDraftTaskStatus,
   FeedbackEvidenceItem,
-  GenerateFeedbackDraftRequest,
-  GenerateFeedbackDraftResult,
   RetryFeedbackDraftTaskBody,
   UpdateFeedbackDraftTaskBody,
 } from '../contracts/feedback-draft';
@@ -66,13 +62,6 @@ export function updateFeedbackDraftTask(
   body: UpdateFeedbackDraftTaskBody,
 ): Promise<FeedbackDraftTask> {
   return apiRequest(`/feedback/draft-tasks/${encodeURIComponent(taskId)}/draft`, { method: 'PATCH', teacherId, body });
-}
-
-export function generateFeedbackDraft(
-  teacherId: string,
-  body: GenerateFeedbackDraftRequest,
-): Promise<GenerateFeedbackDraftResult> {
-  return apiRequest('/feedback/generate-draft', { method: 'POST', teacherId, body });
 }
 
 export function updateFeedbackContent(

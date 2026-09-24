@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
-import { PreviewActions, studentName, type FeedbackEvidenceItem, type FeedbackSaveInput, type FeedbackSnapshot, type GenerateFeedbackDraftResult } from './PreviewApp';
+import { PreviewActions, studentName, type FeedbackEvidenceItem, type FeedbackSaveInput, type FeedbackSnapshot } from './PreviewApp';
 import { Feedback, today } from './data';
 import { usePreviewState } from './ui-state';
 import type { FeedbackDraftTask, FeedbackDraftTaskGeneration } from '../contracts/feedback-draft';
@@ -85,7 +85,6 @@ function FeedbackForm({ feedback, actions, initialStudentId, sourceRecordId, ini
   const initial: FeedbackDraft = { studentId: initialTask?.studentId || feedback?.studentId || initialStudentId || '', title: initialTaskDraft?.title || feedback?.title || '', content: initialTaskDraft?.content || feedback?.content || '' };
   const [draft, setDraft] = usePreviewState(actions, draftKey, initial);
   const [task, setTask] = useState<FeedbackDraftTask | null>(initialTask || null);
-  const [generated, setGenerated] = useState<GenerateFeedbackDraftResult | null>(null);
   const [generating, setGenerating] = useState(initialTask?.status === 'running');
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -96,7 +95,7 @@ function FeedbackForm({ feedback, actions, initialStudentId, sourceRecordId, ini
 
   const hydrateTask = (next: FeedbackDraftTask, preserveLocalDraft = false) => {
     const nextDraft = taskDraft(next);
-    setTask(next); setGenerated(null);
+    setTask(next);
     if (!preserveLocalDraft) {
       setDraft({ studentId: next.studentId, title: nextDraft.title, content: nextDraft.content });
       dirtyRef.current = false; setDirty(false);
@@ -139,15 +138,11 @@ function FeedbackForm({ feedback, actions, initialStudentId, sourceRecordId, ini
     if (task?.status === 'evidence_changed') { setError('生成依据已经变化，请重新新建并核对材料，不能沿用旧依据。'); return; }
     setGenerating(true); setError('');
     try {
-      if (actions.createFeedbackDraftTask) {
-        createRequestId.current ||= crypto.randomUUID();
-        const receipt = await actions.createFeedbackDraftTask({ clientRequestId: createRequestId.current, studentId, ...(sourceRecordId ? { recordIds: [sourceRecordId] } : {}), title: draft.title, content: draft.content });
-        hydrateTask(receipt.task);
-        retryRequestId.current = undefined;
-      } else if (actions.generateFeedbackDraft) {
-        const result = await actions.generateFeedbackDraft({ studentId, ...(sourceRecordId ? { recordIds: [sourceRecordId] } : {}) });
-        setGenerated(result); setDraft({ studentId: result.studentId, title: result.title, content: result.content });
-      } else setError('反馈生成服务尚未连接，请手工编写。');
+      if (!actions.createFeedbackDraftTask) return setError('反馈生成服务尚未连接，请手工编写。');
+      createRequestId.current ||= crypto.randomUUID();
+      const receipt = await actions.createFeedbackDraftTask({ clientRequestId: createRequestId.current, studentId, ...(sourceRecordId ? { recordIds: [sourceRecordId] } : {}), title: draft.title, content: draft.content });
+      hydrateTask(receipt.task);
+      retryRequestId.current = undefined;
     } catch (failure) { setError(messageOf(failure, '反馈生成未完成，请稍后重试。')); }
     finally { setGenerating(false); }
   };
@@ -174,7 +169,6 @@ function FeedbackForm({ feedback, actions, initialStudentId, sourceRecordId, ini
       const persistedTask = await persist();
       const savedDraft: FeedbackSaveInput = { studentId, title, content, id: feedback?.id };
       if (persistedTask?.status === 'succeeded') savedDraft.generationTaskId = persistedTask.id;
-      else if (!persistedTask && generated && generated.studentId === studentId) Object.assign(savedDraft, { lessonId: generated.lessonIds[0], evidence: generated.evidence, windowStart: generated.windowStart, windowEnd: generated.windowEnd });
       if (actions.saveFeedback) {
         await actions.saveFeedback(savedDraft);
       } else if (feedback) actions.setData((old) => ({ ...old, feedbacks: old.feedbacks.map((item) => item.id === feedback.id ? { ...item, studentId, title, content, updatedAt: today } : item) }));
@@ -188,14 +182,14 @@ function FeedbackForm({ feedback, actions, initialStudentId, sourceRecordId, ini
   return <form className="feedback-editor" onSubmit={(event) => void save(event)}>
     {!feedback && <label>学生<select aria-label="选择学生" value={draft.studentId} disabled={Boolean(task)} onChange={(event) => set({ studentId: event.target.value })}><option value="">请选择学生</option>{actions.data.students.map((student) => <option key={student.id} value={student.id}>{student.name}</option>)}</select></label>}
     {task && <p className="form-hint">此草稿已关联 {studentName(actions.data, task.studentId)}。为保证依据一致，如需换学生请关闭后新建反馈。</p>}
-    {!feedback && (actions.createFeedbackDraftTask || actions.generateFeedbackDraft) && <div className="button-row"><Button type="button" variant="outline" onClick={() => void prepare()} disabled={generating || Boolean(task) || !draft.studentId}>{generating ? '正在生成…' : '根据教学记录生成反馈'}</Button><span className="form-hint">生成结果只会填入待核对表单，保存仍需你明确确认。</span></div>}
+    {!feedback && actions.createFeedbackDraftTask && <div className="button-row"><Button type="button" variant="outline" onClick={() => void prepare()} disabled={generating || Boolean(task) || !draft.studentId}>{generating ? '正在生成…' : '根据教学记录生成反馈'}</Button><span className="form-hint">生成结果只会填入待核对表单，保存仍需你明确确认。</span></div>}
     {!feedback && sourceRecordId && <p className="form-hint">已带入刚刚核对的正式记录，生成时只使用这条记录作为依据。</p>}
     {task?.status === 'running' && <p role="status" className="form-hint">正在由服务端生成反馈。关闭后也可以从“继续未保存草稿”回来查看结果。</p>}
     {(task?.status === 'failed' || task?.status === 'uncertain') && <p className="form-hint">当前任务会保留，方便核对或重试。若要完全手工写一份反馈，请关闭后新建反馈，避免丢失这次生成任务的状态。</p>}
     {task?.status === 'evidence_changed' && <p className="form-error" role="alert">生成依据已经变化。请重新新建反馈并核对材料，当前草稿不能继续冒充旧依据。</p>}
     {task?.status === 'uncertain' && <p className="form-error" role="alert">生成结果状态不确定，请重试生成，收到成功结果并重新核对后再保存。</p>}
     <label>标题<Input value={draft.title} onChange={(event) => set({ title: event.target.value })} required /></label><label>正文<Textarea value={draft.content} onChange={(event) => set({ content: event.target.value })} required /></label>
-    {(task?.generation || generated) && <FeedbackGenerationContext generation={task?.generation || generated!} />}
+    {task?.generation && <FeedbackGenerationContext generation={task.generation} />}
     {error && <p className="form-error" role="alert">{error}</p>}
     <div className="dialog-actions">{task && dirty && actions.updateFeedbackDraftTask && <Button type="button" variant="outline" onClick={() => void persist()} disabled={saving || generating}>暂存修改</Button>}{taskAllowsRetry && <Button type="button" variant="outline" onClick={() => void retryGeneration()} disabled={generating || saving}>{generating ? '正在重试…' : '重试生成'}</Button>}<Button type="button" variant="outline" onClick={actions.close} disabled={saving}>取消</Button><Button disabled={generating || saving || taskBlocksSave}>{saving ? '正在保存…' : '保存草稿'}</Button></div>
   </form>;
@@ -217,7 +211,7 @@ function taskDraft(task: FeedbackDraftTask) {
   return task.draft || { title: task.request.title || '', content: task.request.content || '' };
 }
 
-function FeedbackGenerationContext({ generation }: { generation: FeedbackDraftTaskGeneration | GenerateFeedbackDraftResult }) {
+function FeedbackGenerationContext({ generation }: { generation: FeedbackDraftTaskGeneration }) {
   return <div className="feedback-generation-context" aria-label="反馈生成依据"><p><b>生成说明：</b>{generation.rationale}</p><p className="form-hint">本次使用 {generation.evidence?.length || 0} 条已核对依据，范围 {generation.windowStart ? formatDate(generation.windowStart) : '未记录'} 至 {generation.windowEnd ? formatDate(generation.windowEnd) : '未记录'}。</p></div>;
 }
 

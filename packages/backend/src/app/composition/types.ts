@@ -43,7 +43,6 @@ import type { UpdatePaymentUseCase } from '../use-cases/update-payment/types.js'
 import type { UpdateMemoUseCase } from '../use-cases/update-memo/types.js';
 import type { UpdateParentFeedbackContentUseCase } from '../use-cases/update-parent-feedback-content/types.js';
 import type { LessonStatusFixUseCase } from '../use-cases/lesson-status-fix/types.js';
-import type { GenerateFeedbackDraftUseCase } from '../use-cases/generate-feedback-draft/types.js';
 import type { CaptureService } from '../../features/capture/index.js';
 import type { SchedulingWebService } from '../../features/scheduling-web/index.js';
 import type { TeachingTaskRuntimeWorker } from '../teaching-runtime/teaching-task-runtime-worker.js';
@@ -155,7 +154,6 @@ export interface EditRouteDependencies {
 }
 
 export interface FeedbackGenerateRouteDependencies {
-  generateFeedbackDraft: GenerateFeedbackDraftUseCase;
   feedbackService: FeedbackService;
   feedbackDraftTasks: FeedbackDraftTaskService;
 }

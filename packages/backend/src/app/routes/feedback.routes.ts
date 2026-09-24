@@ -96,32 +96,6 @@ export function createFeedbackRouter(dependencies: FeedbackGenerateRouteDependen
     sendResult(res, result, 200);
   });
 
-  router.post('/feedback/generate-draft', async (req, res) => {
-    const teacher = getTeacherId(req);
-    if (!teacher.ok) {
-      sendTeacherError(res, teacher.error);
-      return;
-    }
-
-    const parsed = parseBody(req.body);
-    if (!parsed.ok) {
-      sendTeacherError(res, parsed.error);
-      return;
-    }
-
-    const result = await dependencies.generateFeedbackDraft.execute({
-      teacherId: teacher.value,
-      studentId: parsed.value.studentId,
-      lessonIds: parsed.value.lessonIds,
-      recordIds: parsed.value.recordIds,
-      tone: parsed.value.tone,
-      classSize: parsed.value.classSize,
-      parentType: parsed.value.parentType,
-      focus: parsed.value.focus,
-    });
-    sendResult(res, result, 201);
-  });
-
   router.post('/feedback/draft-tasks', async (req, res) => {
     const teacher = getTeacherId(req); if (!teacher.ok) return void sendTeacherError(res, teacher.error);
     const parsed = parseDraftTaskBody(req.body, true); if (!parsed.ok) return void sendTeacherError(res, parsed.error);

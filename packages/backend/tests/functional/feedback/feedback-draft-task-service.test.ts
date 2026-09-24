@@ -19,6 +19,8 @@ describe('FeedbackDraftTask durable service', () => {
     const first = await tasks.create(input); const replay = await tasks.create(input);
     expect(first.ok && first.value.replayed).toBe(false); expect(replay.ok && replay.value.replayed).toBe(true);
     expect(generator.execute).toHaveBeenCalledTimes(1);
+    expect(generator.execute).toHaveBeenCalledWith(expect.objectContaining({ recordIds: ['record-1'] }));
+    expect(generator.execute).not.toHaveBeenCalledWith(expect.objectContaining({ lessonIds: expect.anything() }));
     const row = await prisma.feedbackDraftTask.findUniqueOrThrow({ where: { teacherId_clientRequestId: { teacherId: TEACHER_A, clientRequestId: input.clientRequestId } } });
     expect(row.requestCiphertext).toMatch(/^enc:v1:/); expect(row.draftCiphertext).toMatch(/^enc:v1:/);
   });

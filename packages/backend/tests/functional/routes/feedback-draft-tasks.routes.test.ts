@@ -8,7 +8,6 @@ import { createFeedbackRouter } from '../../../src/app/routes/feedback.routes.js
 
 function dependencies(): FeedbackGenerateRouteDependencies {
   return {
-    generateFeedbackDraft: { execute: vi.fn() },
     feedbackService: { createFeedback: vi.fn(), getFeedback: vi.fn(), listFeedbacks: vi.fn(), updateFeedbackContent: vi.fn(), updateFeedbackStatus: vi.fn(), getFeedbackSnapshot: vi.fn() },
     feedbackDraftTasks: { create: vi.fn(), list: vi.fn(), get: vi.fn(), retry: vi.fn(), updateDraft: vi.fn() },
   };
@@ -29,6 +28,16 @@ const task = { id: 'task-1', studentId: 'student-1', status: 'succeeded', versio
   request: {}, draft: { title: '标题', content: '正文' }, generation: null, error: null, savedFeedbackId: null, createdAt: new Date(), updatedAt: new Date() };
 
 describe('feedback draft task HTTP routes', () => {
+  it('旧同步生成入口已退出，不会绕过持久化草稿任务', async () => {
+    const deps = dependencies();
+    const app = express();
+    app.use((req, _res, next) => { (req as Request & { teacherId?: string }).teacherId = 'teacher-a'; next(); });
+    app.use(createFeedbackRouter(deps));
+    const result = await request(app).post('/feedback/generate-draft').send({ studentId: 'student-1' });
+    expect(result.status).toBe(404);
+    expect(deps.feedbackDraftTasks.create).not.toHaveBeenCalled();
+  });
+
   it('创建任务由认证 teacherId 注入并透传完整请求', async () => {
     const deps = dependencies(); (deps.feedbackDraftTasks.create as ReturnType<typeof vi.fn>).mockResolvedValue(ok({ task, replayed: false }));
     const result = await invoke(deps, '/feedback/draft-tasks', 'post', { teacherId: 'teacher-a', body: { clientRequestId: 'request-a', studentId: 'student-1', recordIds: ['record-1'], tone: 'warm', title: '', content: '' } });

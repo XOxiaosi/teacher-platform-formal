@@ -154,8 +154,11 @@ export function createFeedbackDraftTaskService(options: {
       if (!frozenAt) return await finishFailure(client, task, runVersion, attempt.id, internalError('数据库可信时间不可用'));
       const frozenSaved = await client.feedbackDraftTask.updateMany({ where: { id: task.id, teacherId, status: 'running', version: runVersion }, data: { requestCiphertext: encryptJsonFieldValue(cipher, frozen), updatedAtTs: frozenAt } });
       if (!frozenSaved.count) return dto((await owned(client, teacherId, task.id))!);
-      const generated = await options.generator.execute({ teacherId, studentId: task.studentId, lessonIds: initial.value.lessonIds,
-        recordIds: initial.value.evidence.map(item => item.id), tone: request.tone, classSize: request.classSize, parentType: request.parentType, focus: request.focus });
+      const evidenceSelection = request.lessonIds !== undefined
+        ? { lessonIds: request.lessonIds }
+        : { recordIds: request.recordIds ?? initial.value.evidence.map(item => item.id) };
+      const generated = await options.generator.execute({ teacherId, studentId: task.studentId, ...evidenceSelection,
+        tone: request.tone, classSize: request.classSize, parentType: request.parentType, focus: request.focus });
       if (!generated.ok) return await finishFailure(client, task, runVersion, attempt.id, generated.error);
       const changed = initial.value.evidence.length !== generated.value.evidence.length || initial.value.evidence.some((item) => {
         const next = generated.value.evidence.find(candidate => candidate.id === item.id);

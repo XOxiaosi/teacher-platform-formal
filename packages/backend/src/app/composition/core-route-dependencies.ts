@@ -398,7 +398,6 @@ export function createCoreRouteDependencies(
     capture: { capture },
     ...(legacyAgent ? { agent: legacyAgent } : {}),
     feedback: {
-      generateFeedbackDraft,
       feedbackDraftTasks,
       feedbackService: createFeedbackService({
         prisma,

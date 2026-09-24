@@ -30,25 +30,6 @@ export type FeedbackEvidenceItem = {
   fullScore: number | null;
   previousScore: number | null;
 };
-export type GenerateFeedbackDraftRequest = {
-  studentId: string;
-  lessonIds?: string[];
-  recordIds?: string[];
-  tone?: 'formal' | 'warm' | 'concise';
-  classSize?: '1v1' | 'small' | 'large';
-  parentType?: 'normal' | 'scores' | 'sensitive';
-  focus?: 'highlight' | 'problem' | 'cooperation' | 'summary';
-};
-export type GenerateFeedbackDraftResult = GenerateFeedbackDraftRequest & {
-  lessonIds: string[];
-  title: string;
-  content: string;
-  source: 'ai';
-  rationale: string;
-  evidence?: FeedbackEvidenceItem[];
-  windowStart?: string;
-  windowEnd?: string;
-};
 export type FeedbackSaveInput = {
   studentId: string;
   title: string;
@@ -73,7 +54,6 @@ export type PreviewActions = {
   prepareRecord?: (studentId: string, text: string, onSaved: () => void) => Promise<void>;
   saveMemo?: (text: string) => Promise<void>;
   toggleMemo?: (id: string, done: boolean) => Promise<void>;
-  generateFeedbackDraft?: (input: GenerateFeedbackDraftRequest) => Promise<GenerateFeedbackDraftResult>;
   createFeedbackDraftTask?: (input: CreateFeedbackDraftTaskBody) => Promise<FeedbackDraftTaskReceipt>;
   listFeedbackDraftTasks?: () => Promise<FeedbackDraftTask[]>;
   getFeedbackDraftTask?: (taskId: string) => Promise<FeedbackDraftTask>;

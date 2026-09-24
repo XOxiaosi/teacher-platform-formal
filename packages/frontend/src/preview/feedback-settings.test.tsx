@@ -7,20 +7,16 @@ import { createDemoData } from './data';
 import type { PreviewActions } from './PreviewApp';
 import type { FeedbackDraftTask } from '../contracts/feedback-draft';
 
-const generateDraft = vi.fn();
-
 beforeEach(() => {
   location.hash = '#/feedback';
-  generateDraft.mockReset();
-  generateDraft.mockImplementation(async ({ studentId, recordIds }: { studentId: string; recordIds?: string[] }) => ({ studentId, recordIds, lessonIds: ['lesson-1'], title: '课堂进展', content: '小雨主动验算，下一次继续保持。', source: 'ai' as const, rationale: '使用具体课堂行为。', evidence: [{ id: 'record-1', type: 'record' as const, occurredAt: '2026-09-14T08:00:00Z', category: 'lesson_observation', summary: '主动验算', examName: null, subject: null, score: null, fullScore: null, previousScore: null }], windowStart: '2026-08-17T17:28:13.335Z', windowEnd: '2026-09-16T17:28:13.335Z' }));
 });
 
-function Harness({ empty = true, generator = false, taskActions = {} }: { empty?: boolean; generator?: boolean; taskActions?: Partial<PreviewActions> }) {
+function Harness({ empty = true, taskActions = {} }: { empty?: boolean; taskActions?: Partial<PreviewActions> }) {
   const seed = createDemoData();
   const [data, setData] = useState(empty ? { ...seed, feedbacks: [] } : seed);
   const [ui, setUi] = useState<Record<string, unknown>>({});
   const [dialog, setDialog] = useState<ReactNode>(null);
-  const actions: PreviewActions = { data, setData, ui, setUi, open: (_title, body) => setDialog(body), toast: vi.fn(), close: () => setDialog(null), complete: vi.fn(), saveSchedule: vi.fn(), cancelSchedule: vi.fn(), saveRule: vi.fn(), replaceRuleFrom: vi.fn(), setRuleEnabled: vi.fn(), addPayment: vi.fn(), ...(generator ? { generateFeedbackDraft: generateDraft } : {}), ...taskActions };
+  const actions: PreviewActions = { data, setData, ui, setUi, open: (_title, body) => setDialog(body), toast: vi.fn(), close: () => setDialog(null), complete: vi.fn(), saveSchedule: vi.fn(), cancelSchedule: vi.fn(), saveRule: vi.fn(), replaceRuleFrom: vi.fn(), setRuleEnabled: vi.fn(), addPayment: vi.fn(), ...taskActions };
   return <><FeedbackPage actions={actions} />{dialog && <div role="dialog">{dialog}</div>}</>;
 }
 
@@ -52,7 +48,8 @@ describe('feedback settings', () => {
   });
 
   it('formats generated evidence window as readable Shanghai dates', async () => {
-    render(<Harness generator />);
+    const create = vi.fn().mockResolvedValue({ replayed: false, task: generatedTask() });
+    render(<Harness taskActions={{ createFeedbackDraftTask: create }} />);
     fireEvent.click(screen.getAllByRole('button', { name: '新建反馈' })[0]);
     fireEvent.change(screen.getByLabelText('选择学生'), { target: { value: 's2' } });
     fireEvent.click(screen.getByRole('button', { name: '根据教学记录生成反馈' }));
@@ -62,13 +59,14 @@ describe('feedback settings', () => {
 
   it('carries the confirmed record into the feedback draft and scopes generation to it', async () => {
     location.hash = '#/feedback?studentId=s2&recordId=record-1';
-    render(<Harness generator />);
+    const create = vi.fn().mockResolvedValue({ replayed: false, task: generatedTask() });
+    render(<Harness taskActions={{ createFeedbackDraftTask: create }} />);
     fireEvent.click(screen.getAllByRole('button', { name: '新建反馈' })[0]);
     expect(screen.getByLabelText('选择学生')).toHaveValue('s2');
     expect(screen.getByText('已带入刚刚核对的正式记录，生成时只使用这条记录作为依据。')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '根据教学记录生成反馈' }));
     await screen.findByLabelText('反馈生成依据');
-    expect(generateDraft).toHaveBeenCalledWith({ studentId: 's2', recordIds: ['record-1'] });
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ studentId: 's2', recordIds: ['record-1'], clientRequestId: expect.any(String) }));
   });
 
   it('opens the saved evidence snapshot so the teacher can review the source', async () => {
@@ -128,3 +126,12 @@ describe('feedback settings', () => {
     expect(screen.getByRole('button', { name: '暂存修改' })).toBeInTheDocument();
   });
 });
+
+function generatedTask(): FeedbackDraftTask {
+  return {
+    id: 'task-generated', studentId: 's2', status: 'succeeded', version: 2, attemptCount: 1, retryable: false,
+    request: { studentId: 's2' }, draft: { title: '课堂进展', content: '小雨主动验算，下一次继续保持。' },
+    generation: { lessonIds: ['lesson-1'], rationale: '使用具体课堂行为。', evidence: [{ id: 'record-1', type: 'record', occurredAt: '2026-09-14T08:00:00Z', category: 'lesson_observation', summary: '主动验算', examName: null, subject: null, score: null, fullScore: null, previousScore: null }], windowStart: '2026-08-17T17:28:13.335Z', windowEnd: '2026-09-16T17:28:13.335Z' },
+    error: null, savedFeedbackId: null, createdAt: '2026-09-16T17:28:13.335Z', updatedAt: '2026-09-16T17:28:13.335Z',
+  };
+}

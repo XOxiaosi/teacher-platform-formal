@@ -7,6 +7,7 @@ import { createApp } from '../../src/index.js';
 import { createCoreRouteDependencies } from '../../src/app/composition/core-route-dependencies.js';
 import { createAssembleParentFeedbackContextUseCase } from '../../src/app/use-cases/assemble-parent-feedback-context/assemble-parent-feedback-context-use-case.js';
 import { createGenerateFeedbackDraftUseCase } from '../../src/app/use-cases/generate-feedback-draft/generate-feedback-draft-use-case.js';
+import { createFeedbackDraftTaskService } from '../../src/features/feedback/index.js';
 import { createFieldCipherFromEnv, encryptFieldValue, encryptJsonFieldValue } from '../../src/shared/field-encryption/index.js';
 import type { AiClient, ChatMessage, ChatToolDefinition } from '../../src/shared/ai-client/types.js';
 import { acceptInvitation } from '../helpers/invitations.js';
@@ -29,11 +30,18 @@ function createTestApp(client: PrismaClient) {
       }),
     } as unknown as AiClient,
   });
+  const feedbackDraftTasks = createFeedbackDraftTaskService({
+    prisma: client,
+    getClient: async () => client,
+    cipher,
+    context,
+    generator,
+  });
   return createApp(client, {
     localSafeMode: true,
     coreDependencies: {
       ...baseDependencies,
-      feedback: { ...baseDependencies.feedback, generateFeedbackDraft: generator },
+      feedback: { ...baseDependencies.feedback, feedbackDraftTasks },
     },
   });
 }
@@ -45,6 +53,8 @@ const studentIds: string[] = [];
 
 async function cleanup() {
   if (teacherIds.length === 0) return;
+  await prisma.feedbackDraftAttempt.deleteMany({ where: { teacherId: { in: teacherIds } } });
+  await prisma.feedbackDraftTask.deleteMany({ where: { teacherId: { in: teacherIds } } });
   await prisma.feedbackEvidence.deleteMany({ where: { teacherId: { in: teacherIds } } });
   await prisma.feedbackContextSnapshot.deleteMany({ where: { teacherId: { in: teacherIds } } });
   await prisma.parentFeedback.deleteMany({ where: { teacherId: { in: teacherIds } } });
@@ -124,30 +134,28 @@ describe('A06 反馈正式认证 HTTP 合成闭环', () => {
     });
 
     const generated = await request(app)
-      .post('/api/v1/feedback/generate-draft')
+      .post('/api/v1/feedback/draft-tasks')
       .set('Cookie', cookie)
-      .send({ studentId, lessonIds: [lesson.id], focus: 'highlight' });
+      .send({ clientRequestId: 'a06-http-generate-0001', studentId, lessonIds: [lesson.id], focus: 'highlight' });
     expect(generated.status).toBe(201);
-    expect(generated.body.data).toMatchObject({
+    expect(generated.body.data.task.error).toBeNull();
+    expect(generated.body.data).toMatchObject({ replayed: false, task: {
       studentId,
-      lessonIds: [lesson.id],
-      title: '本次课堂的主动验算',
-      source: 'ai',
-    });
-    expect(generated.body.data.evidence.map((item: { id: string }) => item.id)).toEqual([record.id]);
+      status: 'succeeded',
+      draft: { title: '本次课堂的主动验算' },
+      generation: { lessonIds: [lesson.id] },
+    } });
+    expect(generated.body.data.task.generation.evidence.map((item: { id: string }) => item.id)).toEqual([record.id]);
     expect(await prisma.parentFeedback.count({ where: { teacherId, studentId } })).toBe(0);
 
     const saveBody = {
       studentId,
-      lessonId: lesson.id,
-      title: generated.body.data.title,
+      title: generated.body.data.task.draft.title,
       content: '老师核对后的反馈：小雨主动验算，下一次继续保持。',
       channel: 'manual-copy',
       parentName: '合成家长',
       clientRequestId: 'a06-http-save-0001',
-      evidence: generated.body.data.evidence,
-      windowStart: generated.body.data.windowStart,
-      windowEnd: generated.body.data.windowEnd,
+      generationTaskId: generated.body.data.task.id,
     };
     const saved = await request(app)
       .post('/api/v1/feedback')
@@ -273,22 +281,22 @@ describe('A06 反馈正式认证 HTTP 合成闭环', () => {
     }
 
     const generated = await request(app)
-      .post('/api/v1/feedback/generate-draft')
+      .post('/api/v1/feedback/draft-tasks')
       .set('Cookie', cookie)
-      .send({ studentId, recordIds: [recordId], focus: 'highlight' });
+      .send({ clientRequestId: 'a06-capture-generate-0001', studentId, recordIds: [recordId], focus: 'highlight' });
     expect(generated.status).toBe(201);
-    expect(generated.body.data.evidence.map((item: { id: string }) => item.id)).toEqual([recordId]);
+    expect(generated.body.data.task.error).toBeNull();
+    expect(generated.body.data.task.status).toBe('succeeded');
+    expect(generated.body.data.task.generation.evidence.map((item: { id: string }) => item.id)).toEqual([recordId]);
     expect(await prisma.parentFeedback.count({ where: { teacherId, studentId } })).toBe(0);
 
     const saveBody = {
       studentId,
-      title: generated.body.data.title,
-      content: generated.body.data.content,
+      title: generated.body.data.task.draft.title,
+      content: generated.body.data.task.draft.content,
       channel: 'manual-copy',
       clientRequestId: 'a06-capture-feedback-save-0001',
-      evidence: generated.body.data.evidence,
-      windowStart: generated.body.data.windowStart,
-      windowEnd: generated.body.data.windowEnd,
+      generationTaskId: generated.body.data.task.id,
     };
     const saved = await request(app).post('/api/v1/feedback').set('Cookie', cookie).send(saveBody);
     expect(saved.status).toBe(201);
@@ -340,11 +348,11 @@ describe('A06 反馈正式认证 HTTP 合成闭环', () => {
       });
 
       const blocked = await request(stateChangedApp)
-        .post('/api/v1/feedback/generate-draft')
+        .post('/api/v1/feedback/draft-tasks')
         .set('Cookie', cookie)
-        .send({ studentId, recordIds: [recordId], focus: 'highlight' });
-      expect(blocked.status).toBe(404);
-      expect(blocked.body.error).toMatchObject({ code: 'NOT_FOUND' });
+        .send({ clientRequestId: 'a06-capture-blocked-0001', studentId, recordIds: [recordId], focus: 'highlight' });
+      expect(blocked.status).toBe(201);
+      expect(blocked.body.data.task).toMatchObject({ status: 'failed', error: { code: 'NOT_FOUND' } });
     } finally {
       await stateChangedPrisma.$disconnect();
     }

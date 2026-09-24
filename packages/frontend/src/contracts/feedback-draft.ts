@@ -23,21 +23,6 @@ export interface FeedbackEvidenceItem {
   previousScore: number | null;
 }
 
-export interface GenerateFeedbackDraftResult {
-  studentId: string;
-  lessonIds: string[];
-  title: string;
-  content: string;
-  source: 'ai';
-  rationale: string;
-  classSize?: '1v1' | 'small' | 'large';
-  parentType?: 'normal' | 'scores' | 'sensitive';
-  focus?: 'highlight' | 'problem' | 'cooperation' | 'summary';
-  evidence?: FeedbackEvidenceItem[];
-  windowStart?: string;
-  windowEnd?: string;
-}
-
 export type FeedbackDraftTaskStatus = 'running' | 'succeeded' | 'failed' | 'evidence_changed' | 'uncertain' | 'saved';
 
 export interface FeedbackDraftTaskRequest extends GenerateFeedbackDraftRequest {

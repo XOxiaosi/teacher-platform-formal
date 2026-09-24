@@ -4,13 +4,13 @@ import { ConnectedWorkspace } from './ConnectedWorkspace';
 import { createDemoData } from '../preview/data';
 import { clearPendingPaymentRequests, readPendingPaymentRequest } from './payments/pending-payment';
 
-const mock = vi.hoisted(() => ({ availability: vi.fn(), load: vi.fn(), command: vi.fn(), schedule: vi.fn(), payment: vi.fn(), balance: vi.fn(), ledger: vi.fn(), update: vi.fn(), logout: vi.fn(), records: vi.fn(), timeline: vi.fn(), generate: vi.fn(), createFeedback: vi.fn(), updateFeedback: vi.fn(), feedbackSnapshot: vi.fn(), createDraftTask: vi.fn(), listDraftTasks: vi.fn(), getDraftTask: vi.fn(), retryDraftTask: vi.fn(), updateDraftTask: vi.fn(), prepareCorrection: vi.fn(), confirmCorrection: vi.fn() }));
+const mock = vi.hoisted(() => ({ availability: vi.fn(), load: vi.fn(), command: vi.fn(), schedule: vi.fn(), payment: vi.fn(), balance: vi.fn(), ledger: vi.fn(), update: vi.fn(), logout: vi.fn(), records: vi.fn(), timeline: vi.fn(), createFeedback: vi.fn(), updateFeedback: vi.fn(), feedbackSnapshot: vi.fn(), createDraftTask: vi.fn(), listDraftTasks: vi.fn(), getDraftTask: vi.fn(), retryDraftTask: vi.fn(), updateDraftTask: vi.fn(), prepareCorrection: vi.fn(), confirmCorrection: vi.fn() }));
 vi.mock('../app/teacher-context', () => ({ useAuth: () => ({ teacherId: 'teacher-a', displayName: '验收老师', email: 'a@example.test', logout: mock.logout }) }));
 vi.mock('./workspace-api', () => ({ loadWorkspace: mock.load, workspaceCommand: mock.command, schedulingCommand: mock.schedule }));
 vi.mock('../api/payments', () => ({ createPayment: mock.payment, listLessonLedgerEntries: mock.ledger }));
 vi.mock('../api/lesson-status-corrections', () => ({ prepareLessonStatusCorrection: mock.prepareCorrection, confirmLessonStatusCorrection: mock.confirmCorrection }));
 vi.mock('../api/students', () => ({ updateStudentProfile: mock.update, getStudentBalance: mock.balance, listStudentRecords: mock.records, getStudentTimeline: mock.timeline, reviewStudentRecord: vi.fn(), getStudentRecordSource: vi.fn() }));
-vi.mock('../api/feedback', () => ({ generateFeedbackDraft: mock.generate, createFeedback: mock.createFeedback, getFeedbackSnapshot: mock.feedbackSnapshot, updateFeedbackContent: mock.updateFeedback, createFeedbackDraftTask: mock.createDraftTask, listFeedbackDraftTasks: mock.listDraftTasks, getFeedbackDraftTask: mock.getDraftTask, retryFeedbackDraftTask: mock.retryDraftTask, updateFeedbackDraftTask: mock.updateDraftTask }));
+vi.mock('../api/feedback', () => ({ createFeedback: mock.createFeedback, getFeedbackSnapshot: mock.feedbackSnapshot, updateFeedbackContent: mock.updateFeedback, createFeedbackDraftTask: mock.createDraftTask, listFeedbackDraftTasks: mock.listDraftTasks, getFeedbackDraftTask: mock.getDraftTask, retryFeedbackDraftTask: mock.retryDraftTask, updateFeedbackDraftTask: mock.updateDraftTask }));
 vi.mock('../api/teaching-tasks', () => ({ getTeachingRuntimeAvailability: mock.availability }));
 vi.mock('../connected/assistant', () => ({ AssistantWorkspace: ({ teacherId }: { teacherId: string }) => <section aria-label="正式教学助手入口"><h1>教学助手</h1><p>当前账号：{teacherId}</p></section> }));
 

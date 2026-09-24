@@ -7,7 +7,6 @@ import { updateStudentProfile } from '../api/students';
 import {
   createFeedback,
   createFeedbackDraftTask,
-  generateFeedbackDraft,
   getFeedbackDraftTask,
   getFeedbackSnapshot,
   listFeedbackDraftTasks,
@@ -136,8 +135,6 @@ export function ConnectedWorkspace() {
     },
     saveMemo: (text) => command('memos', { text }),
     toggleMemo: (id, done) => command('memo-status', { id, done, expectedUpdatedAt: snapshotRef.current!.memoVersions[id] }),
-    // 旧的预览入口仍保留在 PreviewActions 中；正式反馈页优先使用持久化任务。
-    generateFeedbackDraft: (input) => generateFeedbackDraft(auth.teacherId!, input),
     ...(typeof createFeedbackDraftTask === 'function' && { createFeedbackDraftTask: (input: Parameters<typeof createFeedbackDraftTask>[1]) => createFeedbackDraftTask(auth.teacherId!, input) }),
     ...(typeof listFeedbackDraftTasks === 'function' && { listFeedbackDraftTasks: async () => (await listFeedbackDraftTasks(auth.teacherId!)).items }),
     ...(typeof getFeedbackDraftTask === 'function' && { getFeedbackDraftTask: (taskId: string) => getFeedbackDraftTask(auth.teacherId!, taskId) }),
