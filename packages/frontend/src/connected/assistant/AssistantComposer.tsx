@@ -15,14 +15,25 @@ interface Props {
   onSend: (draft: AssistantDraft) => void | Promise<void>;
   placeholder?: string;
   welcome?: boolean;
+  suggestedDraft?: { draft: AssistantDraft; basedOnRequestId: string } | null;
 }
 
-export function AssistantComposer({ teacherId, draftScope, messageState, available, busy = false, error, onSend, placeholder = '说说你现在想处理的教学工作…', welcome = false }: Props) {
+export function AssistantComposer({ teacherId, draftScope, messageState, available, busy = false, error, onSend, placeholder = '说说你现在想处理的教学工作…', welcome = false, suggestedDraft }: Props) {
   const [draft, setDraft] = useState(() => readDraft(teacherId, draftScope));
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  const appliedSuggestionId = useRef<string | null>(null);
   const submitting = Boolean(messageState?.sending || busy);
   const messageError = messageState?.error || error;
   useLayoutEffect(() => { setDraft(readDraft(teacherId, draftScope)); }, [teacherId, draftScope, busy, messageState?.acceptedRequestId, messageState?.sending]);
+  useLayoutEffect(() => {
+    if (!suggestedDraft || appliedSuggestionId.current === suggestedDraft.draft.requestId || messageState?.sending) return;
+    const current = readDraft(teacherId, draftScope);
+    appliedSuggestionId.current = suggestedDraft.draft.requestId;
+    if (current.requestId !== suggestedDraft.basedOnRequestId || current.awaitingReceipt) return;
+    setDraft(suggestedDraft.draft);
+    writeDraft(teacherId, draftScope, suggestedDraft.draft);
+    composerRef.current?.focus();
+  }, [draftScope, messageState?.sending, suggestedDraft, teacherId]);
   const resize = (element: HTMLTextAreaElement) => {
     element.style.height = 'auto';
     element.style.height = `${Math.min(Math.max(element.scrollHeight, welcome ? 106 : 54), welcome ? 220 : 180)}px`;

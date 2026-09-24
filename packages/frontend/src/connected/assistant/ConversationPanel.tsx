@@ -3,7 +3,7 @@ import { useConversation } from './useConversation';
 import { TurnContent } from './TurnContent';
 import { AssistantComposer } from './AssistantComposer';
 import { ConfirmationBatch } from './ConfirmationBatch';
-import { readDraft, type AssistantDraft } from './drafts';
+import { readDraft, writeDraft, type AssistantDraft } from './drafts';
 import { taskLabels, type AssistantTransport } from './transport';
 import type { AssistantTask, AssistantTaskEvent } from './transport';
 import type { MessageState } from './useAssistantMessages';
@@ -95,21 +95,29 @@ export function ConversationPanel({ teacherId, conversationId, transport, messag
   const renderedContentRef = useRef('');
   const workspaceRefreshes = useRef(new Set<string>());
   const pendingConfirmationRequests = useRef(new Set<string>());
+  const revisionRequestLock = useRef(false);
   const conversationScope = useRef(`${teacherId}:${conversationId}`);
   const [showJumpToBottom, setShowJumpToBottom] = useState(false);
   const [workspaceRefreshError, setWorkspaceRefreshError] = useState('');
   const [confirmationStatuses, setConfirmationStatuses] = useState<Record<string, ConfirmationStatus>>({});
   const [confirmationBusy, setConfirmationBusy] = useState<Record<string, boolean>>({});
   const [confirmationError, setConfirmationError] = useState<Record<string, string>>({});
+  const [suggestedDraft, setSuggestedDraft] = useState<{ draft: AssistantDraft; basedOnRequestId: string } | null>(null);
+  const [requestChangesErrors, setRequestChangesErrors] = useState<Record<string, string>>({});
+  const [revisionBusyBatchId, setRevisionBusyBatchId] = useState<string | null>(null);
   const awaitingReceipt = readDraft(teacherId, conversationId).awaitingReceipt;
   useEffect(() => {
     conversationScope.current = `${teacherId}:${conversationId}`;
     workspaceRefreshes.current.clear();
     pendingConfirmationRequests.current.clear();
+    revisionRequestLock.current = false;
     setWorkspaceRefreshError('');
     setConfirmationStatuses({});
     setConfirmationBusy({});
     setConfirmationError({});
+    setSuggestedDraft(null);
+    setRequestChangesErrors({});
+    setRevisionBusyBatchId(null);
   }, [teacherId, conversationId]);
   const visibleTurns = mergePendingTurn(session.turns, messageState?.pendingTurn);
   const confirmationBatches = groupConfirmationsByTask(visibleTurns);
@@ -315,6 +323,89 @@ export function ConversationPanel({ teacherId, conversationId, transport, messag
       });
     }
   };
+  const requestConfirmationChanges = async (batchId: string, turns: ConfirmationTurnDto[]) => {
+    const scope = `${teacherId}:${conversationId}`;
+    if (conversationScope.current !== scope || messageState?.sending || revisionRequestLock.current) return;
+    const draftBaseline = readDraft(teacherId, conversationId);
+    if (draftBaseline.text.trim() || draftBaseline.awaitingReceipt) {
+      setRequestChangesErrors(current => ({ ...current, [batchId]: '输入框已有未发送内容，请先发送或清空，再修改这批安排。' }));
+      return;
+    }
+    writeDraft(teacherId, conversationId, draftBaseline);
+    const pending = turns.filter(turn => (confirmationStatuses[turn.actionId] ?? turn.status) === 'pending'
+      && !pendingConfirmationRequests.current.has(turn.actionId));
+    if (pending.length === 0) return;
+    revisionRequestLock.current = true;
+    setRevisionBusyBatchId(batchId);
+    setRequestChangesErrors(current => {
+      const next = { ...current };
+      delete next[batchId];
+      return next;
+    });
+    setSuggestedDraft(null);
+    pending.forEach(turn => pendingConfirmationRequests.current.add(turn.actionId));
+    setConfirmationBusy(current => ({ ...current, ...Object.fromEntries(pending.map(turn => [turn.actionId, true])) }));
+    setConfirmationError(current => {
+      const next = { ...current };
+      pending.forEach(turn => delete next[turn.actionId]);
+      return next;
+    });
+    try {
+      const results = await Promise.all(pending.map(async turn => {
+        try {
+          if (transport?.pendingActionApi) await transport.pendingActionApi.cancel({ teacherId, actionId: turn.actionId });
+          else await cancelPendingAction(teacherId, turn.actionId);
+          return { turn, status: 'cancelled' as ConfirmationStatus };
+        } catch {
+          try {
+            const current = transport?.pendingActionApi?.get
+              ? await transport.pendingActionApi.get({ teacherId, actionId: turn.actionId })
+              : transport?.pendingActionApi
+                ? null
+                : await getPendingAction(teacherId, turn.actionId);
+            if (current) return { turn, status: current.pendingAction.status };
+          } catch {
+            // Keep the old proposal visible until cancellation can be verified.
+          }
+          return { turn, status: 'pending' as ConfirmationStatus };
+        }
+      }));
+      if (conversationScope.current !== scope) return;
+      setConfirmationStatuses(current => ({
+        ...current,
+        ...Object.fromEntries(results.map(result => [result.turn.actionId, result.status])),
+      }));
+      const unresolved = results.filter(result => result.status === 'pending' || result.status === 'running');
+      setConfirmationError(current => ({
+        ...current,
+        ...Object.fromEntries(unresolved.map(result => [result.turn.actionId, '旧候选尚未撤销，请重试修改。'])),
+      }));
+      void Promise.all([session.load(), session.reloadTasks()]);
+      if (unresolved.length === 0) {
+        const currentDraft = readDraft(teacherId, conversationId);
+        if (currentDraft.requestId === draftBaseline.requestId && !currentDraft.awaitingReceipt) {
+          setSuggestedDraft({
+            basedOnRequestId: draftBaseline.requestId,
+            draft: {
+              requestId: crypto.randomUUID(),
+              text: `请修改这批安排：\n${turns.map(turn => `- ${turn.afterSummary}`).join('\n')}\n\n我的修改是：`,
+            },
+          });
+        } else {
+          setRequestChangesErrors(current => ({ ...current, [batchId]: '旧候选已撤销；输入框内容已变化，请直接在当前输入中写明修改要求。' }));
+        }
+      }
+    } finally {
+      pending.forEach(turn => pendingConfirmationRequests.current.delete(turn.actionId));
+      if (conversationScope.current === scope) setConfirmationBusy(current => {
+        const next = { ...current };
+        pending.forEach(turn => delete next[turn.actionId]);
+        return next;
+      });
+      revisionRequestLock.current = false;
+      if (conversationScope.current === scope) setRevisionBusyBatchId(null);
+    }
+  };
   return <section className="assistant-conversation" aria-label="当前会话">
     <header className="assistant-conversation-heading">
       <div className="assistant-conversation-title">
@@ -340,11 +431,14 @@ export function ConversationPanel({ teacherId, conversationId, transport, messag
           const task = taskPlacement.get(turn.id);
           const taskEvents = task ? visibleEvents.filter(event => event.taskId === task.id) : [];
           const confirmationBatch = confirmationBatchStarts.get(turn.id);
+          const confirmationBatchId = confirmationBatch?.map(item => item.actionId).join('|');
           return <div key={turn.id} className="assistant-turn-with-process">{confirmationBatch
             ? <ConfirmationBatch turns={confirmationBatch} itemStates={Object.fromEntries(confirmationBatch.map(item => [item.actionId, {
               status: item.status === 'pending' ? confirmationStatuses[item.actionId] : item.status,
               busy: confirmationBusy[item.actionId], error: item.status === 'pending' ? confirmationError[item.actionId] : undefined,
-            }]))} onConfirm={(_selectedActionIds, selectedTurns) => { void finishConfirmations(selectedTurns); }} />
+            }]))} onConfirm={(_selectedActionIds, selectedTurns) => { void finishConfirmations(selectedTurns); }}
+              onRequestChanges={items => { void requestConfirmationChanges(confirmationBatchId!, items); }} requestChangesError={requestChangesErrors[confirmationBatchId!]}
+              requestChangesBusy={revisionBusyBatchId !== null} />
             : <TurnContent turn={turn} demoMode={transport?.runtimeAvailability === 'test_only'}
             pendingLabel={turn.id === messageState?.pendingTurn?.id
               ? messageState?.sending ? '正在发送…' : messageState?.error?.includes('接收回执') ? '等待接收回执' : '已接收，等待会话记录'
@@ -382,6 +476,6 @@ export function ConversationPanel({ teacherId, conversationId, transport, messag
         }}><ArrowDown size={15} />回到底部</Button>}
       </>}
     </div>
-    {session.conversation?.status === 'active' && <AssistantComposer teacherId={teacherId} draftScope={conversationId} messageState={messageState} available={Boolean(transport)} busy={session.busy} onSend={draft => send(conversationId, draft)} placeholder="继续交代要处理的教学工作…" />}
+    {session.conversation?.status === 'active' && <AssistantComposer teacherId={teacherId} draftScope={conversationId} messageState={messageState} available={Boolean(transport)} busy={session.busy} suggestedDraft={suggestedDraft} onSend={draft => send(conversationId, draft)} placeholder="继续交代要处理的教学工作…" />}
   </section>;
 }

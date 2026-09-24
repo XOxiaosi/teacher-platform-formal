@@ -57,6 +57,13 @@ describe('ConfirmationBatch', () => {
     expect(screen.getByRole('button', { name: '确认选中的 2 项' })).toBeDisabled();
   });
 
+  it('把整批候选交回助手修改', () => {
+    const onRequestChanges = vi.fn();
+    render(<ConfirmationBatch turns={turns} onConfirm={vi.fn()} onRequestChanges={onRequestChanges} />);
+    fireEvent.click(screen.getByRole('button', { name: '让助手修改' }));
+    expect(onRequestChanges).toHaveBeenCalledWith(turns);
+  });
+
   it('不选择无 token 或已过期的项目，也不把它们计入确认数量', () => {
     const unavailable = [
       { ...turns[0]!, actionToken: null },

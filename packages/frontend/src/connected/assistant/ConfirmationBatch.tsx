@@ -12,6 +12,9 @@ export interface ConfirmationBatchProps {
   turns: ConfirmationTurnDto[];
   itemStates?: Record<string, ConfirmationBatchItemState | undefined>;
   onConfirm: (selectedActionIds: string[], selectedTurns: ConfirmationTurnDto[]) => void;
+  onRequestChanges?: (turns: ConfirmationTurnDto[]) => void;
+  requestChangesError?: string;
+  requestChangesBusy?: boolean;
   title?: string;
 }
 
@@ -45,7 +48,7 @@ function isEligible(turn: ConfirmationTurnDto, status: ConfirmationStatus): bool
   return status === 'pending' && Boolean(turn.actionToken) && Number.isFinite(expiresAt) && expiresAt > Date.now();
 }
 
-export function ConfirmationBatch({ turns, itemStates = EMPTY_ITEM_STATES, onConfirm, title = '确认这些教学安排' }: ConfirmationBatchProps) {
+export function ConfirmationBatch({ turns, itemStates = EMPTY_ITEM_STATES, onConfirm, onRequestChanges, requestChangesError, requestChangesBusy = false, title = '确认这些教学安排' }: ConfirmationBatchProps) {
   const initialized = React.useRef(false);
   const knownActionIds = React.useRef<Set<string>>(new Set());
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(() => new Set(
@@ -83,6 +86,7 @@ export function ConfirmationBatch({ turns, itemStates = EMPTY_ITEM_STATES, onCon
 
   const selectedTurns = turns.filter(turn => selectedIds.has(turn.actionId) && isEligible(turn, itemStates[turn.actionId]?.status ?? turn.status));
   const selectedItemBusy = selectedTurns.some(turn => Boolean(itemStates[turn.actionId]?.busy) || (itemStates[turn.actionId]?.status ?? turn.status) === 'running');
+  const revisable = turns.some(turn => (itemStates[turn.actionId]?.status ?? turn.status) === 'pending');
   return <section className="assistant-confirmation-batch" aria-label={title}>
     <header className="assistant-confirmation-batch-heading">
       <div><h3>{title}</h3><p>逐项核对后，一次确认选中的项目。</p></div>
@@ -105,8 +109,12 @@ export function ConfirmationBatch({ turns, itemStates = EMPTY_ITEM_STATES, onCon
         </label>;
       })}
     </div>
-    <button type="button" className="assistant-confirmation-batch-submit" disabled={selectedTurns.length === 0 || selectedItemBusy} onClick={() => onConfirm(selectedTurns.map(turn => turn.actionId), selectedTurns)}>
-      确认选中的 {selectedTurns.length} 项
-    </button>
+    <div className="assistant-confirmation-batch-actions">
+      <button type="button" className="assistant-confirmation-batch-submit" disabled={selectedTurns.length === 0 || selectedItemBusy} onClick={() => onConfirm(selectedTurns.map(turn => turn.actionId), selectedTurns)}>
+        确认选中的 {selectedTurns.length} 项
+      </button>
+      {onRequestChanges && revisable && <button type="button" className="assistant-confirmation-batch-revise" disabled={selectedItemBusy || requestChangesBusy} onClick={() => onRequestChanges(turns)}>{requestChangesBusy ? '正在准备修改…' : '让助手修改'}</button>}
+    </div>
+    {requestChangesError && <p role="alert" className="assistant-confirmation-batch-revise-error">{requestChangesError}</p>}
   </section>;
 }

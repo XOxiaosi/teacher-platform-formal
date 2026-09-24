@@ -151,6 +151,10 @@
 .assistant-confirmation-batch-item.is-complete .assistant-confirmation-batch-status { color: var(--assistant-primary); font-weight: 650; }
 .assistant-confirmation-batch-submit { min-height: 36px; padding: 7px 13px; border: 0; border-radius: 8px; background: var(--assistant-primary); color: #fff; font: inherit; cursor: pointer; }
 .assistant-confirmation-batch-submit:disabled { cursor: not-allowed; opacity: .48; }
+.assistant-confirmation-batch-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.assistant-confirmation-batch-revise { border: 1px solid var(--border); border-radius: 8px; background: var(--background); color: var(--foreground); padding: 8px 12px; font-size: 13px; font-weight: 650; cursor: pointer; }
+.assistant-confirmation-batch-revise:disabled { cursor: not-allowed; opacity: .55; }
+.assistant-confirmation-batch-revise-error { margin: 0; color: var(--destructive); font-size: 13px; }
 
 .assistant-welcome { display: flex; flex: 1; flex-direction: column; justify-content: center; align-items: center; min-height: 0; padding: 36px 24px; background: #fff; }
 .assistant-welcome-copy { display: grid; justify-items: center; max-width: 620px; margin-bottom: 28px; text-align: center; }
