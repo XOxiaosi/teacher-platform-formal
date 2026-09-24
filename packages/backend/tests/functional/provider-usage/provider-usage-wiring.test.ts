@@ -29,7 +29,10 @@ process.env.PROVIDER_BASEURL_ALLOWED_IPS = '127.0.0.0/8';
 
 const prisma = new PrismaClient();
 // 此测试验证正式 provider 路径；local-safe 默认关闭 provider 装配，故显式 opt-out。
-const deps = createCoreRouteDependencies(prisma, { localSafeMode: false });
+const deps = createCoreRouteDependencies(prisma, {
+  localSafeMode: false,
+  legacyAiInputRoutesEnabled: true,
+});
 
 let mockServer: http.Server;
 let mockPort = 0;
@@ -117,7 +120,7 @@ describe('ProviderUsage 采集接线（P16 P1：正式结构化输入 onUsage �
 
     // 路径 A：第一处 createRoutingAiClient（aiNotes/saveRawInput）——run() ×2
     const rawResult = await runAsTeacher(teacherId, () =>
-      deps.aiInput.saveRawInput.saveRawInput({
+      deps.aiInput!.saveRawInput.saveRawInput({
         teacherId,
         inputType: 'text',
         text: '今天给小明上了数学课，作业是完成第三单元练习',

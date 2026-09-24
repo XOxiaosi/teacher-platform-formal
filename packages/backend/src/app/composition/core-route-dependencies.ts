@@ -101,9 +101,13 @@ export function createCoreRouteDependencies(
   options?: CoreRouterOptions,
 ): CoreRouteDependencies {
   const localSafeMode = options?.localSafeMode !== false;
-  const defaultAiProvider = localSafeMode
-    ? createFailClosedAiProvider()
-    : createArkAiProviderFromEnv();
+  const legacyAiClientRequired = options?.legacyAiInputRoutesEnabled === true
+    || options?.legacyModelCaptureRoutesEnabled === true;
+  const defaultAiProvider = legacyAiClientRequired
+    ? localSafeMode
+      ? createFailClosedAiProvider()
+      : createArkAiProviderFromEnv()
+    : undefined;
   // S2/S3：业务服务使用请求期 getClient（databaseRouter 注入），单库回退装配期 client
   const clientProvider = createClientProvider(prisma);
   // P8 phase-3 批1：字段加密 cipher 统一装配（ENCRYPTION_KEY env；未配置 → undefined 惰性 SAFETY_BLOCK）
@@ -197,20 +201,22 @@ export function createCoreRouteDependencies(
     ? createProviderUsageService({ prisma })
     : undefined;
   const usageLogger = options?.logger ?? createLogger();
-  const aiClient = localSafeMode
-    ? createAiClient({ provider: defaultAiProvider })
-    : createRoutingAiClient({
-      defaultProvider: defaultAiProvider,
-      resolver: providerRouter!,
-      onUsage: (input) => {
-        void providerUsageService!.record(input).catch((error: unknown) => {
-          usageLogger.warn('provider usage record failed', {
-            error: error instanceof Error ? error.message : String(error),
-            teacherId: input.teacherId,
+  const aiClient = defaultAiProvider
+    ? localSafeMode
+      ? createAiClient({ provider: defaultAiProvider })
+      : createRoutingAiClient({
+        defaultProvider: defaultAiProvider,
+        resolver: providerRouter!,
+        onUsage: (input) => {
+          void providerUsageService!.record(input).catch((error: unknown) => {
+            usageLogger.warn('provider usage record failed', {
+              error: error instanceof Error ? error.message : String(error),
+              teacherId: input.teacherId,
+            });
           });
-        });
-      },
-    });
+        },
+      })
+    : undefined;
   const providerConfigService = createProviderConfigService(
     localSafeMode
       ? { prisma, allowedCidrs: [], endpointValidation: 'static', runtimeEnabled: false }
@@ -225,7 +231,9 @@ export function createCoreRouteDependencies(
   });
   const feedbackDraftTasks = createFeedbackDraftTaskService({ prisma, getClient: clientProvider.getClient, cipher: fieldCipher,
     context: assembleParentFeedbackContext, generator: generateFeedbackDraft });
-  const captureScoreFromText = createCaptureScoreFromTextUseCase({ prisma, aiClient, assessments, getClient: clientProvider.getClient });
+  const captureScoreFromText = aiClient
+    ? createCaptureScoreFromTextUseCase({ prisma, aiClient, assessments, getClient: clientProvider.getClient })
+    : undefined;
   const platformServices = createPlatformServicesForMode(localSafeMode);
   const communicationModeration = platformServices.moderation?.provider === 'local'
     ? platformServices.moderation
@@ -238,11 +246,15 @@ export function createCoreRouteDependencies(
       : {}),
     auditSource: 'manual',
   });
-  const captureCommunicationFromText = createCaptureCommunicationFromTextUseCase({ prisma, aiClient, communications, getClient: clientProvider.getClient });
+  const captureCommunicationFromText = aiClient
+    ? createCaptureCommunicationFromTextUseCase({ prisma, aiClient, communications, getClient: clientProvider.getClient })
+    : undefined;
   // P11 t2（对象存储）：存储装配走 StorageBackend 抽象——STORAGE_BACKEND=local（缺省，零破坏）| s3
   // （S3 模式下媒体原文件/导出/归档对象入桶，fileRef 即对象 key；见 shared/storage createAppStorage）
   const storage = createAppStorageForMode(localSafeMode);
-  const aiNotes = createAiNoteService({ prisma, aiClient, storage, getClient: clientProvider.getClient, cipher: fieldCipher });
+  const aiNotes = aiClient
+    ? createAiNoteService({ prisma, aiClient, storage, getClient: clientProvider.getClient, cipher: fieldCipher })
+    : undefined;
   // P8 S3 媒体证据链（t8）+ P9 阶段二（t3/t6）：媒体资产服务——教师库表（MediaAsset，走 getClient 路由）
   // + 通用存储（rootDir .data，exactRef=media/<teacherId>/<assetId>/original）+ 证据捕获链注入（幂等）
   // + 文件级加密（MEDIA_ENCRYPTION_KEY 独立 env；未配置 → 上传写路径 SAFETY_BLOCK 拒绝明文落盘）
@@ -265,7 +277,7 @@ export function createCoreRouteDependencies(
     storage,
     trustedClock,
   });
-  const saveRawInput = createSaveRawInputUseCase({ aiNotes });
+  const saveRawInput = aiNotes ? createSaveRawInputUseCase({ aiNotes }) : undefined;
   // T-015 正式捕获链完全不依赖 AI/OCR/ASR；文字先加密持久化，再产出确定性逐字候选。
   const capture = createCaptureService({ prisma, getClient: clientProvider.getClient, cipher: fieldCipher });
   const conversations = createConversationService({ prisma, getClient: clientProvider.getClient, cipher: fieldCipher });
@@ -391,16 +403,16 @@ export function createCoreRouteDependencies(
       sources: studentSources,
       assessments,
       timeline: studentTimeline,
-      captureScoreFromText,
       communications,
-      captureCommunicationFromText,
+      ...(captureScoreFromText ? { captureScoreFromText } : {}),
+      ...(captureCommunicationFromText ? { captureCommunicationFromText } : {}),
     },
     schedules: { schedules, plannedSchedules, scheduleComplete },
     schedulingWeb: { schedulingWeb },
     workspaceWeb,
     payments: { payments, ledger: lessonLedger, lessonStatusCorrections },
     dailyReview: { dailyReview },
-    aiInput: { saveRawInput },
+    ...(saveRawInput ? { aiInput: { saveRawInput } } : {}),
     capture: { capture },
     ...(legacyAgent ? { agent: legacyAgent } : {}),
     feedback: {

@@ -26,6 +26,9 @@ describe('explicit DSH gate stays independent of provider/legacy local-safe isol
     const dependencies = createCoreRouteDependencies({} as PrismaClient);
     expect(dependencies.teachingRuntimeWorker).toBeUndefined();
     expect(createRealDshTeachingRuntime).not.toHaveBeenCalled();
+    expect(dependencies.aiInput).toBeUndefined();
+    expect(dependencies.studentRecords.captureScoreFromText).toBeUndefined();
+    expect(dependencies.studentRecords.captureCommunicationFromText).toBeUndefined();
   });
 
   it('explicit local-safe DSH is available without provider reads or legacy network access', async () => {

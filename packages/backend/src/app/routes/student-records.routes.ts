@@ -20,45 +20,20 @@ export interface StudentRecordsRouteDependencies {
   sources: import('../../features/student-records/index.js').StudentSourceRecordService;
   assessments: import('../../features/assessments/index.js').AssessmentService;
   timeline: import('../../features/student-timeline/index.js').StudentTimelineService;
-  captureScoreFromText: CaptureScoreFromTextUseCase;
+  captureScoreFromText?: CaptureScoreFromTextUseCase;
   communications: import('../../features/student-communications/types.js').CommunicationService;
-  captureCommunicationFromText: CaptureCommunicationFromTextUseCase;
+  captureCommunicationFromText?: CaptureCommunicationFromTextUseCase;
 }
 
 const ALLOWED_REVIEW_STATUSES: ReadonlySet<string> = new Set(['confirmed', 'rejected']);
 
-interface CreateRecordBody {
-  category: StudentRecordCategory;
-  summary: string;
-  occurredAt?: Date;
-  structuredData?: Record<string, unknown>;
-  confidence?: Confidence;
-  visibility?: Visibility;
-  importance?: Importance;
-}
+interface CreateRecordBody { category: StudentRecordCategory; summary: string; occurredAt?: Date; structuredData?: Record<string, unknown>; confidence?: Confidence; visibility?: Visibility; importance?: Importance }
+interface AssessmentBody { examName?: string; subject?: string; score?: number; fullScore?: number; examDate?: Date; note?: string; sourceText?: string; summaryOverride?: string }
+interface CorrectBody extends AssessmentBody { oldRecordId: string }
+interface ReviewBody { reviewStatus: 'confirmed' | 'rejected'; visibility?: Visibility; expectedUpdatedAt?: string }
 
-interface AssessmentBody {
-  examName?: string;
-  subject?: string;
-  score?: number;
-  fullScore?: number;
-  examDate?: Date;
-  note?: string;
-  sourceText?: string;
-  summaryOverride?: string;
-}
-
-interface CorrectBody extends AssessmentBody {
-  oldRecordId: string;
-}
-
-interface ReviewBody {
-  reviewStatus: 'confirmed' | 'rejected';
-  visibility?: Visibility;
-  expectedUpdatedAt?: string;
-}
-
-export function createStudentRecordsRouter(dependencies: StudentRecordsRouteDependencies): Router {
+export function createStudentRecordsRouter(dependencies: StudentRecordsRouteDependencies,
+  options?: { legacyModelCaptureRoutesEnabled?: boolean }): Router {
   const router = Router();
 
   // 必须注册在 /students/:studentId/* 之前，避免被 :studentId 吞掉
@@ -140,21 +115,23 @@ export function createStudentRecordsRouter(dependencies: StudentRecordsRouteDepe
     sendResult(res, result, 201);
   });
 
-  router.post('/students/:studentId/assessments/capture-from-text', async (req, res) => {
-    const teacher = getTeacherId(req);
-    if (!teacher.ok) return sendTeacherError(res, teacher.error);
+  if (options?.legacyModelCaptureRoutesEnabled === true && dependencies.captureScoreFromText) {
+    router.post('/students/:studentId/assessments/capture-from-text', async (req, res) => {
+      const teacher = getTeacherId(req);
+      if (!teacher.ok) return sendTeacherError(res, teacher.error);
 
-    const body = parseCaptureFromTextBody(req.body);
-    if (!body.ok) return sendTeacherError(res, body.error);
+      const body = parseCaptureFromTextBody(req.body);
+      if (!body.ok) return sendTeacherError(res, body.error);
 
-    const result = await dependencies.captureScoreFromText.execute({
-      teacherId: teacher.value,
-      studentId: req.params.studentId,
-      rawText: body.value.rawText,
-      occurredAt: body.value.occurredAt,
+      const result = await dependencies.captureScoreFromText!.execute({
+        teacherId: teacher.value,
+        studentId: req.params.studentId,
+        rawText: body.value.rawText,
+        occurredAt: body.value.occurredAt,
+      });
+      sendResult(res, result, 201);
     });
-    sendResult(res, result, 201);
-  });
+  }
 
   router.post('/students/:studentId/assessments/correct', async (req, res) => {
     const teacher = getTeacherId(req);
@@ -196,21 +173,23 @@ export function createStudentRecordsRouter(dependencies: StudentRecordsRouteDepe
     sendResult(res, result, 201);
   });
 
-  router.post('/students/:studentId/communications/capture-from-text', async (req, res) => {
-    const teacher = getTeacherId(req);
-    if (!teacher.ok) return sendTeacherError(res, teacher.error);
+  if (options?.legacyModelCaptureRoutesEnabled === true && dependencies.captureCommunicationFromText) {
+    router.post('/students/:studentId/communications/capture-from-text', async (req, res) => {
+      const teacher = getTeacherId(req);
+      if (!teacher.ok) return sendTeacherError(res, teacher.error);
 
-    const body = parseCommunicationCaptureBody(req.body);
-    if (!body.ok) return sendTeacherError(res, body.error);
+      const body = parseCommunicationCaptureBody(req.body);
+      if (!body.ok) return sendTeacherError(res, body.error);
 
-    const result = await dependencies.captureCommunicationFromText.execute({
-      teacherId: teacher.value,
-      studentId: req.params.studentId,
-      rawText: body.value.rawText,
-      occurredAt: body.value.occurredAt,
+      const result = await dependencies.captureCommunicationFromText!.execute({
+        teacherId: teacher.value,
+        studentId: req.params.studentId,
+        rawText: body.value.rawText,
+        occurredAt: body.value.occurredAt,
+      });
+      sendResult(res, result, 201);
     });
-    sendResult(res, result, 201);
-  });
+  }
 
   router.patch('/students/:studentId/communications/:recordId', async (req, res) => {
     const teacher = getTeacherId(req);
@@ -309,10 +288,7 @@ function parseAssessmentBody(body: unknown): Result<AssessmentBody, CommonError>
   };
 }
 
-interface CaptureFromTextBody {
-  rawText: string;
-  occurredAt?: Date;
-}
+interface CaptureFromTextBody { rawText: string; occurredAt?: Date }
 
 function parseCaptureFromTextBody(body: unknown): Result<CaptureFromTextBody, CommonError> {
   if (!isPlainObject(body)) {
@@ -382,10 +358,7 @@ function parseReviewBody(body: unknown): Result<ReviewBody, CommonError> {
 
 // ---- 沟通 capture 解析 ----
 
-interface CommunicationCaptureBody {
-  rawText: string;
-  occurredAt?: Date;
-}
+interface CommunicationCaptureBody { rawText: string; occurredAt?: Date }
 
 function parseCommunicationCaptureBody(body: unknown): Result<CommunicationCaptureBody, CommonError> {
   if (!isPlainObject(body)) {
@@ -409,16 +382,7 @@ function parseCommunicationCaptureBody(body: unknown): Result<CommunicationCaptu
 
 // ---- 沟通 patch 解析 ----
 
-interface CommunicationPatchBody {
-  direction?: string;
-  channel?: string | null;
-  parentType?: string | null;
-  parentConcerns?: string[];
-  teacherResponses?: string[];
-  agreements?: string[];
-  followUps?: string[];
-  nextContactAtTs?: Date | null;
-}
+interface CommunicationPatchBody { direction?: string; channel?: string | null; parentType?: string | null; parentConcerns?: string[]; teacherResponses?: string[]; agreements?: string[]; followUps?: string[]; nextContactAtTs?: Date | null }
 
 function parseCommunicationPatchBody(body: unknown): Result<CommunicationPatchBody, CommonError> {
   if (!isPlainObject(body)) {

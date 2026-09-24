@@ -76,7 +76,9 @@ export function createCoreRouter(prisma: PrismaClient, options?: CoreRouterOptio
       runtimeWorker: dependencies.teachingRuntimeWorker,
     }));
   }
-  router.use(createStudentRecordsRouter(dependencies.studentRecords));
+  router.use(createStudentRecordsRouter(dependencies.studentRecords, {
+    legacyModelCaptureRoutesEnabled: options?.legacyModelCaptureRoutesEnabled === true,
+  }));
   router.use(createStudentRecordSourceRouter(dependencies.studentRecords));
   router.use(createScheduleRouter(dependencies.schedules));
   router.use(createSchedulingWebRouter(dependencies.schedulingWeb.schedulingWeb));
@@ -84,7 +86,7 @@ export function createCoreRouter(prisma: PrismaClient, options?: CoreRouterOptio
   router.use(createPaymentRouter(dependencies.payments));
   router.use(createDailyReviewRouter(dependencies.dailyReview));
   router.use(createCaptureRouter(dependencies.capture));
-  if (options?.legacyAiInputRoutesEnabled === true) {
+  if (options?.legacyAiInputRoutesEnabled === true && dependencies.aiInput) {
     router.use(createAiInputRouter(dependencies.aiInput));
   }
   if (dependencies.agent) {

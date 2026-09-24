@@ -73,6 +73,8 @@ export interface CoreRouterOptions {
   localSafeMode?: boolean;
   /** 仅兼容旧专项测试；正式装配默认不暴露旧 AI 输入路由。 */
   legacyAiInputRoutesEnabled?: boolean;
+  /** 仅兼容旧专项测试；正式装配默认不暴露会直接写库的模型文本捕获路由。 */
+  legacyModelCaptureRoutesEnabled?: boolean;
   /** 仅兼容旧专项测试；正式装配默认不暴露旧媒体/OCR/ASR 路由。 */
   legacyMediaRoutesEnabled?: boolean;
   /** 仅兼容旧缴费编辑专项测试；正式装配默认关闭，避免绕过不可变课时账本。 */
@@ -94,9 +96,11 @@ export interface StudentRecordsRouteDependencies {
   sources: StudentSourceRecordService;
   assessments: AssessmentService;
   timeline: StudentTimelineService;
-  captureScoreFromText: import('../use-cases/capture-score-from-text/types.js').CaptureScoreFromTextUseCase;
+  /** Retired direct-model write path; absent from formal composition by default. */
+  captureScoreFromText?: import('../use-cases/capture-score-from-text/types.js').CaptureScoreFromTextUseCase;
   communications: import('../../features/student-communications/types.js').CommunicationService;
-  captureCommunicationFromText: import('../use-cases/capture-communication-from-text/types.js').CaptureCommunicationFromTextUseCase;
+  /** Retired direct-model write path; absent from formal composition by default. */
+  captureCommunicationFromText?: import('../use-cases/capture-communication-from-text/types.js').CaptureCommunicationFromTextUseCase;
 }
 
 export interface ScheduleRouteDependencies {
@@ -198,7 +202,8 @@ export interface CoreRouteDependencies {
   workspaceWeb?: Router;
   payments: PaymentRouteDependencies;
   dailyReview: DailyReviewRouteDependencies;
-  aiInput: AiInputRouteDependencies;
+  /** Retired raw AI input path; absent from formal composition by default. */
+  aiInput?: AiInputRouteDependencies;
   capture: CaptureRouteDependencies;
   /** Absent in formal composition; explicit legacy tests may still inject it. */
   agent?: AgentRouteDependencies;

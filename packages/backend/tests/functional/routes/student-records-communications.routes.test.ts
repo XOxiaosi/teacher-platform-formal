@@ -95,7 +95,9 @@ async function invoke(options: {
   body?: unknown;
   teacherId?: string;
 }) {
-  const router = createStudentRecordsRouter(options.dependencies);
+  const router = createStudentRecordsRouter(options.dependencies, {
+    legacyModelCaptureRoutesEnabled: true,
+  });
   const layer = (router.stack as RouteLayer[]).find(
     (candidate) => candidate.route?.path === options.routePath && candidate.route.methods[options.method],
   );
@@ -144,6 +146,14 @@ async function createCommunicationRecord(teacherId: string, studentId: string) {
 }
 
 describe('POST /students/:studentId/communications/capture-from-text', () => {
+  it('默认不注册会绕过 DSH 确认链的旧模型写入路由', () => {
+    const router = createStudentRecordsRouter(buildDeps(createMockProvider()));
+    const layer = (router.stack as RouteLayer[]).find(
+      (candidate) => candidate.route?.path === CAPTURE_ROUTE && candidate.route.methods.post,
+    );
+    expect(layer).toBeUndefined();
+  });
+
   it('成功：rawText → 201，body 含 record/detail/sourceRecord', async () => {
     const studentId = await createStudent(TEACHER_ID, '张三');
     const mockProvider = createMockProvider();

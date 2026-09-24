@@ -75,7 +75,9 @@ async function invoke(options: {
   body?: unknown;
   teacherId?: string;
 }) {
-  const router = createStudentRecordsRouter(options.dependencies);
+  const router = createStudentRecordsRouter(options.dependencies, {
+    legacyModelCaptureRoutesEnabled: true,
+  });
   const layer = (router.stack as RouteLayer[]).find(
     (candidate) => candidate.route?.path === ROUTE_PATH && candidate.route.methods.post,
   );
@@ -105,6 +107,14 @@ async function invoke(options: {
 }
 
 describe('POST /students/:studentId/assessments/capture-from-text', () => {
+  it('默认不注册会绕过 DSH 确认链的旧模型写入路由', () => {
+    const router = createStudentRecordsRouter(buildDeps(createMockProvider()));
+    const layer = (router.stack as RouteLayer[]).find(
+      (candidate) => candidate.route?.path === ROUTE_PATH && candidate.route.methods.post,
+    );
+    expect(layer).toBeUndefined();
+  });
+
   it('成功：rawText 带成绩 → 201，body 有 record/detail/sourceRecord，previousScore 持久化', async () => {
     const studentId = await createStudent(TEACHER_ID, '张三');
     const mockProvider = createMockProvider();
