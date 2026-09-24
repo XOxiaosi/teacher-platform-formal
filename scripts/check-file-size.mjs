@@ -55,6 +55,7 @@ function countLines(content) {
 
 const violations = [];
 const legacyMatches = [];
+const advisories = [];
 const files = await collectFiles(root);
 
 for (const file of files) {
@@ -66,6 +67,10 @@ for (const file of files) {
     const sha256 = createHash('sha256').update(content).digest('hex');
     if (baseline?.lines === lines && baseline.sha256 === sha256) {
       legacyMatches.push(path);
+      continue;
+    }
+    if (extname(file) === '.md') {
+      advisories.push(`${path}: ${lines} lines`);
       continue;
     }
     violations.push(`${path}: ${lines} lines`);
@@ -80,5 +85,9 @@ if (violations.length > 0) {
   if (legacyMatches.length > 0) {
     console.log(`Unchanged legacy exceptions (${legacyMatches.length}, source ${legacyBaseline.sourceCommit}, exit ${legacyBaseline.exitTask}):`);
     console.log(legacyMatches.join('\n'));
+  }
+  if (advisories.length > 0) {
+    console.log(`Markdown files over the ${MAX_LINES}-line maintainability advisory (${advisories.length}):`);
+    console.log(advisories.join('\n'));
   }
 }

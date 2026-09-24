@@ -86,7 +86,9 @@ test('reject uncoupled test and delivery check entry points', () => {
 test('reject removal of mandatory rules even when headings remain', () => {
   for (const rule of [
     '每次改动后都必须编写或更新相关测试',
+    '检查强度与风险匹配',
     '运行项目完整自动化入口 `npm run check`',
+    '500 行是可维护性提示',
     '任一必须检查失败或未执行，任务不能标为已完成或交付通过',
     '每次完成一项可独立描述的改动，都必须创建对应的 Git commit 后再交付',
     '这不是合格交付，也不是已验证可用的回滚点',

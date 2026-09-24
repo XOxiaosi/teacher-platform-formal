@@ -6,11 +6,11 @@ import { clearAssistantDrafts } from './drafts';
 import { detail, deferred, makeTransport, userTurn } from './assistant-test-support';
 import type { ConfirmationTurnDto, ConversationResponse } from '../../api/conversations';
 
-const api = vi.hoisted(() => ({ create: vi.fn(), list: vi.fn(), detail: vi.fn(), turns: vi.fn(), archive: vi.fn(), sendLegacy: vi.fn(), confirmLegacy: vi.fn(), cancelLegacy: vi.fn() }));
+const api = vi.hoisted(() => ({ create: vi.fn(), list: vi.fn(), detail: vi.fn(), turns: vi.fn(), archive: vi.fn(), sendLegacy: vi.fn(), getLegacy: vi.fn(), confirmLegacy: vi.fn(), cancelLegacy: vi.fn() }));
 vi.mock('../../api/conversations', () => ({
   createConversation: api.create, listConversations: api.list, getConversation: api.detail,
   listConversationTurns: api.turns, archiveConversation: api.archive,
-  sendConversationMessage: api.sendLegacy, confirmPendingAction: api.confirmLegacy, cancelPendingAction: api.cancelLegacy,
+  sendConversationMessage: api.sendLegacy, getPendingAction: api.getLegacy, confirmPendingAction: api.confirmLegacy, cancelPendingAction: api.cancelLegacy,
 }));
 beforeEach(() => {
   vi.clearAllMocks(); sessionStorage.clear(); clearAssistantDrafts('teacher-a'); clearAssistantDrafts('teacher-b');
@@ -21,15 +21,16 @@ beforeEach(() => {
   api.create.mockResolvedValue({ conversation: detail('new') });
   api.archive.mockResolvedValue({ conversation: detail('one', 'archived') });
   api.confirmLegacy.mockResolvedValue({ pendingAction: { id: 'pending-1', status: 'consumed' } });
+  api.getLegacy.mockResolvedValue({ pendingAction: { id: 'pending-1', status: 'pending' } });
   api.cancelLegacy.mockResolvedValue({ pendingAction: { id: 'pending-1', status: 'cancelled' } });
 });
 
-function proposedAction(actionName: 'scheduling.create' | 'memos.create' = 'scheduling.create'): ConfirmationTurnDto {
+function proposedAction(actionName: 'scheduling.create' | 'memos.create' = 'scheduling.create', overrides: Partial<ConfirmationTurnDto> = {}): ConfirmationTurnDto {
   return {
     id: 'confirmation-1', conversationId: 'one', kind: 'confirmation', actionId: 'pending-1', actionName,
     target: { type: 'Schedule', id: 'proposal-1' }, beforeSummary: null, afterSummary: '周三 19:00 为小明安排数学课。',
     parameterSummary: {}, status: 'pending', expiresAt: '2099-09-19T12:00:00Z', actionToken: 'private-confirmation-token', error: null,
-    createdAt: '2026-09-19T12:00:00Z',
+    createdAt: '2026-09-19T12:00:00Z', ...overrides,
   };
 }
 
@@ -396,6 +397,82 @@ describe('A03 server-backed assistant conversations', () => {
     await screen.findByText('保存尚未确认，请重试。');
     expect(screen.getByRole('button', { name: '确认保存' })).toBeEnabled();
     expect(screen.getByText(/周三 19:00 为小明安排数学课。/)).toBeInTheDocument();
+  });
+
+  it('groups proposals from one task and confirms only the selected items once', async () => {
+    const schedule = proposedAction('scheduling.create', { taskId: 'task-batch' });
+    const memo = proposedAction('memos.create', {
+      id: 'confirmation-2', taskId: 'task-batch', actionId: 'pending-2', actionToken: 'private-memo-token',
+      target: { type: 'Memo', id: 'proposal-2' }, afterSummary: '周五提醒家长反馈。',
+    });
+    api.turns.mockResolvedValue({ items: [schedule, memo], previousCursor: null });
+    render(<AssistantWorkspace teacherId="teacher-a" />);
+    await screen.findByRole('button', { name: '确认选中的 2 项' });
+    expect(screen.queryByRole('button', { name: '确认保存' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('checkbox')[1]!);
+    fireEvent.click(screen.getByRole('button', { name: '确认选中的 1 项' }));
+    await waitFor(() => expect(api.confirmLegacy).toHaveBeenCalledTimes(1));
+    expect(api.confirmLegacy).toHaveBeenCalledWith('teacher-a', 'pending-1', 'private-confirmation-token');
+    expect(document.body.textContent).not.toContain('private-confirmation-token');
+    expect(document.body.textContent).not.toContain('private-memo-token');
+  });
+
+  it('shows partial batch results and retries only the failed item', async () => {
+    const refreshWorkspace = vi.fn().mockResolvedValue(undefined);
+    const schedule = proposedAction('scheduling.create', { taskId: 'task-batch' });
+    const memo = proposedAction('memos.create', {
+      id: 'confirmation-2', taskId: 'task-batch', actionId: 'pending-2', actionToken: 'private-memo-token',
+      target: { type: 'Memo', id: 'proposal-2' }, afterSummary: '周五提醒家长反馈。',
+    });
+    api.turns.mockResolvedValue({ items: [schedule, memo], previousCursor: null });
+    api.confirmLegacy.mockImplementation((_teacher: string, actionId: string) => actionId === 'pending-2'
+      ? Promise.reject(new Error('memo write failed'))
+      : Promise.resolve({ pendingAction: { id: actionId, status: 'consumed' } }));
+    render(<AssistantWorkspace teacherId="teacher-a" onWorkspaceRefresh={refreshWorkspace} />);
+    fireEvent.click(await screen.findByRole('button', { name: '确认选中的 2 项' }));
+    await screen.findByText('已保存');
+    await screen.findByText('需重试');
+    expect(screen.getByText('保存尚未确认，请重试。')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '确认选中的 1 项' })).toBeEnabled();
+    await waitFor(() => expect(refreshWorkspace).toHaveBeenCalledTimes(1));
+
+    api.confirmLegacy.mockResolvedValue({ pendingAction: { id: 'pending-2', status: 'consumed' } });
+    fireEvent.click(screen.getByRole('button', { name: '确认选中的 1 项' }));
+    await waitFor(() => expect(api.confirmLegacy).toHaveBeenCalledTimes(3));
+    expect(api.confirmLegacy.mock.calls.map(call => call[1])).toEqual(['pending-1', 'pending-2', 'pending-2']);
+    await waitFor(() => expect(refreshWorkspace).toHaveBeenCalledTimes(2));
+  });
+
+  it('uses authoritative readback when another page already resolved a failed confirmation', async () => {
+    const schedule = proposedAction('scheduling.create', { taskId: 'task-batch' });
+    const memo = proposedAction('memos.create', {
+      id: 'confirmation-2', taskId: 'task-batch', actionId: 'pending-2', actionToken: 'private-memo-token',
+      target: { type: 'Memo', id: 'proposal-2' }, afterSummary: '周五提醒家长反馈。',
+    });
+    api.turns.mockResolvedValue({ items: [schedule, memo], previousCursor: null });
+    api.confirmLegacy.mockRejectedValue(new Error('already resolved elsewhere'));
+    api.getLegacy.mockImplementation((_teacher: string, actionId: string) => Promise.resolve({ pendingAction: {
+      id: actionId, status: actionId === 'pending-1' ? 'consumed' : 'cancelled',
+    } }));
+    render(<AssistantWorkspace teacherId="teacher-a" />);
+    fireEvent.click(await screen.findByRole('button', { name: '确认选中的 2 项' }));
+    await screen.findByText('已保存');
+    await screen.findByText('已取消');
+    expect(screen.queryByText('保存尚未确认，请重试。')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '确认选中的 0 项' })).toBeDisabled();
+  });
+
+  it('does not merge non-contiguous confirmations even when they share a task', async () => {
+    const schedule = proposedAction('scheduling.create', { taskId: 'task-batch' });
+    const memo = proposedAction('memos.create', {
+      id: 'confirmation-2', taskId: 'task-batch', actionId: 'pending-2', actionToken: 'private-memo-token',
+      target: { type: 'Memo', id: 'proposal-2' }, afterSummary: '周五提醒家长反馈。',
+    });
+    api.turns.mockResolvedValue({ items: [schedule, userTurn('between', '先补充一个条件'), memo], previousCursor: null });
+    render(<AssistantWorkspace teacherId="teacher-a" />);
+    await screen.findByText('先补充一个条件');
+    expect(screen.queryByRole('button', { name: /确认选中的/ })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: '确认保存' })).toHaveLength(2);
   });
 
   it('cancels a pending memo proposal without claiming it was saved', async () => {

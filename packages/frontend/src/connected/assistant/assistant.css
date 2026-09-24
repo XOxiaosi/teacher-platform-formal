@@ -134,6 +134,23 @@
 .assistant-confirmation-actions { margin-top: 14px; }
 .assistant-confirmation-actions > p { margin: 0 0 9px; color: var(--assistant-muted); font-size: 12px; }
 .assistant-confirmation-actions > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.assistant-confirmation-batch { max-width: 800px; margin: 14px 0; padding: 16px; border: 1px solid #d9e9e4; border-radius: 10px; background: #fbfefd; }
+.assistant-confirmation-batch-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.assistant-confirmation-batch-heading h3 { margin: 0; font-size: 16px; }
+.assistant-confirmation-batch-heading p { margin: 4px 0 0; color: var(--assistant-muted); font-size: 12px; }
+.assistant-confirmation-batch-heading > span { color: var(--assistant-muted); font-size: 12px; white-space: nowrap; }
+.assistant-confirmation-batch-list { display: grid; gap: 7px; margin: 14px 0; }
+.assistant-confirmation-batch-item { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: start; gap: 10px; padding: 11px; border: 1px solid #dce9e5; border-radius: 8px; background: #fff; cursor: pointer; }
+.assistant-confirmation-batch-item.is-complete { background: #f5f8f7; cursor: default; }
+.assistant-confirmation-batch-item input { width: 17px; height: 17px; margin: 2px 0 0; accent-color: var(--assistant-primary); }
+.assistant-confirmation-batch-copy { display: grid; gap: 3px; min-width: 0; }
+.assistant-confirmation-batch-copy strong { font-size: 13px; }
+.assistant-confirmation-batch-copy > span { line-height: 1.5; }
+.assistant-confirmation-batch-copy small { color: #9d4539; font-size: 12px; }
+.assistant-confirmation-batch-status { color: var(--assistant-muted); font-size: 12px; white-space: nowrap; }
+.assistant-confirmation-batch-item.is-complete .assistant-confirmation-batch-status { color: var(--assistant-primary); font-weight: 650; }
+.assistant-confirmation-batch-submit { min-height: 36px; padding: 7px 13px; border: 0; border-radius: 8px; background: var(--assistant-primary); color: #fff; font: inherit; cursor: pointer; }
+.assistant-confirmation-batch-submit:disabled { cursor: not-allowed; opacity: .48; }
 
 .assistant-welcome { display: flex; flex: 1; flex-direction: column; justify-content: center; align-items: center; min-height: 0; padding: 36px 24px; background: #fff; }
 .assistant-welcome-copy { display: grid; justify-items: center; max-width: 620px; margin-bottom: 28px; text-align: center; }

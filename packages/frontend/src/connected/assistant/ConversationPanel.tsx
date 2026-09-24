@@ -2,11 +2,12 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import { useConversation } from './useConversation';
 import { TurnContent } from './TurnContent';
 import { AssistantComposer } from './AssistantComposer';
+import { ConfirmationBatch } from './ConfirmationBatch';
 import { readDraft, type AssistantDraft } from './drafts';
 import { taskLabels, type AssistantTransport } from './transport';
 import type { AssistantTask, AssistantTaskEvent } from './transport';
 import type { MessageState } from './useAssistantMessages';
-import { cancelPendingAction, confirmPendingAction, type AgentTurnDto, type ConfirmationStatus, type ConfirmationTurnDto, type UserTurnDto } from '../../api/conversations';
+import { cancelPendingAction, confirmPendingAction, getPendingAction, type AgentTurnDto, type ConfirmationStatus, type ConfirmationTurnDto, type UserTurnDto } from '../../api/conversations';
 import { formatDateTime } from '../../shared/date-format';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -62,6 +63,29 @@ function mergePendingTurn(turns: AgentTurnDto[], pendingTurn: UserTurnDto | unde
 
 const LIVE_TASK_STATUSES = new Set(['queued', 'running', 'waiting_input', 'waiting_confirmation']);
 const WORKSPACE_REFRESH_TERMINAL_STATUSES = new Set(['succeeded', 'partial', 'failed']);
+const BATCH_CONFIRMABLE_ACTIONS = new Set(['scheduling.create', 'memos.create']);
+
+function groupConfirmationsByTask(turns: AgentTurnDto[]): ConfirmationTurnDto[][] {
+  const groups: ConfirmationTurnDto[][] = [];
+  for (let index = 0; index < turns.length;) {
+    const first = turns[index];
+    if (first?.kind !== 'confirmation' || !first.taskId || !BATCH_CONFIRMABLE_ACTIONS.has(first.actionName)) {
+      index += 1;
+      continue;
+    }
+    const group = [first];
+    let nextIndex = index + 1;
+    while (nextIndex < turns.length) {
+      const next = turns[nextIndex];
+      if (next?.kind !== 'confirmation' || next.taskId !== first.taskId || !BATCH_CONFIRMABLE_ACTIONS.has(next.actionName)) break;
+      group.push(next);
+      nextIndex += 1;
+    }
+    if (group.length > 1) groups.push(group);
+    index = nextIndex;
+  }
+  return groups;
+}
 
 export function ConversationPanel({ teacherId, conversationId, transport, messageState, send, onArchive, onWorkspaceRefresh, headerActions }: Props) {
   const session = useConversation(teacherId, conversationId, transport, messageState?.acceptedRequestId);
@@ -75,7 +99,7 @@ export function ConversationPanel({ teacherId, conversationId, transport, messag
   const [showJumpToBottom, setShowJumpToBottom] = useState(false);
   const [workspaceRefreshError, setWorkspaceRefreshError] = useState('');
   const [confirmationStatuses, setConfirmationStatuses] = useState<Record<string, ConfirmationStatus>>({});
-  const [confirmationBusyId, setConfirmationBusyId] = useState<string | null>(null);
+  const [confirmationBusy, setConfirmationBusy] = useState<Record<string, boolean>>({});
   const [confirmationError, setConfirmationError] = useState<Record<string, string>>({});
   const awaitingReceipt = readDraft(teacherId, conversationId).awaitingReceipt;
   useEffect(() => {
@@ -84,10 +108,21 @@ export function ConversationPanel({ teacherId, conversationId, transport, messag
     pendingConfirmationRequests.current.clear();
     setWorkspaceRefreshError('');
     setConfirmationStatuses({});
-    setConfirmationBusyId(null);
+    setConfirmationBusy({});
     setConfirmationError({});
   }, [teacherId, conversationId]);
   const visibleTurns = mergePendingTurn(session.turns, messageState?.pendingTurn);
+  const confirmationBatches = groupConfirmationsByTask(visibleTurns);
+  const confirmationBatchStarts = new Map<string, ConfirmationTurnDto[]>();
+  const confirmationBatchStartByHiddenTurn = new Map<string, string>();
+  const batchedConfirmationTurnIds = new Set<string>();
+  for (const group of confirmationBatches) {
+    confirmationBatchStarts.set(group[0]!.id, group);
+    group.forEach(turn => {
+      batchedConfirmationTurnIds.add(turn.id);
+      confirmationBatchStartByHiddenTurn.set(turn.id, group[0]!.id);
+    });
+  }
   const visibleEvents = compactEvents(session.events);
   const latestAssistantEvent = [...session.events].reverse().find(event => event.eventKind === 'assistant_message' && event.content.trim());
   const liveTail = latestAssistantEvent && !visibleTurns.some(turn => turn.kind === 'assistant' && turn.content.trim() === latestAssistantEvent.content.trim())
@@ -129,7 +164,7 @@ export function ConversationPanel({ teacherId, conversationId, transport, messag
   const taskPlacement = new Map<string, AssistantTask>();
   for (const task of tasks) {
     const turn = [...visibleTurns].reverse().find(item => item.taskId === task.id);
-    if (turn) taskPlacement.set(turn.id, task);
+    if (turn) taskPlacement.set(confirmationBatchStartByHiddenTurn.get(turn.id) ?? turn.id, task);
   }
   const historicalTasks = tasks.filter(task => ![...taskPlacement.values()].some(placed => placed.id === task.id));
   const refreshTargets = [
@@ -176,7 +211,7 @@ export function ConversationPanel({ teacherId, conversationId, transport, messag
     if (turn.status !== 'pending' || !['scheduling.create', 'memos.create'].includes(turn.actionName)) return;
     if (operation === 'confirm' && (!turn.actionToken || Date.parse(turn.expiresAt) <= Date.now())) return;
     pendingConfirmationRequests.current.add(turn.actionId);
-    setConfirmationBusyId(turn.actionId);
+    setConfirmationBusy(current => ({ ...current, [turn.actionId]: true }));
     setConfirmationError(current => {
       const { [turn.actionId]: _removed, ...remaining } = current;
       return remaining;
@@ -206,7 +241,78 @@ export function ConversationPanel({ teacherId, conversationId, transport, messag
       }));
     } finally {
       pendingConfirmationRequests.current.delete(turn.actionId);
-      if (conversationScope.current === scope) setConfirmationBusyId(current => current === turn.actionId ? null : current);
+      if (conversationScope.current === scope) setConfirmationBusy(current => {
+        const { [turn.actionId]: _removed, ...remaining } = current;
+        return remaining;
+      });
+    }
+  };
+  const finishConfirmations = async (turns: ConfirmationTurnDto[]) => {
+    const scope = `${teacherId}:${conversationId}`;
+    if (conversationScope.current !== scope) return;
+    const eligible = turns.filter(turn => {
+      const status = confirmationStatuses[turn.actionId] ?? turn.status;
+      return status === 'pending'
+        && BATCH_CONFIRMABLE_ACTIONS.has(turn.actionName)
+        && Boolean(turn.actionToken)
+        && Date.parse(turn.expiresAt) > Date.now()
+        && !pendingConfirmationRequests.current.has(turn.actionId);
+    });
+    if (eligible.length === 0) return;
+    eligible.forEach(turn => pendingConfirmationRequests.current.add(turn.actionId));
+    setConfirmationBusy(current => ({ ...current, ...Object.fromEntries(eligible.map(turn => [turn.actionId, true])) }));
+    setConfirmationError(current => {
+      const next = { ...current };
+      eligible.forEach(turn => delete next[turn.actionId]);
+      return next;
+    });
+    try {
+      const results = await Promise.all(eligible.map(async turn => {
+        try {
+          if (transport?.pendingActionApi) await transport.pendingActionApi.confirm({ teacherId, actionId: turn.actionId, actionToken: turn.actionToken! });
+          else await confirmPendingAction(teacherId, turn.actionId, turn.actionToken!);
+          return { turn, status: 'consumed' as ConfirmationStatus, retryable: false };
+        } catch {
+          try {
+            const current = transport?.pendingActionApi?.get
+              ? await transport.pendingActionApi.get({ teacherId, actionId: turn.actionId })
+              : transport?.pendingActionApi
+                ? null
+                : await getPendingAction(teacherId, turn.actionId);
+            if (current) return { turn, status: current.pendingAction.status, retryable: current.pendingAction.status === 'pending' };
+          } catch {
+            // If authoritative readback also fails, retain the exact proposal for a safe retry.
+          }
+          return { turn, status: 'pending' as ConfirmationStatus, retryable: true };
+        }
+      }));
+      if (conversationScope.current !== scope) return;
+      const succeeded = results.filter(result => result.status === 'consumed');
+      const failed = results.filter(result => result.retryable);
+      setConfirmationStatuses(current => ({
+        ...current,
+        ...Object.fromEntries(results.map(result => [result.turn.actionId, result.status])),
+      }));
+      setConfirmationError(current => ({
+        ...current,
+        ...Object.fromEntries(failed.map(result => [result.turn.actionId, '保存尚未确认，请重试。'])),
+      }));
+      void Promise.all([session.load(), session.reloadTasks()]);
+      if (succeeded.length > 0 && onWorkspaceRefresh) {
+        try {
+          await onWorkspaceRefresh();
+          if (conversationScope.current === scope) setWorkspaceRefreshError('');
+        } catch {
+          if (conversationScope.current === scope) setWorkspaceRefreshError('助手本轮已返回，资料刷新失败；请先刷新核对，不要重复登记。');
+        }
+      }
+    } finally {
+      eligible.forEach(turn => pendingConfirmationRequests.current.delete(turn.actionId));
+      if (conversationScope.current === scope) setConfirmationBusy(current => {
+        const next = { ...current };
+        eligible.forEach(turn => delete next[turn.actionId]);
+        return next;
+      });
     }
   };
   return <section className="assistant-conversation" aria-label="当前会话">
@@ -230,16 +336,23 @@ export function ConversationPanel({ teacherId, conversationId, transport, messag
       {session.conversation && <>
         {session.previousCursor && <Button type="button" className="assistant-load-history" variant="ghost" size="sm" disabled={session.loadingHistory || session.busy} onClick={() => { void loadOlder(); }}>{session.loadingHistory ? '正在加载较早内容…' : '加载较早内容'}</Button>}
         <div className="assistant-turns" aria-label="会话内容">{visibleTurns.map(turn => {
+          if (batchedConfirmationTurnIds.has(turn.id) && !confirmationBatchStarts.has(turn.id)) return null;
           const task = taskPlacement.get(turn.id);
           const taskEvents = task ? visibleEvents.filter(event => event.taskId === task.id) : [];
-          return <div key={turn.id} className="assistant-turn-with-process"><TurnContent turn={turn} demoMode={transport?.runtimeAvailability === 'test_only'}
+          const confirmationBatch = confirmationBatchStarts.get(turn.id);
+          return <div key={turn.id} className="assistant-turn-with-process">{confirmationBatch
+            ? <ConfirmationBatch turns={confirmationBatch} itemStates={Object.fromEntries(confirmationBatch.map(item => [item.actionId, {
+              status: item.status === 'pending' ? confirmationStatuses[item.actionId] : item.status,
+              busy: confirmationBusy[item.actionId], error: item.status === 'pending' ? confirmationError[item.actionId] : undefined,
+            }]))} onConfirm={(_selectedActionIds, selectedTurns) => { void finishConfirmations(selectedTurns); }} />
+            : <TurnContent turn={turn} demoMode={transport?.runtimeAvailability === 'test_only'}
             pendingLabel={turn.id === messageState?.pendingTurn?.id
               ? messageState?.sending ? '正在发送…' : messageState?.error?.includes('接收回执') ? '等待接收回执' : '已接收，等待会话记录'
               : undefined}
             confirmation={turn.kind === 'confirmation' ? {
-              status: confirmationStatuses[turn.actionId], busy: confirmationBusyId === turn.actionId, error: confirmationError[turn.actionId],
+              status: confirmationStatuses[turn.actionId], busy: confirmationBusy[turn.actionId], error: confirmationError[turn.actionId],
               onConfirm: () => { void finishConfirmation(turn, 'confirm'); }, onCancel: () => { void finishConfirmation(turn, 'cancel'); },
-            } : undefined} />
+            } : undefined} />}
             {task && <TaskProcess task={task} events={taskEvents} liveTail={liveTail} liveTask={liveTask} resuming={session.resumingTaskId === task.id}
               onResume={() => { void session.resumeTask(task); }} />}
           </div>;

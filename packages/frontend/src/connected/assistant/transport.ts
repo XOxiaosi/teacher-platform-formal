@@ -5,6 +5,7 @@ import type {
   ConversationResponse,
   ConversationStatus,
   ConversationTurnsResponse,
+  PendingActionResponse,
 } from '../../api/conversations';
 import type { TeachingTaskEventDto } from '../../api/teaching-tasks';
 
@@ -35,6 +36,7 @@ export interface AssistantConversationApi {
 }
 /** Keeps the visual sample's confirmation controls inside its synthetic store. */
 export interface AssistantPendingActionApi {
+  get?(input: { teacherId: string; actionId: string }): Promise<PendingActionResponse>;
   confirm(input: { teacherId: string; actionId: string; actionToken: string }): Promise<void>;
   cancel(input: { teacherId: string; actionId: string }): Promise<void>;
 }
