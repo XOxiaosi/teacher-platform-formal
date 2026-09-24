@@ -1,7 +1,5 @@
 import { apiRequest } from './client';
 import type {
-  CaptureCommunicationResult,
-  CaptureScoreFromTextResult,
   CommunicationDetailData,
   CommunicationDetailPatch,
   EditReceipt,
@@ -102,31 +100,7 @@ export function getStudentRecordSource(
   return apiRequest(`/students/${encodeURIComponent(studentId)}/records/${encodeURIComponent(recordId)}/source`, { teacherId });
 }
 
-export function captureScoreFromText(
-  teacherId: string,
-  studentId: string,
-  rawText: string,
-): Promise<CaptureScoreFromTextResult> {
-  return apiRequest(`/students/${encodeURIComponent(studentId)}/assessments/capture-from-text`, {
-    method: 'POST',
-    teacherId,
-    body: { rawText },
-  });
-}
-
 // ---- 家长沟通 ----
-
-export function captureCommunicationFromText(
-  teacherId: string,
-  studentId: string,
-  body: { rawText: string; occurredAt?: string },
-): Promise<CaptureCommunicationResult> {
-  return apiRequest(`/students/${encodeURIComponent(studentId)}/communications/capture-from-text`, {
-    method: 'POST',
-    teacherId,
-    body,
-  });
-}
 
 export function updateCommunicationDetail(
   teacherId: string,

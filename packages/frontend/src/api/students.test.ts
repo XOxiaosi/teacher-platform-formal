@@ -4,6 +4,12 @@ const request = vi.hoisted(() => vi.fn());
 vi.mock('./client', () => ({ apiRequest: request }));
 beforeEach(() => request.mockReset());
 describe('student record API contracts', () => {
+  it('does not expose retired direct-model capture calls', async () => {
+    const studentApi = await import('./students');
+    expect(studentApi).not.toHaveProperty('captureScoreFromText');
+    expect(studentApi).not.toHaveProperty('captureCommunicationFromText');
+  });
+
   it('supports complete paging while preserving the default endpoint', async () => {
     await listStudentRecords('teacher', 'student/1');
     expect(request).toHaveBeenLastCalledWith('/students/student%2F1/records', { teacherId: 'teacher' });

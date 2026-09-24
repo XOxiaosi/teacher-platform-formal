@@ -318,30 +318,6 @@ export interface ScoreRecordData {
   detail: AssessmentDetailData;
 }
 
-// ---- 文字记成绩（识别+归档） ----
-export interface ScoreExtraction {
-  examName?: string;
-  subject?: string;
-  score?: number;
-  fullScore?: number;
-  previousScore?: number;
-  examDate?: string;
-  note?: string;
-  confidence?: string;
-}
-
-export interface CaptureScoreFromTextResult {
-  studentId: string;
-  extraction: ScoreExtraction;
-  record: StudentRecordItem;
-  detail: AssessmentDetailData;
-  sourceRecord: {
-    id: string;
-    rawText: string | null;
-    captureStatus: string;
-  };
-}
-
 // ---- 家长沟通明细 ----
 export interface CommunicationDetailData {
   id: string;
@@ -359,27 +335,6 @@ export interface CommunicationDetailData {
   moderationReasons: string[] | null;
   createdAtTs: string;
   updatedAtTs: string;
-}
-
-export interface CommunicationExtraction {
-  direction?: string | null;
-  channel?: string | null;
-  parentType?: string | null;
-  parentConcerns?: string[] | null;
-  teacherResponses?: string[] | null;
-  agreements?: string[] | null;
-  followUps?: string[] | null;
-  nextContactAt?: string | null;
-  summary?: string | null;
-  confidence?: string | null;
-}
-
-export interface CaptureCommunicationResult {
-  studentId: string;
-  extraction: CommunicationExtraction;
-  record: StudentRecordItem;
-  detail: CommunicationDetailData;
-  sourceRecord: { id: string } | null;
 }
 
 export interface CommunicationDetailPatch {
