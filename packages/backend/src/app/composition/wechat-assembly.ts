@@ -27,13 +27,14 @@ import {
   type NormalizedInboundMessage,
   type WechatIlinkConfig,
 } from '../../features/wechat/index.js';
+import { createWechatTeachingTaskAgent } from '../teaching-runtime/wechat-teaching-task-agent.js';
 import type { CoreRouteDependencies } from './types.js';
 
 /**
  * WeChat iLink 装配工厂（P8 t20 装配 + P9 W0 真实 transport，设计 p7-wechat-ilink-design.md §12）。
  *
  * - 由 index.ts（装配线独占）在 WECHAT_ILINK_ENABLED=true 时调用；未启用不创建（零破坏，同 admin 先例）；
- * - 复用 core-route-dependencies 的 conversationService + agentConverse（单一组合，budget/工具注册不重复）；
+ * - 复用 core-route-dependencies 的 teaching-task service + DSH worker（渠道不再拥有另一套 Agent loop）；
  * - runInTeacherContext：worker 在 HTTP 请求外运行——pool.acquire(教师库) + runWithRequestDb 建立
  *   请求级数据库上下文（conversation/agent-execution/tool 的 getClient 由此路由到教师库）；单库形态透传；
  * - W0 真实 transport（协议冻结 p9-w0-wechat-ilink-protocol-freeze.md）：
@@ -112,20 +113,27 @@ export function createWechatFeature(options: CreateWechatFeatureOptions): Wechat
     maxKeys: config.maxStateKeys,
   });
 
-  // S3 Agent 闭环：复用 core-route-dependencies 的组合（conversationService + agentConverse）
+  // S3 Agent 闭环：渠道只做身份/队列/收发，规划与工具循环统一进入 teaching-task/DSH。
   const runInTeacherContext = pool
     ? createRunInTeacherContext(pool, prisma)
     // 单库形态：无池（无教师库路由）——仍须 runAsTeacher（provider 路由 currentTeacherId 依赖）
     : (async <T>(teacherId: string, fn: () => Promise<T>): Promise<T> => runAsTeacher(teacherId, () => fn()));
   // S5 多会话：渠道会话映射（共享库）+ 平台 Conversation（教师库，经 coreDeps）
   const channelConversations = createChannelConversationService({ prisma });
+  const teachingTasks = coreDeps.teachingTasks;
+  if (!teachingTasks) throw new Error('WeChat 功能需要 teaching-task 服务');
   const conversationResolver = createWechatConversationResolver({
-    conversationService: coreDeps.conversations.conversations,
+    conversationService: teachingTasks,
     channelConversations,
     clock,
+    runtimeOwner: 'dsh-v1',
+  });
+  const teachingTaskAgent = createWechatTeachingTaskAgent({
+    tasks: teachingTasks,
+    runtimeWorker: coreDeps.teachingRuntimeWorker,
   });
   const agentLoop = createWechatAgentLoop({
-    agentConverse: coreDeps.agent.agentConverse,
+    agentConverse: teachingTaskAgent,
     conversationResolver,
     runInTeacherContext,
   });

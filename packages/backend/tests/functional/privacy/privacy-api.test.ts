@@ -197,7 +197,7 @@ describe('privacy export：jobId 轮询全流程（演练教师）', () => {
     expect(jobId).toMatch(/^job_/);
 
     const terminal = await pollJob(app, cookie, jobId);
-    expect(terminal.status).toBe('succeeded');
+    expect(terminal.status, terminal.error).toBe('succeeded');
     expect((terminal.result as { tool?: string }).tool).toBe('export-teacher-data');
 
     // download：认证 + owner 匹配 → JSON 附件（manifest/account/tables）
@@ -247,7 +247,7 @@ describe('privacy export：jobId 轮询全流程（演练教师）', () => {
     const jobId = start.body.data.jobId;
 
     const terminal = await pollJob(app, cookie, jobId);
-    expect(terminal.status).toBe('succeeded');
+    expect(terminal.status, terminal.error).toBe('succeeded');
     expect((terminal.result as { tool?: string }).tool).toBe('export-teacher-data');
     // 结果含 zip 产物路径（export-teacher-data --zip 输出）
     expect((terminal.result as { zip?: string }).zip).toBeTruthy();

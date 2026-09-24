@@ -40,8 +40,10 @@ export function createWechatConversationResolver(options: {
   conversationService: ConversationCreator;
   channelConversations: ChannelConversationService;
   clock: TrustedClock;
+  runtimeOwner?: 'legacy' | 'dsh-v1';
 }): WechatConversationResolver {
   const { conversationService, channelConversations, clock } = options;
+  const runtimeOwner = options.runtimeOwner ?? 'legacy';
 
   async function resolveForMessage(input: {
     teacherId: string;
@@ -55,6 +57,27 @@ export function createWechatConversationResolver(options: {
     });
     if (!found.ok) return found;
     if (found.value) {
+      if (runtimeOwner === 'dsh-v1' && found.value.runtimeOwner !== runtimeOwner) {
+        const created = await conversationService.createConversation({ teacherId: input.teacherId });
+        if (!created.ok) return created;
+        const now = await clock.now();
+        if (!now.ok) return err(now.error);
+        if (!(now.value instanceof Date) || Number.isNaN(now.value.getTime())) {
+          return err(internalError('TrustedClock 返回无效时间'));
+        }
+        const replaced = await channelConversations.replaceMappingRuntime({
+          id: found.value.id,
+          channel: 'wechat',
+          teacherId: input.teacherId,
+          externalConversationId: input.externalConversationId,
+          expectedConversationId: found.value.conversationId,
+          expectedRuntimeOwner: found.value.runtimeOwner,
+          conversationId: created.value.id,
+          runtimeOwner: 'dsh-v1',
+          lastMessageAt: now.value,
+        });
+        return replaced.ok ? ok(replaced.value.conversationId) : replaced;
+      }
       // 2a. 命中：touch lastMessageAtTs（TrustedClock）
       const now = await clock.now();
       if (now.ok && now.value instanceof Date && !Number.isNaN(now.value.getTime())) {
@@ -77,10 +100,14 @@ export function createWechatConversationResolver(options: {
       teacherId: input.teacherId,
       externalConversationId: input.externalConversationId,
       conversationId: created.value.id,
+      runtimeOwner,
       lastMessageAt: now.value,
     });
     if (!recorded.ok) return recorded;
-    return ok(created.value.id);
+    // Concurrent first messages may both create a conversation, while the
+    // shared mapping unique key selects only one. Always follow the persisted
+    // mapping returned by recordMapping so this message cannot fork history.
+    return ok(recorded.value.conversationId);
   }
 
   return { resolveForMessage };

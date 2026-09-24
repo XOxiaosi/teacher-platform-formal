@@ -30,7 +30,7 @@ export {
   channelMessageRowToInbound,
   type CreateWechatAgentLoopOptions,
 } from './agent-loop.js';
-export { createWechatOutboundSender, splitText, type WechatTextAdapter } from './outbound.js';
+export { createWechatOutboundSender, formatTextChunks, splitText, type WechatTextAdapter } from './outbound.js';
 export {
   createWechatNotifier,
   createWechatPushRecipientResolver,

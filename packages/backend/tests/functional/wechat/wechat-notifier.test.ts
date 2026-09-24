@@ -25,7 +25,7 @@ import type { MessageAdapter } from '../../../src/adapters/shared/index.js';
  * S4 主动推送（P8 t21，设计 p7-wechat-ilink-design.md §4.6/§6/§7）：
  * - parseWechatNotifyToolCall：channels=["bridge_owner"] + bridgePlatforms=["wechat"] 缺一不可；
  * - createWechatNotifier.sendNotify：ChannelIdentity 解析外部 id → 出站落表 + adapter send；
- *   无绑定 skipped；幂等重放（同 correlationId 首片已 sent → replayed 不重发）；失败 failed 可重试；
+ *   无绑定 skipped；逐片发送前持久占位；已 sent 重放不重发，失败/不确定状态停止自动重发；
  *   限流（RateLimiter 1min/N，RATE_LIMITED）；
  * - createWechatPushRecipientResolver（D37 §4.3）：wechat-bot 渠道 teacherId → wxid；无绑定 null；
  *   其它渠道原样 teacherId；
@@ -212,15 +212,19 @@ describe('createWechatNotifier.sendNotify（主动推送）', () => {
     const first = await notifier.sendNotify({ teacherId, type: 'morning_brief', correlationId, content: '内容 A' });
     expect(first.ok && first.value.status).toBe('sent');
 
-    const replay = await notifier.sendNotify({ teacherId, type: 'morning_brief', correlationId, content: '内容 B（不应发送）' });
+    const replay = await notifier.sendNotify({ teacherId, type: 'morning_brief', correlationId, content: '内容 A' });
     expect(replay.ok).toBe(true);
     if (!replay.ok) return;
     expect(replay.value.status).toBe('replayed');
     expect(adapter.sends).toHaveLength(1); // 只发一次
     expect(adapter.sends[0].content).toBe('内容 A');
+
+    const conflict = await notifier.sendNotify({ teacherId, type: 'morning_brief', correlationId, content: '内容 B（不得覆盖）' });
+    expect(conflict.ok).toBe(false);
+    expect(adapter.sends).toHaveLength(1);
   });
 
-  it('失败 → 返回错误 + outbound 落表 status=failed；换可用 adapter 重试成功（可重试）', async () => {
+  it('失败 → 返回错误 + outbound 落表 status=failed；自动重试被阻止以免重复发送', async () => {
     const teacherId = await createTeacher();
     await bindTeacher(teacherId, 'wx-s4-fail');
 
@@ -239,14 +243,14 @@ describe('createWechatNotifier.sendNotify（主动推送）', () => {
     expect(failRow!.status).toBe('failed');
     expect(failRow!.errorMsg).toContain('transport 未就绪');
 
-    // 重试：同一 correlationId，adapter 恢复 → sent（failed 行不阻塞重试）
+    // 重试：远端是否收到无法由本地证明，因此不再自动发送。
     const adapter = fakeAdapter(true);
     const notifier2 = notifierWith(adapter);
-    const retried = await notifier2.sendNotify({ teacherId, type: 'morning_brief', correlationId, content: '重试成功' });
-    expect(retried.ok).toBe(true);
-    if (!retried.ok) return;
-    expect(retried.value.status).toBe('sent');
-    expect(adapter.sends).toHaveLength(1);
+    const retried = await notifier2.sendNotify({ teacherId, type: 'morning_brief', correlationId, content: '会失败' });
+    expect(retried.ok).toBe(false);
+    if (retried.ok) return;
+    expect(retried.error.message).toContain('状态不确定');
+    expect(adapter.sends).toHaveLength(0);
   });
 
   it('长内容分片 [1/2] → 多行 outbound 落表', async () => {

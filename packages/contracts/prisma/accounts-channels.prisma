@@ -158,7 +158,8 @@ model ChannelIdentity {
 // P8 微信接入线（t13，设计 p7-wechat-ilink-design.md §4/§8）：入站消息持久化（共享库表）。
 // 幂等键：@@unique([channel, externalMessageId])——同一供应商消息重投只 claim 一行（重放防护持久层）；
 // teacherId 可空：未绑定消息挂起（status='new' 不处理，绑定后由 S3 恢复扫描再处理）；
-// processedAtTs 由服务层 TrustedClock 写入（业务时间纪律）；status: new | queued | processed | failed。
+// processedAtTs 由服务层 TrustedClock 写入（业务时间纪律）；入站 status: new | queued | processed | failed；
+// 出站先占位 sending，再收口为 sent | failed，sending/failed 不自动重发。
 model ChannelMessage {
   id                 String    @id @default(cuid())
   teacherId          String? // 未绑定挂起为 null；绑定解析后填充
@@ -188,6 +189,8 @@ model ChannelConversation {
   channel                String // 渠道平台：wechat
   externalConversationId String // 外部会话标识（私聊=发送方 wxid；群聊=群 ID）
   conversationId         String // 平台 Conversation id（教师库）
+  runtimeOwner           String    @default("legacy") // legacy | dsh-v1
+  previousConversationId String?   // 运行时切换时保留上一会话引用，历史不被静默覆盖
   status                 String    @default("active") // active | archived
   lastMessageAtTs        DateTime? @db.Timestamptz(3) // TrustedClock 写入（最后消息时刻）
   createdAtTs            DateTime  @default(now()) @db.Timestamptz(3)

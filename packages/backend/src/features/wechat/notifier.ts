@@ -1,8 +1,8 @@
-import { err, internalError, ok, rateLimited, validationError, type CommonError, type Result } from '@teacher-platform/contracts';
+import { err, ok, rateLimited, validationError, type CommonError, type Result } from '@teacher-platform/contracts';
 import type { RateLimiter } from '../../shared/rate-limit/index.js';
 import type { TrustedClock } from '../../shared/trusted-clock/index.js';
 
-import { splitText, type WechatTextAdapter } from './outbound.js';
+import { createWechatOutboundSender, type WechatTextAdapter } from './outbound.js';
 import type { ChannelIdentityService, ChannelMessageService } from './types.js';
 import { WECHAT_PLATFORM } from './types.js';
 
@@ -15,9 +15,8 @@ import { WECHAT_PLATFORM } from './types.js';
  *   本模块不落 PushRecord——PushRecord 收件人改造见 features/push + createWechatPushRecipientResolver）：
  *   - 收件人：teacherId → ChannelIdentity → 外部 wxid（无绑定 → skipped，不发送）；
  *   - 限流：复用 RateLimiter，出站 1min/60（env WECHAT_ILINK_NOTIFY_PER_MIN，建议值）；
- *   - 幂等：出站 externalMessageId = `out:notify:<correlationId>:<chunkIndex>`（channelMessageService
- *     recordOutbound 的 @@unique([channel, externalMessageId]) 持久幂等）——同 correlationId 重放
- *     首片已 sent → replayed（不重发）；失败 status=failed 可重试；
+ *   - 幂等：每片发送前以 `out:notify:<correlationId>:<chunkIndex>` 原子占位；已 sent 跳过，
+ *     sending/failed 停止自动重发并等待人工核对，避免渠道重复触达；
  *   - 时间：processedAtTs 走 TrustedClock（业务时间纪律，不取墙钟）；
  *   - 出站走 wechat-bot adapter send（真实 transport 由 W0 协议冻结后接入，stub 明确失败 fail-closed）。
  */
@@ -119,6 +118,13 @@ export function createWechatNotifier(options: CreateWechatNotifierOptions): Wech
   const notifyRatePerMin = options.notifyRatePerMin ?? 60;
   const maxTextLength = options.maxTextLength ?? 1500;
   const botExternalUserId = options.botExternalUserId ?? 'wechat-bot';
+  const outbound = createWechatOutboundSender({
+    channelMessageService: options.channelMessageService,
+    adapter: options.adapter,
+    clock: options.clock,
+    maxTextLength,
+    botExternalUserId,
+  });
 
   return {
     async sendNotify(input) {
@@ -145,59 +151,19 @@ export function createWechatNotifier(options: CreateWechatNotifierOptions): Wech
         return ok({ status: 'skipped', sentChunks: 0, targetExternalUserId: null });
       }
 
-      // 3. 幂等预检：首片 `out:notify:<correlationId>:0` 已 sent → replayed（不重发）
-      // 注意：getByExternalMessageId 返回行 status 为入站状态机（new|queued|processed|failed），
-      // 出站行 recordOutbound 用同一表（status=sent|failed）——故用字符串比较而非类型收窄。
-      const firstExternalId = `out:notify:${input.correlationId}:0`;
-      const existing = await options.channelMessageService.getByExternalMessageId('wechat', firstExternalId);
-      if (!existing.ok) return existing;
-      if (existing.value && (existing.value.status as string) === 'sent') {
-        return ok({ status: 'replayed', sentChunks: 0, targetExternalUserId: target });
-      }
-
-      // 4. TrustedClock（业务时间纪律）
-      const now = await options.clock.now();
-      if (!now.ok) return now;
-      if (!(now.value instanceof Date) || Number.isNaN(now.value.getTime())) {
-        return err(internalError('TrustedClock 返回无效时间'));
-      }
-
-      // 5. 分片发送 + outbound 落表（correlationId=`notify:<correlationId>` → 持久幂等）
-      const chunks = splitText(input.content, maxTextLength);
-      let sent = 0;
-      for (let i = 0; i < chunks.length; i++) {
-        const content = chunks.length > 1 ? `[${i + 1}/${chunks.length}]\n${chunks[i]}` : chunks[i];
-        const sendResult = await options.adapter.send({ to: target, content });
-        if (!sendResult.ok) {
-          await options.channelMessageService.recordOutbound({
-            channel: 'wechat',
-            teacherId: input.teacherId,
-            correlationId: `notify:${input.correlationId}`,
-            chunkIndex: i,
-            fromExternalUserId: botExternalUserId,
-            toExternalUserId: target,
-            contentText: content,
-            status: 'failed',
-            errorMsg: sendResult.error.message,
-            processedAt: now.value,
-          });
-          return err(sendResult.error);
-        }
-        const record = await options.channelMessageService.recordOutbound({
-          channel: 'wechat',
-          teacherId: input.teacherId,
-          correlationId: `notify:${input.correlationId}`,
-          chunkIndex: i,
-          fromExternalUserId: botExternalUserId,
-          toExternalUserId: target,
-          contentText: content,
-          status: 'sent',
-          processedAt: now.value,
-        });
-        if (!record.ok) return record;
-        sent += 1;
-      }
-      return ok({ status: 'sent', sentChunks: sent, targetExternalUserId: target });
+      // 3. 复用回复发送器的逐片占位与真实回执；不再以“首片 sent”猜测整条完成。
+      const sent = await outbound.sendReply({
+        teacherId: input.teacherId,
+        targetExternalUserId: target,
+        text: input.content,
+        correlationId: `notify:${input.correlationId}`,
+      });
+      if (!sent.ok) return sent;
+      return ok({
+        status: sent.value.sentChunks === 0 ? 'replayed' : 'sent',
+        sentChunks: sent.value.sentChunks,
+        targetExternalUserId: target,
+      });
     },
   };
 }

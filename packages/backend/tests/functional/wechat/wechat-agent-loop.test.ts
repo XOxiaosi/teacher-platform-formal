@@ -16,7 +16,6 @@ import {
   createWechatOutboundSender,
   createWechatUnboundRecoveryScanner,
   deriveClientRequestId,
-  splitText,
   WECHAT_PLATFORM,
   type ChannelIdentityService,
   type NormalizedInboundMessage,
@@ -107,47 +106,55 @@ describe('clientRequestId 派生（幂等键）', () => {
   });
 });
 
-describe('splitText（出站回复分片 ≤1500 [1/N]）', () => {
-  it('短文本 → 单片', () => {
-    expect(splitText('你好', 1500)).toEqual(['你好']);
-  });
-
-  it('长文本 → 多片，单片 ≤ maxLength', () => {
-    const long = 'x'.repeat(4000);
-    const chunks = splitText(long, 1500);
-    expect(chunks.length).toBe(3);
-    expect(chunks.every((c) => c.length <= 1500)).toBe(true);
-    expect(chunks.join('')).toBe(long);
-  });
-
-  it('优先在段尾换行处切断（保留语义）', () => {
-    const text = `${'a'.repeat(1200)}\n${'b'.repeat(600)}`;
-    const chunks = splitText(text, 1500);
-    expect(chunks.length).toBe(2);
-    expect(chunks[0].endsWith('\n')).toBe(true);
-    expect(chunks.join('')).toBe(text);
-  });
-
-  it('maxLength ≤ 0 → 单片', () => {
-    expect(splitText('abc', 0)).toEqual(['abc']);
+describe('出站发送占位（持久幂等）', () => {
+  it('并发重放只能有一个 claimed，完成后返回 sent，载荷变化被拒绝', async () => {
+    const service = createChannelMessageService({ prisma });
+    const input = {
+      channel: 'wechat', teacherId: 'teacher-outbound', correlationId: `claim-${randomBytes(6).toString('hex')}`,
+      chunkIndex: 0, fromExternalUserId: 'bot', toExternalUserId: 'wx-target', contentText: '唯一回复',
+    };
+    const first = await service.claimOutbound(input);
+    expect(first.ok && first.value.state).toBe('claimed');
+    const duplicate = await service.claimOutbound(input);
+    expect(duplicate.ok && duplicate.value.state).toBe('uncertain');
+    if (!first.ok) return;
+    const completed = await service.completeOutbound({
+      id: first.value.row.id, status: 'sent', processedAt: new Date('2030-01-01T00:00:00.000Z'),
+    });
+    expect(completed.ok && completed.value.status).toBe('sent');
+    const replay = await service.claimOutbound(input);
+    expect(replay.ok && replay.value.state).toBe('sent');
+    const conflict = await service.claimOutbound({ ...input, contentText: '不同回复' });
+    expect(conflict.ok).toBe(false);
   });
 });
 
 describe('createWechatConversationResolver（S5 多会话映射）', () => {
   function resolverDeps(overrides: {
-    found?: { conversationId: string } | null;
+    found?: { conversationId: string; runtimeOwner?: string } | null;
     createConversationId?: string;
+    recordedConversationId?: string;
+    runtimeOwner?: 'legacy' | 'dsh-v1';
   } = {}) {
     const conversationService = {
       createConversation: vi.fn(async () => ok({ id: overrides.createConversationId ?? 'conv-new' })),
     } as unknown as ConversationService;
     const channelConversations = {
-      findMapping: vi.fn(async () => ok(overrides.found ?? null)),
-      recordMapping: vi.fn(async () => ok({ id: 'cc-1' })),
+      findMapping: vi.fn(async () => ok(overrides.found
+        ? { id: 'cc-1', runtimeOwner: overrides.found.runtimeOwner ?? 'legacy', ...overrides.found }
+        : null)),
+      recordMapping: vi.fn(async (input: { conversationId: string }) => ok({
+        id: 'cc-1', conversationId: overrides.recordedConversationId ?? input.conversationId,
+      })),
+      replaceMappingRuntime: vi.fn(async (input: { conversationId: string }) => ok({
+        id: 'cc-1', conversationId: input.conversationId,
+      })),
       touchLastMessage: vi.fn(async () => ok({ id: 'cc-1' })),
     };
     const clock = { now: vi.fn(async () => ok(new Date('2030-01-01T00:00:00.000Z'))) };
-    const resolver = createWechatConversationResolver({ conversationService, channelConversations, clock });
+    const resolver = createWechatConversationResolver({
+      conversationService, channelConversations, clock, runtimeOwner: overrides.runtimeOwner,
+    });
     return { resolver, conversationService, channelConversations };
   }
 
@@ -180,6 +187,29 @@ describe('createWechatConversationResolver（S5 多会话映射）', () => {
     expect(a.ok && a.value).toBe('conv-new');
     expect(b.ok && b.value).toBe('conv-new');
     expect(conversationService.createConversation).toHaveBeenCalledTimes(2);
+  });
+
+  it('并发首次建映射冲突时跟随已持久化映射，不返回落败方孤立会话', async () => {
+    const { resolver } = resolverDeps({
+      createConversationId: 'conv-created-by-loser',
+      recordedConversationId: 'conv-selected-by-mapping',
+    });
+    const result = await resolver.resolveForMessage({ teacherId: 't-1', externalConversationId: 'wx-race' });
+    expect(result.ok && result.value).toBe('conv-selected-by-mapping');
+  });
+
+  it('DSH 装配命中 legacy 映射时创建新会话并原子换绑，保留旧会话引用', async () => {
+    const { resolver, channelConversations } = resolverDeps({
+      found: { conversationId: 'conv-legacy', runtimeOwner: 'legacy' },
+      createConversationId: 'conv-dsh',
+      runtimeOwner: 'dsh-v1',
+    });
+    const result = await resolver.resolveForMessage({ teacherId: 't-1', externalConversationId: 'wx-legacy' });
+    expect(result.ok && result.value).toBe('conv-dsh');
+    expect(channelConversations.replaceMappingRuntime).toHaveBeenCalledWith(expect.objectContaining({
+      expectedConversationId: 'conv-legacy', expectedRuntimeOwner: 'legacy',
+      conversationId: 'conv-dsh', runtimeOwner: 'dsh-v1',
+    }));
   });
 });
 

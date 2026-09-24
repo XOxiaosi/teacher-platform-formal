@@ -44,4 +44,24 @@ describe('TeachingTaskRuntimeWorker', () => {
     expect(run).toHaveBeenCalledTimes(1);
     expect(run).toHaveBeenCalledWith({ teacherId: 'teacher-a', taskId: 'task-a' });
   });
+
+  it('serializes concurrent runOnce calls without leaving the later wake stranded', async () => {
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => { release = resolve; });
+    const run = vi.fn(async (input: { taskId: string }) => {
+      if (input.taskId === 'task-a') await blocked;
+      return ok({ status: 'succeeded', executionId: `execution-${input.taskId}` });
+    });
+    const worker = createTeachingTaskRuntimeWorker({ driver: available, runner: { run } });
+    worker.wake({ teacherId: 'teacher-a', taskId: 'task-a' });
+    worker.wake({ teacherId: 'teacher-a', taskId: 'task-b' });
+    const first = worker.runOnce();
+    const second = worker.runOnce();
+    expect(run).toHaveBeenCalledTimes(1);
+    release();
+    await expect(first).resolves.toMatchObject({ ok: true, value: { ran: true } });
+    await expect(second).resolves.toMatchObject({ ok: true, value: { ran: true, pending: false } });
+    expect(run).toHaveBeenCalledTimes(2);
+    expect(run.mock.calls.map(([input]) => input.taskId)).toEqual(['task-a', 'task-b']);
+  });
 });

@@ -36,7 +36,7 @@ export const EXPORT_POLICY = {
     exclude: [], relations: [],
   },
   ChannelConversation: { source: 'shared_db',
-    fields: ["id","teacherId","channel","externalConversationId","conversationId","status","lastMessageAtTs","createdAtTs","updatedAtTs"],
+    fields: ["id","teacherId","channel","externalConversationId","conversationId","runtimeOwner","previousConversationId","status","lastMessageAtTs","createdAtTs","updatedAtTs"],
     exclude: [], relations: [],
   },
   AdminAccount: { source: 'excluded',

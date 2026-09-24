@@ -21,6 +21,7 @@ export function createInMemoryMessageQueue(options: CreateInMemoryQueueOptions =
   let worker: ((msg: NormalizedInboundMessage) => Promise<void>) | null = null;
   let running = false;
   let stopped = false;
+  let draining: Promise<void> | null = null;
 
   async function drain(): Promise<void> {
     while (pending.length > 0 && !stopped) {
@@ -36,6 +37,14 @@ export function createInMemoryMessageQueue(options: CreateInMemoryQueueOptions =
     }
   }
 
+  function scheduleDrain(): void {
+    if (draining || stopped || !running || !worker) return;
+    draining = drain().finally(() => {
+      draining = null;
+      if (pending.length > 0) scheduleDrain();
+    });
+  }
+
   return {
     async enqueue(msg) {
       if (stopped) return err(internalError('消息队列已停止'));
@@ -43,9 +52,7 @@ export function createInMemoryMessageQueue(options: CreateInMemoryQueueOptions =
         return err(internalError('消息队列已满，请稍后重试'));
       }
       pending.push(msg);
-      if (running && worker) {
-        void drain(); // 非阻塞启动一轮消费（不 await，webhook 5s 硬约束）
-      }
+      scheduleDrain(); // 非阻塞启动单一消费者（webhook 5s 硬约束）
       return ok({ queued: true });
     },
 
@@ -53,12 +60,13 @@ export function createInMemoryMessageQueue(options: CreateInMemoryQueueOptions =
       if (running) return;
       worker = handler;
       running = true;
-      void drain();
+      scheduleDrain();
     },
 
     async stop() {
       stopped = true;
       running = false;
+      await draining;
     },
 
     size() {

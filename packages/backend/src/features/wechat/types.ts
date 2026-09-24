@@ -134,7 +134,7 @@ export interface NormalizedInboundMessage {
   replyContext?: unknown;
 }
 
-export type ChannelMessageStatus = 'new' | 'queued' | 'processed' | 'failed';
+export type ChannelMessageStatus = 'new' | 'queued' | 'processed' | 'sending' | 'sent' | 'failed';
 
 export interface ChannelMessageDto {
   id: string;
@@ -171,8 +171,11 @@ export interface ChannelMessageService {
   /** 处理失败：status=failed + errorMsg（可重试依据；幂等键防重复由 AgentExecution claim 保证）。 */
   markFailed(id: string, input?: { errorMsg?: string }): Promise<Result<ChannelMessageDto, CommonError>>;
   getByExternalMessageId(channel: string, externalMessageId: string): Promise<Result<ChannelMessageDto | null, CommonError>>;
-  /** 出站消息落表（direction=outbound；externalMessageId=`out:<correlationId>:<chunkIndex>` 确定性幂等）。 */
-  recordOutbound(input: {
+  /**
+   * 出站发送前占位。只有 state=claimed 的调用者可以触发网络发送；sent 表示已完成重放，
+   * uncertain 表示上次发送结果无法证明，必须停止自动重发。
+   */
+  claimOutbound(input: {
     channel: string;
     teacherId: string;
     correlationId: string;
@@ -180,6 +183,10 @@ export interface ChannelMessageService {
     fromExternalUserId: string;
     toExternalUserId: string;
     contentText: string;
+  }): Promise<Result<{ row: ChannelMessageDto; state: 'claimed' | 'sent' | 'uncertain' }, CommonError>>;
+  /** 仅把本次持有的 sending 占位收口为真实 sent/failed 结果。 */
+  completeOutbound(input: {
+    id: string;
     status: 'sent' | 'failed';
     errorMsg?: string;
     processedAt: Date;
@@ -215,6 +222,8 @@ export interface ChannelConversationDto {
   channel: string;
   externalConversationId: string;
   conversationId: string;
+  runtimeOwner: string;
+  previousConversationId: string | null;
   status: string;
   lastMessageAtTs: Date | null;
   createdAtTs: Date;
@@ -233,7 +242,19 @@ export interface ChannelConversationService {
     teacherId: string;
     externalConversationId: string;
     conversationId: string;
+    runtimeOwner?: 'legacy' | 'dsh-v1';
     lastMessageAt?: Date;
+  }): Promise<Result<ChannelConversationDto, CommonError>>;
+  replaceMappingRuntime(input: {
+    id: string;
+    channel: string;
+    teacherId: string;
+    externalConversationId: string;
+    expectedConversationId: string;
+    expectedRuntimeOwner: string;
+    conversationId: string;
+    runtimeOwner: 'dsh-v1';
+    lastMessageAt: Date;
   }): Promise<Result<ChannelConversationDto, CommonError>>;
   touchLastMessage(input: { id: string; lastMessageAt: Date }): Promise<Result<ChannelConversationDto, CommonError>>;
 }

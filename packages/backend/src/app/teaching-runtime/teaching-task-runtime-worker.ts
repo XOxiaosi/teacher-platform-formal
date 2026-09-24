@@ -47,7 +47,31 @@ export function createTeachingTaskRuntimeWorker(
     ? createTeachingTaskRuntimeRunner({ ...options.runnerOptions, driver: options.driver })
     : undefined);
   if (!runner) throw new Error('TeachingTaskRuntimeWorker 需要 runner 或 runnerOptions');
+  const taskRunner = runner;
   const pending = new Map<string, TeachingTaskRuntimeWake>();
+  type RunResult = Result<{
+    ran: boolean; pending: boolean; status?: string; executionId?: string | null;
+  }, CommonError>;
+  let activeRun: Promise<RunResult> | null = null;
+
+  async function runNext(): Promise<RunResult> {
+    const next = pending.values().next().value as TeachingTaskRuntimeWake | undefined;
+    if (!next) return ok({ ran: false, pending: false });
+    // Do not dequeue or claim an unavailable task. A later availability
+    // transition can safely process the same durable task after another wake.
+    if (toTaskRuntimeAvailability(options.driver.availability) === 'unavailable') {
+      return ok({ ran: false, pending: true, status: 'unavailable' });
+    }
+    pending.delete(key(next));
+    const result = await taskRunner.run(next);
+    if (!result.ok) return err(result.error);
+    return ok({
+      ran: true,
+      pending: pending.size > 0,
+      status: result.value.status,
+      executionId: result.value.executionId,
+    });
+  }
 
   return {
     availability: options.driver.availability,
@@ -61,22 +85,17 @@ export function createTeachingTaskRuntimeWorker(
     },
 
     async runOnce() {
-      const next = pending.values().next().value as TeachingTaskRuntimeWake | undefined;
-      if (!next) return ok({ ran: false, pending: false });
-      // Do not dequeue or claim an unavailable task. A later availability
-      // transition can safely process the same durable task after another wake.
-      if (toTaskRuntimeAvailability(options.driver.availability) === 'unavailable') {
-        return ok({ ran: false, pending: true, status: 'unavailable' });
+      const previous = activeRun;
+      const current = (async () => {
+        if (previous) await previous;
+        return runNext();
+      })();
+      activeRun = current;
+      try {
+        return await current;
+      } finally {
+        if (activeRun === current) activeRun = null;
       }
-      pending.delete(key(next));
-      const result = await runner.run(next);
-      if (!result.ok) return err(result.error);
-      return ok({
-        ran: true,
-        pending: pending.size > 0,
-        status: result.value.status,
-        executionId: result.value.executionId,
-      });
     },
   };
 }

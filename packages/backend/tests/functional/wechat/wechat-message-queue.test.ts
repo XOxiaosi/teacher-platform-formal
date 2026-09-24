@@ -62,6 +62,26 @@ describe('进程内内存消息队列（QueuePort）', () => {
     expect(received).toEqual(['ok']);
   });
 
+  it('前一条仍在处理时不并发启动后一条', async () => {
+    const queue = createInMemoryMessageQueue({ maxSize: 10 });
+    const events: string[] = [];
+    let releaseFirst!: () => void;
+    const firstBlocked = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    await queue.start(async (msg) => {
+      events.push(`start:${msg.externalMessageId}`);
+      if (msg.externalMessageId === 'a') await firstBlocked;
+      events.push(`end:${msg.externalMessageId}`);
+    });
+    await queue.enqueue(message('a'));
+    await waitFor(() => events.includes('start:a'));
+    await queue.enqueue(message('b'));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(events).toEqual(['start:a']);
+    releaseFirst();
+    await waitFor(() => events.includes('end:b'));
+    expect(events).toEqual(['start:a', 'end:a', 'start:b', 'end:b']);
+  });
+
   it('stop() 后 enqueue 拒绝（返回错误）', async () => {
     const queue = createInMemoryMessageQueue({ maxSize: 10 });
     await queue.start(async () => undefined);

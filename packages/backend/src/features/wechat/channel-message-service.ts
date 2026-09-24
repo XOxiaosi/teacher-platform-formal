@@ -163,8 +163,9 @@ export function createChannelMessageService(options: { prisma: PrismaClient }): 
       return ok(row ? toDto(row) : null);
     },
 
-    async recordOutbound(input) {
+    async claimOutbound(input) {
       if (!input.channel.trim()) return err(validationError('渠道平台不能为空', 'channel'));
+      if (!input.teacherId.trim()) return err(validationError('教师 ID 不能为空', 'teacherId'));
       if (!input.correlationId.trim()) return err(validationError('关联消息 ID 不能为空', 'correlationId'));
       if (!input.toExternalUserId.trim()) return err(validationError('接收方标识不能为空', 'toExternalUserId'));
       if (!input.contentText.trim()) return err(validationError('消息内容不能为空', 'contentText'));
@@ -180,22 +181,54 @@ export function createChannelMessageService(options: { prisma: PrismaClient }): 
             direction: 'outbound',
             contentType: 'text',
             contentText: input.contentText,
+            status: 'sending',
+          },
+        });
+        return ok({ row: toDto(created), state: 'claimed' as const });
+      } catch (error) {
+        if (!isUniqueViolation(error)) {
+          const message = error instanceof Error ? error.message : String(error);
+          return err(internalError(`出站消息占位失败：${message}`));
+        }
+        const existing = await prisma.channelMessage.findUnique({
+          where: { channel_externalMessageId: { channel: input.channel, externalMessageId } },
+        });
+        if (!existing) return err(internalError('出站消息幂等冲突但记录不存在'));
+        const samePayload = existing.direction === 'outbound'
+          && existing.teacherId === input.teacherId
+          && existing.fromExternalUserId === input.fromExternalUserId
+          && existing.toExternalUserId === input.toExternalUserId
+          && existing.contentText === input.contentText;
+        if (!samePayload) {
+          return err(validationError('出站幂等键已绑定其他消息载荷', 'correlationId'));
+        }
+        return ok({
+          row: toDto(existing),
+          state: existing.status === 'sent' ? 'sent' as const : 'uncertain' as const,
+        });
+      }
+    },
+
+    async completeOutbound(input) {
+      try {
+        const updated = await prisma.channelMessage.updateMany({
+          where: { id: input.id, direction: 'outbound', status: 'sending' },
+          data: {
             status: input.status,
-            ...(input.errorMsg ? { errorMsg: input.errorMsg } : {}),
+            errorMsg: input.errorMsg ?? null,
             processedAtTs: input.processedAt,
           },
         });
-        return ok(toDto(created));
-      } catch (error) {
-        if (isUniqueViolation(error)) {
-          // 确定性 externalMessageId：重试/重放幂等（返回既有行）
-          const existing = await prisma.channelMessage.findUnique({
-            where: { channel_externalMessageId: { channel: input.channel, externalMessageId } },
-          });
-          if (existing) return ok(toDto(existing));
+        if (updated.count !== 1) {
+          const existing = await prisma.channelMessage.findUnique({ where: { id: input.id } });
+          if (existing?.direction === 'outbound' && existing.status === input.status) return ok(toDto(existing));
+          return err(validationError('出站消息不再处于可收口状态', 'status'));
         }
+        const row = await prisma.channelMessage.findUnique({ where: { id: input.id } });
+        return row ? ok(toDto(row)) : err(notFound('出站消息不存在'));
+      } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        return err(internalError(`出站消息落表失败：${message}`));
+        return err(internalError(`出站消息结果保存失败：${message}`));
       }
     },
 

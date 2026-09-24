@@ -6,10 +6,9 @@ import type { ChannelMessageService, WechatOutboundSender } from './types.js';
  * S3 出站回复发送器（P8 t16，设计 p7-wechat-ilink-design.md §4.4/§4.5）。
  *
  * - iLink reply 语义（客服消息）：纯文本分片 ≤maxTextLength（默认 1500），多段加 [1/N] 标记；
- * - 每片经 adapter.send（wechat-bot 出站骨架，W0 协议冻结后接真实 transport）发送；
- * - 出站 ChannelMessage（direction=outbound）落表：externalMessageId=`out:<correlationId>:<chunkIndex>`
- *   确定性幂等（重试/重放不重复发）；processedAtTs 走 TrustedClock；
- * - 任一片发送失败 → 该片落 failed 行并返回错误（入站侧由调用方 markFailed，可重试）。
+ * - 每片先以确定性 externalMessageId 占位，再经 adapter.send 发送；只有本次成功占位者能触发网络；
+ * - sent 重放直接跳过，sending/failed 一律视为结果不确定并停止自动重发，避免重复触达；
+ * - 发送结果收口为 sent/failed，processedAtTs 走 TrustedClock。崩溃遗留 sending 需人工核对。
  */
 
 export interface WechatTextAdapter {
@@ -46,6 +45,24 @@ export function splitText(text: string, maxLength: number): string[] {
   return chunks;
 }
 
+/** 分片编号也计入渠道长度上限，避免正文满额后追加前缀造成超限。 */
+export function formatTextChunks(text: string, maxLength: number): string[] {
+  if (text.length <= maxLength || maxLength <= 0) return [text];
+  let digits = 1;
+  for (;;) {
+    const prefixLength = (2 * digits) + 4; // [N/N]\n
+    const bodyLimit = maxLength - prefixLength;
+    if (bodyLimit < 1) return splitText(text, maxLength);
+    const chunks = splitText(text, bodyLimit);
+    const requiredDigits = String(chunks.length).length;
+    if (requiredDigits > digits) {
+      digits = requiredDigits;
+      continue;
+    }
+    return chunks.map((chunk, index) => `[${index + 1}/${chunks.length}]\n${chunk}`);
+  }
+}
+
 export function createWechatOutboundSender(options: CreateWechatOutboundSenderOptions): WechatOutboundSender {
   const maxTextLength = options.maxTextLength ?? 1500;
   const botExternalUserId = options.botExternalUserId ?? 'wechat-bot';
@@ -61,27 +78,11 @@ export function createWechatOutboundSender(options: CreateWechatOutboundSenderOp
         return ok({ sentChunks: 0 }); // Agent 无回复：不发送
       }
 
-      const chunks = splitText(input.text, maxTextLength);
+      const chunks = formatTextChunks(input.text, maxTextLength);
       let sent = 0;
       for (let i = 0; i < chunks.length; i++) {
-        const content = chunks.length > 1 ? `[${i + 1}/${chunks.length}]\n${chunks[i]}` : chunks[i];
-        const sendResult = await options.adapter.send({ to: input.targetExternalUserId, content });
-        if (!sendResult.ok) {
-          await options.channelMessageService.recordOutbound({
-            channel: 'wechat',
-            teacherId: input.teacherId,
-            correlationId: input.correlationId,
-            chunkIndex: i,
-            fromExternalUserId: botExternalUserId,
-            toExternalUserId: input.targetExternalUserId,
-            contentText: content,
-            status: 'failed',
-            errorMsg: sendResult.error.message,
-            processedAt: now.value,
-          });
-          return sendResult;
-        }
-        const record = await options.channelMessageService.recordOutbound({
+        const content = chunks[i]!;
+        const claimed = await options.channelMessageService.claimOutbound({
           channel: 'wechat',
           teacherId: input.teacherId,
           correlationId: input.correlationId,
@@ -89,6 +90,30 @@ export function createWechatOutboundSender(options: CreateWechatOutboundSenderOp
           fromExternalUserId: botExternalUserId,
           toExternalUserId: input.targetExternalUserId,
           contentText: content,
+        });
+        if (!claimed.ok) return claimed;
+        if (claimed.value.state === 'sent') continue;
+        if (claimed.value.state === 'uncertain') {
+          return {
+            ok: false as const,
+            error: {
+              code: 'INTERNAL_ERROR' as const,
+              message: '出站消息状态不确定，已停止自动重发，请核对发送回执',
+            },
+          };
+        }
+        const sendResult = await options.adapter.send({ to: input.targetExternalUserId, content });
+        if (!sendResult.ok) {
+          await options.channelMessageService.completeOutbound({
+            id: claimed.value.row.id,
+            status: 'failed',
+            errorMsg: sendResult.error.message,
+            processedAt: now.value,
+          });
+          return sendResult;
+        }
+        const record = await options.channelMessageService.completeOutbound({
+          id: claimed.value.row.id,
           status: 'sent',
           processedAt: now.value,
         });
