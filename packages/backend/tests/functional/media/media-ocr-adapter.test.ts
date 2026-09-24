@@ -56,11 +56,12 @@ async function waitForOcrStatus(
     const poll = await service.getOcr(TEACHER, assetId);
     if (!poll.ok) throw new Error(`轮询失败: ${poll.error.message}`);
     const { ocrStatus, ocrText, ocrConfidence, ocrLayoutBlocks, job } = poll.value;
-    if (ocrStatus === expected) {
+    const expectedJobStatus = expected === 'completed' ? 'succeeded' : expected === 'failed' ? 'failed' : undefined;
+    if (ocrStatus === expected && (!expectedJobStatus || job?.status === expectedJobStatus)) {
       return { status: ocrStatus, text: ocrText, confidence: ocrConfidence, blocks: ocrLayoutBlocks, jobStatus: job?.status ?? null };
     }
     if (Date.now() > deadline) {
-      throw new Error(`等待 OCR 状态 ${expected} 超时，当前 ${ocrStatus}`);
+      throw new Error(`等待 OCR 状态 ${expected} 超时，当前 ${ocrStatus}/${job?.status ?? 'no-job'}`);
     }
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 20));
   }
@@ -122,11 +123,12 @@ describe('P11：OCR 接线（shared/platform-services adapter 替换占位）', 
       const pollResult = await pollService.getOcr(TEACHER, assetId);
       if (!pollResult.ok) throw new Error(`轮询失败: ${pollResult.error.message}`);
       const { ocrStatus, ocrText, ocrConfidence, ocrLayoutBlocks, job } = pollResult.value;
-      if (ocrStatus === expected) {
+      const expectedJobStatus = expected === 'completed' ? 'succeeded' : expected === 'failed' ? 'failed' : undefined;
+      if (ocrStatus === expected && (!expectedJobStatus || job?.status === expectedJobStatus)) {
         return { status: ocrStatus, text: ocrText, confidence: ocrConfidence, blocks: ocrLayoutBlocks, jobStatus: job?.status ?? null };
       }
       if (Date.now() > deadline) {
-        throw new Error(`等待 OCR 状态 ${expected} 超时，当前 ${ocrStatus}`);
+        throw new Error(`等待 OCR 状态 ${expected} 超时，当前 ${ocrStatus}/${job?.status ?? 'no-job'}`);
       }
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 20));
     }

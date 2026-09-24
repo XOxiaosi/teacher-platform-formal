@@ -157,8 +157,13 @@ export function createFeedbackDraftTaskService(options: {
       const evidenceSelection = request.lessonIds !== undefined
         ? { lessonIds: request.lessonIds }
         : { recordIds: request.recordIds ?? initial.value.evidence.map(item => item.id) };
+      const firstAttempt = task.attemptCount > 1
+        ? await client.feedbackDraftAttempt.findFirst({ where: { taskId: task.id }, orderBy: { createdAtTs: 'asc' }, select: { id: true } })
+        : attempt;
       const generated = await options.generator.execute({ teacherId, studentId: task.studentId, ...evidenceSelection,
-        tone: request.tone, classSize: request.classSize, parentType: request.parentType, focus: request.focus });
+        tone: request.tone, classSize: request.classSize, parentType: request.parentType, focus: request.focus,
+        runtime: { taskId: task.id, executionId: firstAttempt?.id ?? attempt.id, contextEpoch: 0,
+          ...(task.attemptCount > 1 ? { resume: true } : {}) } });
       if (!generated.ok) return await finishFailure(client, task, runVersion, attempt.id, generated.error);
       const changed = initial.value.evidence.length !== generated.value.evidence.length || initial.value.evidence.some((item) => {
         const next = generated.value.evidence.find(candidate => candidate.id === item.id);

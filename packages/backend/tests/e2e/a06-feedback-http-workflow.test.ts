@@ -9,7 +9,7 @@ import { createAssembleParentFeedbackContextUseCase } from '../../src/app/use-ca
 import { createGenerateFeedbackDraftUseCase } from '../../src/app/use-cases/generate-feedback-draft/generate-feedback-draft-use-case.js';
 import { createFeedbackDraftTaskService } from '../../src/features/feedback/index.js';
 import { createFieldCipherFromEnv, encryptFieldValue, encryptJsonFieldValue } from '../../src/shared/field-encryption/index.js';
-import type { AiClient, ChatMessage, ChatToolDefinition } from '../../src/shared/ai-client/types.js';
+import type { TeachingRuntimeDriver } from '../../src/app/teaching-runtime/runtime-driver.js';
 import { acceptInvitation } from '../helpers/invitations.js';
 
 const prisma = new PrismaClient();
@@ -23,12 +23,17 @@ function createTestApp(client: PrismaClient) {
     prisma: client,
     cipher,
     context,
-    aiClient: {
-      run: async () => ok({}),
-      chat: async (_messages: ChatMessage[], _tools: ChatToolDefinition[]) => ok({
-        content: '标题：本次课堂的主动验算\n内容：本次课小雨独立完成三道计算题，并主动检查了每一步。接下来继续练习验算。\n所以这样写：用具体课堂行为让家长看见可延续的进展。',
+    runtimeDriver: {
+      availability: 'test',
+      runtimeVersion: 'dsh-v1',
+      run: async input => ok({
+        reply: '标题：本次课堂的主动验算\n内容：本次课小雨独立完成三道计算题，并主动检查了每一步。接下来继续练习验算。\n所以这样写：用具体课堂行为让家长看见可延续的进展。',
+        sessionRef: `dsh:${input.taskId}`,
+        status: 'succeeded',
+        checkpoint: null,
+        cost: { modelCalls: 1, inputTokens: 100, outputTokens: 40, toolCalls: 0, synthetic: true },
       }),
-    } as unknown as AiClient,
+    } satisfies TeachingRuntimeDriver,
   });
   const feedbackDraftTasks = createFeedbackDraftTaskService({
     prisma: client,

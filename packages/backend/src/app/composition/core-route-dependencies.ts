@@ -71,7 +71,7 @@ import {
 import { createAgendaQuery } from '../agenda/index.js';
 import { createConfiguredRealDshDriver } from './real-dsh-config.js';
 import { createTeachingTaskRuntimeWorker } from '../teaching-runtime/teaching-task-runtime-worker.js';
-import { toTaskRuntimeAvailability } from '../teaching-runtime/runtime-driver.js';
+import { createUnavailableTeachingRuntime, toTaskRuntimeAvailability } from '../teaching-runtime/runtime-driver.js';
 import type {
   CoreRouteDependencies,
   CoreRouterOptions,
@@ -109,7 +109,8 @@ export function createCoreRouteDependencies(
   // P8 phase-3 批1：字段加密 cipher 统一装配（ENCRYPTION_KEY env；未配置 → undefined 惰性 SAFETY_BLOCK）
   const fieldCipher = createFieldCipherFromEnv();
   let providerUsageService: ProviderUsageService | undefined;
-  const configuredTeachingDriver = createConfiguredRealDshDriver(() => providerUsageService);
+  const configuredTeachingDriver = options?.teachingRuntimeDriver
+    ?? createConfiguredRealDshDriver(() => providerUsageService);
   const teachingRuntimeAvailability = options?.teachingRuntimeWorker
     ? toTaskRuntimeAvailability(options.teachingRuntimeWorker.availability)
     : configuredTeachingDriver
@@ -216,7 +217,12 @@ export function createCoreRouteDependencies(
       : { prisma },
   );
   const assembleParentFeedbackContext = createAssembleParentFeedbackContextUseCase({ prisma, getClient: clientProvider.getClient, cipher: fieldCipher });
-  const generateFeedbackDraft = createGenerateFeedbackDraftUseCase({ prisma, aiClient, context: assembleParentFeedbackContext, getClient: clientProvider.getClient });
+  const generateFeedbackDraft = createGenerateFeedbackDraftUseCase({
+    prisma,
+    runtimeDriver: configuredTeachingDriver ?? createUnavailableTeachingRuntime(),
+    context: assembleParentFeedbackContext,
+    getClient: clientProvider.getClient,
+  });
   const feedbackDraftTasks = createFeedbackDraftTaskService({ prisma, getClient: clientProvider.getClient, cipher: fieldCipher,
     context: assembleParentFeedbackContext, generator: generateFeedbackDraft });
   const captureScoreFromText = createCaptureScoreFromTextUseCase({ prisma, aiClient, assessments, getClient: clientProvider.getClient });

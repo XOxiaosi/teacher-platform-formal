@@ -1,5 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
+import { ok } from '@teacher-platform/contracts';
 import type { ChatMessage } from '../../../src/shared/ai-client/types.js';
+import { createAssembleParentFeedbackContextUseCase } from '../../../src/app/use-cases/assemble-parent-feedback-context/assemble-parent-feedback-context-use-case.js';
+import type { TeachingRuntimeDriver } from '../../../src/app/teaching-runtime/runtime-driver.js';
 import { prisma, TEACHER_A, TEACHER_B, requireUseCaseFactory, createMockAiClient, buildUseCase, createStudentFixture, createLessonFixture, createAssessmentRecord } from './generate-feedback-draft-use-case.fixtures.js';
 describe("generate-feedback-draft use-case", () => {
 
@@ -55,6 +58,55 @@ describe("generate-feedback-draft use-case", () => {
 
     const savedCount = await prisma.parentFeedback.count({ where: { teacherId: TEACHER_A } });
     expect(savedCount).toBe(0);
+  });
+
+  it('正式适配可只通过 DSH driver 生成，并使用持久任务身份且不开放工具', async () => {
+    const student = await createStudentFixture(TEACHER_A, '合成学生');
+    const lesson = await createLessonFixture({
+      teacherId: TEACHER_A,
+      studentId: student.id,
+      progress: '完成三道计算题',
+    });
+    const run = vi.fn<TeachingRuntimeDriver['run']>(async input => ok({
+      reply: '标题：本次课堂进展\n内容：今天独立完成三道计算题，下一次继续练习验算。\n所以这样写：使用已确认的课堂事实。',
+      sessionRef: `dsh:${input.taskId}`,
+      status: 'succeeded',
+      checkpoint: null,
+      cost: { modelCalls: 1, inputTokens: 100, outputTokens: 40, toolCalls: 0, synthetic: true },
+    }));
+    const runtimeDriver: TeachingRuntimeDriver = { availability: 'test', runtimeVersion: 'dsh-v1', run };
+    const context = createAssembleParentFeedbackContextUseCase({ prisma });
+    const useCase = requireUseCaseFactory()({ prisma, runtimeDriver, context });
+
+    const result = await useCase.execute({
+      teacherId: TEACHER_A,
+      studentId: student.id,
+      lessonIds: [lesson.id],
+      runtime: { taskId: 'feedback-task-1', executionId: 'attempt-1', contextEpoch: 0 },
+    });
+
+    expect(result).toMatchObject({ ok: true, value: { title: '本次课堂进展' } });
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({
+      teacherId: TEACHER_A,
+      taskId: 'feedback-task-1',
+      executionId: 'attempt-1',
+      contextEpoch: 0,
+      sessionRef: null,
+      history: [],
+      tools: expect.objectContaining({ definitions: [] }),
+      message: expect.stringContaining('完成三道计算题'),
+    }));
+    await useCase.execute({
+      teacherId: TEACHER_A,
+      studentId: student.id,
+      lessonIds: [lesson.id],
+      runtime: { taskId: 'feedback-task-1', executionId: 'attempt-1', contextEpoch: 0, resume: true },
+    });
+    expect(run).toHaveBeenLastCalledWith(expect.objectContaining({
+      taskId: 'feedback-task-1',
+      executionId: 'attempt-1',
+      sessionRef: expect.stringMatching(/^teaching-/),
+    }));
   });
 
 

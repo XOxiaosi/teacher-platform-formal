@@ -21,6 +21,9 @@ describe('FeedbackDraftTask durable service', () => {
     expect(generator.execute).toHaveBeenCalledTimes(1);
     expect(generator.execute).toHaveBeenCalledWith(expect.objectContaining({ recordIds: ['record-1'] }));
     expect(generator.execute).not.toHaveBeenCalledWith(expect.objectContaining({ lessonIds: expect.anything() }));
+    expect(generator.execute).toHaveBeenCalledWith(expect.objectContaining({
+      runtime: { taskId: first.ok ? first.value.task.id : '', executionId: expect.any(String), contextEpoch: 0 },
+    }));
     const row = await prisma.feedbackDraftTask.findUniqueOrThrow({ where: { teacherId_clientRequestId: { teacherId: TEACHER_A, clientRequestId: input.clientRequestId } } });
     expect(row.requestCiphertext).toMatch(/^enc:v1:/); expect(row.draftCiphertext).toMatch(/^enc:v1:/);
   });
@@ -83,13 +86,16 @@ describe('FeedbackDraftTask durable service', () => {
     const ended = new Date(Date.now() - 30 * 1000);
     const task = await prisma.feedbackDraftTask.create({ data: { teacherId: TEACHER_A, studentId: student.id, clientRequestId: 'draft-ended-attempt-1', requestFingerprint: 'hash', status: 'running', attemptCount: 1,
       requestCiphertext: cipher.encryptJson({ clientRequestId: 'draft-ended-attempt-1', studentId: student.id }), draftCiphertext: cipher.encryptJson({ title: '', content: '' }), createdAtTs: old, updatedAtTs: old } });
-    await prisma.feedbackDraftAttempt.create({ data: { taskId: task.id, teacherId: TEACHER_A, clientRequestId: 'draft-ended-attempt-1', requestFingerprint: 'hash', status: 'succeeded', modelCallStartedAtTs: old, modelCallEndedAtTs: ended, createdAtTs: old, updatedAtTs: ended } });
+    const originalAttempt = await prisma.feedbackDraftAttempt.create({ data: { taskId: task.id, teacherId: TEACHER_A, clientRequestId: 'draft-ended-attempt-1', requestFingerprint: 'hash', status: 'succeeded', modelCallStartedAtTs: old, modelCallEndedAtTs: ended, createdAtTs: old, updatedAtTs: ended } });
     const got = await tasks.get({ teacherId: TEACHER_A, taskId: task.id });
     expect(got).toMatchObject({ ok: true, value: { status: 'uncertain', retryable: true } });
     if (!got.ok) return;
     const recovered = await tasks.retry({ teacherId: TEACHER_A, taskId: task.id, clientRequestId: 'draft-ended-attempt-retry', expectedVersion: got.value.version });
     expect(recovered).toMatchObject({ ok: true, value: { task: { status: 'succeeded' }, replayed: false } });
     expect(generator.execute).toHaveBeenCalledTimes(1);
+    expect(generator.execute).toHaveBeenCalledWith(expect.objectContaining({
+      runtime: { taskId: task.id, executionId: originalAttempt.id, contextEpoch: 0, resume: true },
+    }));
   });
   it('旧 attempt 晚到结果不能覆盖重试后的新草稿', async () => {
     const student = await createStudentFixture(TEACHER_A, '并发恢复学生');

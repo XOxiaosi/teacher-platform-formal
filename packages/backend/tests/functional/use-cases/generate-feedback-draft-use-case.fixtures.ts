@@ -2,6 +2,7 @@ import { beforeEach, afterEach, vi } from 'vitest';
 import { PrismaClient } from '@prisma/client';
 import type { AiClient, ChatMessage, ChatResponse, ChatToolDefinition } from '../../../src/shared/ai-client/types.js';
 import type { CommonError, Result } from '@teacher-platform/contracts';
+import type { TeachingRuntimeDriver } from '../../../src/app/teaching-runtime/runtime-driver.js';
 import { createAssembleParentFeedbackContextUseCase } from '../../../src/app/use-cases/assemble-parent-feedback-context/assemble-parent-feedback-context-use-case.js';
 export let createGenerateFeedbackDraftUseCase: unknown;
 
@@ -24,6 +25,7 @@ export interface GenerateFeedbackDraftUseCase {
     classSize?: '1v1' | 'small' | 'large';
     parentType?: 'normal' | 'scores' | 'sensitive';
     focus?: 'highlight' | 'problem' | 'cooperation' | 'summary';
+    runtime?: { taskId: string; executionId: string; contextEpoch: number; resume?: boolean };
   }): Promise<Result<{
     studentId: string;
     lessonIds: string[];
@@ -68,7 +70,12 @@ export function requireUseCaseFactory() {
   if (!createGenerateFeedbackDraftUseCase) {
     throw new Error('generate-feedback-draft use-case loaded but factory export is missing');
   }
-  return createGenerateFeedbackDraftUseCase as (options: { prisma: PrismaClient; aiClient: AiClient; context: ReturnType<typeof createAssembleParentFeedbackContextUseCase> }) => GenerateFeedbackDraftUseCase;
+  return createGenerateFeedbackDraftUseCase as (options: {
+    prisma: PrismaClient;
+    aiClient?: AiClient;
+    runtimeDriver?: TeachingRuntimeDriver;
+    context: ReturnType<typeof createAssembleParentFeedbackContextUseCase>;
+  }) => GenerateFeedbackDraftUseCase;
 }
 
 

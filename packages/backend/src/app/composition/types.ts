@@ -46,6 +46,7 @@ import type { LessonStatusFixUseCase } from '../use-cases/lesson-status-fix/type
 import type { CaptureService } from '../../features/capture/index.js';
 import type { SchedulingWebService } from '../../features/scheduling-web/index.js';
 import type { TeachingTaskRuntimeWorker } from '../teaching-runtime/teaching-task-runtime-worker.js';
+import type { TeachingRuntimeDriver } from '../teaching-runtime/runtime-driver.js';
 
 export interface CoreRouterOptions {
   /** Retired Agent HTTP compatibility, available only to explicit legacy tests. */
@@ -78,6 +79,8 @@ export interface CoreRouterOptions {
   legacyPaymentEditEnabled?: boolean;
   /** Optional real DSH worker; omitted keeps the teaching runtime unavailable. */
   teachingRuntimeWorker?: TeachingTaskRuntimeWorker;
+  /** Explicit driver injection for tests or alternate process assembly. */
+  teachingRuntimeDriver?: TeachingRuntimeDriver;
 }
 
 export interface StudentRouteDependencies {

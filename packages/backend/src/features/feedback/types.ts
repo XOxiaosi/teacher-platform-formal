@@ -127,6 +127,12 @@ export interface FeedbackDraftGeneratorExecutor {
     classSize?: '1v1' | 'small' | 'large';
     parentType?: 'normal' | 'scores' | 'sensitive';
     focus?: 'highlight' | 'problem' | 'cooperation' | 'summary';
+    runtime?: {
+      taskId: string;
+      executionId: string;
+      contextEpoch: number;
+      resume?: boolean;
+    };
   }): Promise<Result<{
     studentId: string;
     lessonIds: string[];
