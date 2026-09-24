@@ -153,36 +153,6 @@ export interface ListConversationTurnsParams {
   limit?: number;
 }
 
-export interface SendConversationMessageRequest {
-  conversationId: string;
-  message: string;
-  clientRequestId: string;
-}
-
-export type AgentExecutionStatus = 'running' | 'succeeded' | 'failed' | 'partial' | 'waiting_confirmation';
-
-export interface AgentConverseResponse {
-  conversationId: string;
-  executionId: string;
-  status: AgentExecutionStatus;
-  reply: string | null;
-  replayed: boolean;
-}
-
-export interface AgentExecutionDto {
-  id: string;
-  conversationId: string;
-  clientRequestId: string;
-  status: AgentExecutionStatus;
-  stage: 'conversation' | 'model' | 'tool' | 'persistence' | 'confirmation';
-  reply: string | null;
-  error: CommonError | null;
-  completedToolCallIds: string[];
-  startedAt: string;
-  finishedAt: string | null;
-  updatedAt: string;
-}
-
 function pathWithQuery(path: string, entries: Array<[string, string | number | undefined]>): string {
   const query = new URLSearchParams();
   for (const [key, value] of entries) {
@@ -254,33 +224,4 @@ export function confirmPendingAction(
 
 export function cancelPendingAction(teacherId: string, actionId: string): Promise<PendingActionResponse> {
   return apiRequest(`${pendingActionPath(actionId)}/cancel`, { method: 'POST', teacherId });
-}
-
-export function sendConversationMessage(
-  teacherId: string,
-  body: SendConversationMessageRequest,
-): Promise<AgentConverseResponse> {
-  return apiRequest('/agent/converse', { method: 'POST', teacherId, body });
-}
-
-export function getAgentExecution(
-  teacherId: string,
-  executionId: string,
-): Promise<{ execution: AgentExecutionDto }> {
-  return apiRequest(`/agent/executions/${encodeURIComponent(executionId)}`, {
-    method: 'GET',
-    teacherId,
-  });
-}
-
-export function replayAgentExecution(
-  teacherId: string,
-  executionId: string,
-  clientRequestId: string,
-): Promise<AgentConverseResponse> {
-  return apiRequest(`/agent/executions/${encodeURIComponent(executionId)}/replay`, {
-    method: 'POST',
-    teacherId,
-    body: { clientRequestId },
-  });
 }

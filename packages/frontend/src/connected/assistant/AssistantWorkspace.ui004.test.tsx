@@ -5,11 +5,11 @@ import { clearAssistantDrafts } from './drafts';
 import { detail, deferred, makeTransport } from './assistant-test-support';
 import type { ConversationResponse } from '../../api/conversations';
 
-const api = vi.hoisted(() => ({ create: vi.fn(), list: vi.fn(), detail: vi.fn(), turns: vi.fn(), archive: vi.fn(), sendLegacy: vi.fn(), confirmLegacy: vi.fn(), cancelLegacy: vi.fn() }));
+const api = vi.hoisted(() => ({ create: vi.fn(), list: vi.fn(), detail: vi.fn(), turns: vi.fn(), archive: vi.fn(), confirmLegacy: vi.fn(), cancelLegacy: vi.fn() }));
 vi.mock('../../api/conversations', () => ({
   createConversation: api.create, listConversations: api.list, getConversation: api.detail,
   listConversationTurns: api.turns, archiveConversation: api.archive,
-  sendConversationMessage: api.sendLegacy, confirmPendingAction: api.confirmLegacy, cancelPendingAction: api.cancelLegacy,
+  confirmPendingAction: api.confirmLegacy, cancelPendingAction: api.cancelLegacy,
 }));
 
 beforeEach(() => {
@@ -120,7 +120,6 @@ describe('UI-004 assistant chat entry and history', () => {
     expect(await screen.findByRole('heading', { name: '今天想一起完成什么？' })).toBeInTheDocument();
     expect(screen.getByLabelText('交给教学助手的工作')).toHaveValue('');
     expect(api.create).not.toHaveBeenCalled();
-    expect(api.sendLegacy).not.toHaveBeenCalled();
   });
 
   it('keeps history closed by default, opens it on demand, and filters archived work', async () => {

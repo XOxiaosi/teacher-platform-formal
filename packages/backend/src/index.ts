@@ -103,6 +103,7 @@ function createMetricsRouter(): Router {
 }
 
 export interface CreateAppOptions {
+  /** Retired Agent HTTP compatibility for explicit legacy tests only. */
   agentConverse?: AgentConverseUseCase;
   /** 测试/本地合成注入完整核心依赖；生产缺省走正式组合装配。 */
   coreDependencies?: CoreRouteDependencies;

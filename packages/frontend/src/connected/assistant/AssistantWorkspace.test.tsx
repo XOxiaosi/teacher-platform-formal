@@ -6,11 +6,11 @@ import { clearAssistantDrafts } from './drafts';
 import { detail, deferred, makeTransport, userTurn } from './assistant-test-support';
 import type { ConfirmationTurnDto, ConversationResponse } from '../../api/conversations';
 
-const api = vi.hoisted(() => ({ create: vi.fn(), list: vi.fn(), detail: vi.fn(), turns: vi.fn(), archive: vi.fn(), sendLegacy: vi.fn(), getLegacy: vi.fn(), confirmLegacy: vi.fn(), cancelLegacy: vi.fn() }));
+const api = vi.hoisted(() => ({ create: vi.fn(), list: vi.fn(), detail: vi.fn(), turns: vi.fn(), archive: vi.fn(), getLegacy: vi.fn(), confirmLegacy: vi.fn(), cancelLegacy: vi.fn() }));
 vi.mock('../../api/conversations', () => ({
   createConversation: api.create, listConversations: api.list, getConversation: api.detail,
   listConversationTurns: api.turns, archiveConversation: api.archive,
-  sendConversationMessage: api.sendLegacy, getPendingAction: api.getLegacy, confirmPendingAction: api.confirmLegacy, cancelPendingAction: api.cancelLegacy,
+  getPendingAction: api.getLegacy, confirmPendingAction: api.confirmLegacy, cancelPendingAction: api.cancelLegacy,
 }));
 beforeEach(() => {
   vi.clearAllMocks(); sessionStorage.clear(); clearAssistantDrafts('teacher-a'); clearAssistantDrafts('teacher-b');
@@ -61,14 +61,14 @@ describe('A03 server-backed assistant conversations', () => {
     expect((await screen.findAllByText('2026年9月15日 20:00')).length).toBe(2);
   });
 
-  it('opens a saved URL and never calls the old executor or renders a board', async () => {
+  it('opens a saved URL without rendering a separate task board', async () => {
     render(<AssistantWorkspace teacherId="teacher-a" />);
     await screen.findByRole('heading', { name: '会话one' });
     expect(api.detail).toHaveBeenCalledWith('teacher-a', 'one');
     expect(screen.queryByLabelText('任务看板')).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('交给教学助手的工作'), { target: { value: '整理记录' } });
     expect(screen.getByRole('button', { name: '发送' })).toBeDisabled();
-    expect(api.sendLegacy).not.toHaveBeenCalled(); expect(api.confirmLegacy).not.toHaveBeenCalled();
+    expect(api.confirmLegacy).not.toHaveBeenCalled();
   });
   it('loads complete older history and paginates the conversation list', async () => {
     api.list.mockImplementation((_teacher, params) => Promise.resolve(params.cursor

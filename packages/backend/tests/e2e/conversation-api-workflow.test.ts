@@ -323,7 +323,7 @@ describe('Conversation API 契约', () => {
     });
   });
 
-  it('POST /conversations/:id/archive 幂等，并使会话只读', async () => {
+  it('POST /conversations/:id/archive 幂等，默认组合不再暴露旧 Agent 写入口', async () => {
     const conversation = await createConversationOrThrow();
 
     const first = await api('POST', `/api/v1/conversations/${conversation.id}/archive`);
@@ -339,11 +339,13 @@ describe('Conversation API 契约', () => {
       message: '继续追加消息',
       clientRequestId: 'request-archived-conversation',
     });
-
-    expect(converse.status).toBe(400);
-    expect(converse.body).toEqual({
-      ok: false,
-      error: expect.objectContaining({ code: 'VALIDATION_ERROR' }),
+    const execution = await api('GET', '/api/v1/agent/executions/retired-execution');
+    const replay = await api('POST', '/api/v1/agent/executions/retired-execution/replay', {
+      clientRequestId: 'request-retired-replay',
     });
+
+    expect(converse.status).toBe(404);
+    expect(execution.status).toBe(404);
+    expect(replay.status).toBe(404);
   });
 });

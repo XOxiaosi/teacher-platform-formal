@@ -87,7 +87,9 @@ export function createCoreRouter(prisma: PrismaClient, options?: CoreRouterOptio
   if (options?.legacyAiInputRoutesEnabled === true) {
     router.use(createAiInputRouter(dependencies.aiInput));
   }
-  router.use(createAgentRouter(dependencies.agent));
+  if (dependencies.agent) {
+    router.use(createAgentRouter(dependencies.agent));
+  }
   router.use(createFeedbackRouter(dependencies.feedback));
   router.use(createRequirementRouter(dependencies.requirements));
   // L4 装配（t91）：provider-configs/usage 路由挂载——共享库服务（装配期共享库 prisma），

@@ -49,6 +49,7 @@ import type { SchedulingWebService } from '../../features/scheduling-web/index.j
 import type { TeachingTaskRuntimeWorker } from '../teaching-runtime/teaching-task-runtime-worker.js';
 
 export interface CoreRouterOptions {
+  /** Retired Agent HTTP compatibility, available only to explicit legacy tests. */
   agentConverse?: AgentConverseUseCase;
   trustedClock?: TrustedClock;
   rawPrisma?: PrismaClient;
@@ -198,7 +199,8 @@ export interface CoreRouteDependencies {
   dailyReview: DailyReviewRouteDependencies;
   aiInput: AiInputRouteDependencies;
   capture: CaptureRouteDependencies;
-  agent: AgentRouteDependencies;
+  /** Absent in formal composition; explicit legacy tests may still inject it. */
+  agent?: AgentRouteDependencies;
   feedback: FeedbackGenerateRouteDependencies;
   requirements: RequirementRouteDependencies;
   media?: MediaRouteDependencies;

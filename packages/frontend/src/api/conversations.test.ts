@@ -4,13 +4,10 @@ import {
   cancelPendingAction,
   confirmPendingAction,
   createConversation,
-  getAgentExecution,
   getConversation,
   getPendingAction,
   listConversations,
   listConversationTurns,
-  replayAgentExecution,
-  sendConversationMessage,
 } from './conversations';
 
 const TEACHER_ID = 'demo-teacher';
@@ -119,49 +116,4 @@ describe('Conversation API client', () => {
     expect(fetchMock.mock.calls[2][1]).not.toHaveProperty('body');
   });
 
-  it('发送消息提交稳定 clientRequestId', async () => {
-    const fetchMock = mockSuccess({ conversationId: 'conversation-1', reply: '已完成' });
-
-    await sendConversationMessage(TEACHER_ID, {
-      conversationId: 'conversation-1',
-      message: '查一下今天的课程',
-      clientRequestId: 'request-client-001',
-    });
-
-    expect(fetchMock).toHaveBeenCalledWith('/api/v1/agent/converse', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-      },
-      credentials: 'include',
-      body: JSON.stringify({
-        conversationId: 'conversation-1',
-        message: '查一下今天的课程',
-        clientRequestId: 'request-client-001',
-      }),
-    });
-  });
-
-  it('查询 execution 编码 path', async () => {
-    const fetchMock = mockSuccess({ execution: { id: 'execution/1', status: 'running' } });
-
-    await getAgentExecution(TEACHER_ID, 'execution/1');
-
-    expect(fetchMock).toHaveBeenCalledWith('/api/v1/agent/executions/execution%2F1', expect.objectContaining({
-      method: 'GET',
-    }));
-  });
-
-  it('失败回放只提交新 clientRequestId，不重提 message 或工具参数', async () => {
-    const fetchMock = mockSuccess({
-      conversationId: 'conversation-1', executionId: 'execution-2', status: 'succeeded', reply: '完成', replayed: false,
-    });
-
-    await replayAgentExecution(TEACHER_ID, 'execution/1', 'request-replay-001');
-
-    expect(fetchMock).toHaveBeenCalledWith('/api/v1/agent/executions/execution%2F1/replay', expect.objectContaining({
-      method: 'POST',
-      body: JSON.stringify({ clientRequestId: 'request-replay-001' }),
-    }));
-  });
 });

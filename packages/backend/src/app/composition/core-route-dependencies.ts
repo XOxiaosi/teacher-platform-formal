@@ -9,7 +9,6 @@ import { createStudentTimelineService } from '../../features/student-timeline/in
 import { createScheduleService } from '../../features/scheduling/index.js';
 import { createSchedulingWebService } from '../../features/scheduling-web/index.js';
 import { createWorkspaceWebRouter } from '../routes/workspace-web.routes.js';
-import { createLessonService } from '../../features/lessons/index.js';
 import { createLessonLedgerService, createPaymentService } from '../../features/payments/index.js';
 import { createAiNoteService } from '../../features/ai-notes/index.js';
 import { createConversationService } from '../../features/conversation/index.js';
@@ -31,7 +30,6 @@ import {
 import type { ProviderConfigRow } from '../../shared/ai-client/provider-router.js';
 import { createDatabaseTrustedClock } from '../../shared/trusted-clock/index.js';
 import { createClientProvider } from '../../shared/database-pool/index.js';
-import { createBudgetTracker, budgetConfigFromEnv } from '../../shared/agent-cost/index.js';
 import { createLogger } from '../../shared/logger/index.js';
 import { createAppStorage } from '../../shared/storage/index.js';
 import { createJobStore } from '../../shared/background-jobs/index.js';
@@ -42,7 +40,6 @@ import { createPlannedScheduleUseCase } from '../use-cases/create-planned-schedu
 import { createScheduleCompleteUseCase } from '../use-cases/schedule-complete/index.js';
 import { createDailyReviewAssembleUseCase } from '../use-cases/daily-review-assemble/index.js';
 import { createSaveRawInputUseCase } from '../use-cases/save-raw-input/index.js';
-import { createAgentConverseUseCase } from '../use-cases/agent-converse/index.js';
 import { createConfirmPendingActionUseCase } from '../use-cases/confirm-pending-action/index.js';
 import { createCancelPendingActionUseCase } from '../use-cases/cancel-pending-action/index.js';
 import { createUpdateStudentProfileUseCase } from '../use-cases/update-student-profile/index.js';
@@ -68,17 +65,9 @@ import {
 import { createCaptureCommunicationFromTextUseCase } from '../use-cases/capture-communication-from-text/index.js';
 import { createFieldCipherFromEnv } from '../../shared/field-encryption/index.js';
 import {
-  createExecutionRunners,
-  DEFAULT_MODEL_TIMEOUT_MS,
-  DEFAULT_READ_TOOL_TIMEOUT_MS,
-} from '../reliability/execution-runners.js';
-import {
-  createConfirmationGateway,
   createConfirmationTransactionPort,
   createDatabaseConfirmableActionRegistry,
 } from '../confirmation/index.js';
-import { createMinimalToolRegistry } from '../tool-registration.js';
-import { createPresentationBuilder } from '../presentation/index.js';
 import { createAgendaQuery } from '../agenda/index.js';
 import { createConfiguredRealDshDriver } from './real-dsh-config.js';
 import { createTeachingTaskRuntimeWorker } from '../teaching-runtime/teaching-task-runtime-worker.js';
@@ -274,7 +263,6 @@ export function createCoreRouteDependencies(
   // T-015 正式捕获链完全不依赖 AI/OCR/ASR；文字先加密持久化，再产出确定性逐字候选。
   const capture = createCaptureService({ prisma, getClient: clientProvider.getClient, cipher: fieldCipher });
   const conversations = createConversationService({ prisma, getClient: clientProvider.getClient, cipher: fieldCipher });
-  const agentExecutions = createAgentExecutionService({ prisma, getClient: clientProvider.getClient, cipher: fieldCipher });
   // P1 修复（t87）：UserRequirement 是共享库表（与 TeacherRegistry/SessionStore 同库），
   // 装配必须直传共享库 prisma（禁止 getClient 形态——否则 databaseRouter 解析到隔离教师库，
   // 教师未注册在隔离库 TeacherRegistry → FK 违反 500；R8 gate 强制，qa3 t82 实测）
@@ -333,7 +321,6 @@ export function createCoreRouteDependencies(
     : undefined;
 
   let pendingActionDependencies: PendingActionDependencies | undefined;
-  let confirmationGateway;
 
   if (options?.confirmation) {
     // P29-W1：确认 registry 显式注入 feedback.updateStatus / payments.create executor 所需的
@@ -358,39 +345,6 @@ export function createCoreRouteDependencies(
       },
       cipher: fieldCipher,
     });
-    const confirmationStudents = createStudentService(options.confirmation.rawPrisma);
-    const confirmationSchedules = createScheduleService(options.confirmation.rawPrisma);
-    const confirmationRawPrisma = options.confirmation.rawPrisma;
-    const confirmationLessons = createLessonService({
-      getClient: async () => confirmationRawPrisma,
-      cipher: fieldCipher,
-    });
-    const confirmationPayments = createPaymentService({
-      getClient: async () => confirmationRawPrisma,
-      cipher: fieldCipher,
-    });
-    const confirmationMemos = createMemoService({ prisma: options.confirmation.rawPrisma, cipher: fieldCipher });
-    const confirmationFeedback = createFeedbackService({ prisma: options.confirmation.rawPrisma, cipher: fieldCipher });
-    confirmationGateway = createConfirmationGateway({
-      pendingActions,
-      schedules: confirmationSchedules,
-      lessons: confirmationLessons,
-      students: confirmationStudents,
-      editOwners: {
-        studentProfiles: {
-          getOwnedStudentProfile: (input) => confirmationStudents.getOwnedStudent(input),
-        },
-        scheduleReschedules: confirmationSchedules,
-        lessonRecords: confirmationLessons,
-        payments: confirmationPayments,
-        memos: {
-          getOwnedMemo: (input) => confirmationMemos.getMemo(input),
-        },
-        feedback: {
-          getOwnedFeedback: (input) => confirmationFeedback.getFeedback(input),
-        },
-      },
-    });
     pendingActionDependencies = {
       pendingActions,
       confirmPendingAction: createConfirmPendingActionUseCase({
@@ -401,49 +355,19 @@ export function createCoreRouteDependencies(
     };
   }
 
-  const agentConverse = options?.agentConverse ?? createAgentConverseUseCase({
-    conversationService: conversations,
-    aiClient: localSafeMode ? createAiClient({ provider: defaultAiProvider }) : createRoutingAiClient({
-      defaultProvider: defaultAiProvider,
-      resolver: providerRouter!,
-      // P16 P1 修复（t69 装配遗漏）：Agent 路径同款用量采集接线——chat 成功后落 ProviderUsage 行
-      onUsage: (input) => {
-        void providerUsageService!.record(input).catch((error: unknown) => {
-          usageLogger.warn('provider usage record failed (agent)', {
-            error: error instanceof Error ? error.message : String(error),
-            teacherId: input.teacherId,
-          });
-        });
-      },
-    }),
-    toolRegistry: createMinimalToolRegistry({
-      prisma,
-      trustedClock,
-      getClient: clientProvider.getClient,
-      ...(providerRouter ? { providerRouter } : {}),
-      defaultAiProvider,
-      // P15 t2（agent 工具路径 moderation 透传）：与 requirements service 同款注入——
-      // createPlatformServices(env).moderation（未配置 = undefined → 工具路径零影响）+ 审计 logger
-      moderation: platformServices.moderation?.provider === 'local' ? platformServices.moderation : undefined,
-      logger: options?.logger ?? createLogger(),
-      localSafeMode,
-    }),
-    confirmationGateway,
-    agentExecutions,
-    trustedClock,
-    businessTimeZone: 'Asia/Shanghai',
-    presentationBuilder: createPresentationBuilder(),
-    // 成本控制（t48 装配交接）：AGENT_DAILY_TOKEN_LIMIT / AGENT_TURN_TOKEN_LIMIT env 读取
-    budgetTracker: createBudgetTracker(budgetConfigFromEnv()),
-    perTurnTokenLimit: budgetConfigFromEnv().perTurnTokenLimit,
-    executionRunners: createExecutionRunners({
-      modelTimeoutMs: DEFAULT_MODEL_TIMEOUT_MS,
-      readToolTimeoutMs: DEFAULT_READ_TOOL_TIMEOUT_MS,
-      log(event) {
-        process.stdout.write(`${JSON.stringify({ event: 'agent_execution_step', ...event })}\n`);
-      },
-    }),
-  });
+  // The formal web and WeChat callers use teaching-task/DSH. Keep the old
+  // HTTP adapter reachable only when a legacy test explicitly injects it;
+  // normal startup no longer constructs a second model/tool runtime.
+  const legacyAgent = options?.agentConverse
+    ? {
+      agentConverse: options.agentConverse,
+      agentExecutions: createAgentExecutionService({
+        prisma,
+        getClient: clientProvider.getClient,
+        cipher: fieldCipher,
+      }),
+    }
+    : undefined;
 
   return {
     agenda: { agenda },
@@ -472,7 +396,7 @@ export function createCoreRouteDependencies(
     dailyReview: { dailyReview },
     aiInput: { saveRawInput },
     capture: { capture },
-    agent: { agentConverse, agentExecutions },
+    ...(legacyAgent ? { agent: legacyAgent } : {}),
     feedback: {
       generateFeedbackDraft,
       feedbackDraftTasks,

@@ -7,11 +7,11 @@ import type { ConfirmationTurnDto } from '../../api/conversations';
 
 const api = vi.hoisted(() => ({
   create: vi.fn(), list: vi.fn(), detail: vi.fn(), turns: vi.fn(), archive: vi.fn(),
-  sendLegacy: vi.fn(), getLegacy: vi.fn(), confirmLegacy: vi.fn(), cancelLegacy: vi.fn(),
+  getLegacy: vi.fn(), confirmLegacy: vi.fn(), cancelLegacy: vi.fn(),
 }));
 vi.mock('../../api/conversations', () => ({
   createConversation: api.create, listConversations: api.list, getConversation: api.detail,
-  listConversationTurns: api.turns, archiveConversation: api.archive, sendConversationMessage: api.sendLegacy,
+  listConversationTurns: api.turns, archiveConversation: api.archive,
   getPendingAction: api.getLegacy, confirmPendingAction: api.confirmLegacy, cancelPendingAction: api.cancelLegacy,
 }));
 

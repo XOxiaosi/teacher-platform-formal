@@ -143,8 +143,7 @@ describe('minimalToolRegistry 契约（Phase 1.12-A 红灯）', () => {
     expect(toolNames).not.toContain('payments.delete');
   });
 
-  it('composition 默认 agentConverse 使用 createMinimalToolRegistry 而非空 createToolRegistry', async () => {
-    // 源码边界断言：默认Agent装配路径必须引用最小业务工具注册表
+  it('composition 默认不再构造旧 agentConverse 或第二套工具运行时', async () => {
     const fs = await import('node:fs');
     const path = await import('node:path');
     const compositionPath = path.resolve(
@@ -153,8 +152,8 @@ describe('minimalToolRegistry 契约（Phase 1.12-A 红灯）', () => {
     );
     const source = fs.readFileSync(compositionPath, 'utf8');
 
-    expect(source).toContain('createMinimalToolRegistry');
-    expect(source).toContain('tool-registration');
-    expect(source).not.toMatch(/toolRegistry:\s*createToolRegistry\(\)/);
+    expect(source).not.toContain('createAgentConverseUseCase');
+    expect(source).not.toContain('createMinimalToolRegistry');
+    expect(source).toContain('const legacyAgent = options?.agentConverse');
   });
 });

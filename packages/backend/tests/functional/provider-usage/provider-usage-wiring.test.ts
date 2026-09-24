@@ -2,8 +2,8 @@
  * P16 P1 修复（t69 装配遗漏）：ProviderUsage 采集接线测试。
  *
  * 背景：qa3 全链路 smoke 发现 /usage/summary 与 admin 用量看板恒 0——
- * core-route-dependencies.ts 两处 createRoutingAiClient（aiNotes 路径 + agentConverse 路径）
- * 均未传 onUsage 回调 → providerUsageService.record 无调用点。
+ * core-route-dependencies.ts 的正式结构化输入路径必须把模型用量写入
+ * ProviderUsage；DSH 自己的用量由 TeachingRuntimeUsage 记录，不再构造第二套旧 Agent client。
  *
  * 本测试验证真实链路（本地 mock OpenAI 兼容服务 + 真实 routing client + 真实 record）：
  * 1. 装配 createCoreRouteDependencies(prisma)（生产同款组合）；
@@ -11,9 +11,7 @@
  * 3. runAsTeacher 模拟请求级教师身份（生产 dbRouter 分支由中间件注入，语义一致）；
  * 4. 路径 A：saveRawInput → aiNotes.parseInput → aiClient.run ×2（第一处 createRoutingAiClient）
  *    → ProviderUsage 落 2 行；
- * 5. 路径 B：agentConverse.execute → aiClient.chat ×1（第二处 createRoutingAiClient）
- *    → ProviderUsage 落 1 行；
- * 6. 断言：ProviderUsage 3 行（tokens 全 >0）+ summary 非 0（修复前恒 0）。
+ * 5. 断言：ProviderUsage 2 行（tokens 全 >0）+ summary 非 0，且正式组合不再暴露旧 Agent。
  */
 
 import { randomBytes } from 'node:crypto';
@@ -36,7 +34,6 @@ const deps = createCoreRouteDependencies(prisma, { localSafeMode: false });
 let mockServer: http.Server;
 let mockPort = 0;
 let runCalls = 0;
-let chatCalls = 0;
 
 const createdTeacherIds: string[] = [];
 
@@ -60,8 +57,7 @@ beforeAll(async () => {
         // 非 JSON 请求体 → 按 run 形态处理
       }
       const isChat = Array.isArray(parsed.tools);
-      if (isChat) chatCalls += 1;
-      else runCalls += 1;
+      if (!isChat) runCalls += 1;
       const content = isChat
         ? '好的，已处理'
         : JSON.stringify({ intent: 'lesson', confidenceScore: 0.9, studentName: '小明' });
@@ -83,9 +79,6 @@ afterAll(async () => {
   await prisma.providerUsage.deleteMany({ where: { teacherId: { in: createdTeacherIds } } });
   await prisma.providerConfig.deleteMany({ where: { teacherId: { in: createdTeacherIds } } });
   await prisma.aINote.deleteMany({ where: { teacherId: { in: createdTeacherIds } } });
-  await prisma.agentExecution.deleteMany({ where: { teacherId: { in: createdTeacherIds } } });
-  await prisma.conversationTurn.deleteMany({ where: { teacherId: { in: createdTeacherIds } } });
-  await prisma.conversation.deleteMany({ where: { teacherId: { in: createdTeacherIds } } });
   await prisma.sessionStore.deleteMany({ where: { teacherId: { in: createdTeacherIds } } });
   await prisma.teacherRegistry.deleteMany({ where: { id: { in: createdTeacherIds } } });
   await prisma.$disconnect();
@@ -94,8 +87,8 @@ afterAll(async () => {
   await new Promise<void>((resolve) => mockServer.close(() => resolve()));
 });
 
-describe('ProviderUsage 采集接线（P16 P1：onUsage → record，两处 createRoutingAiClient）', () => {
-  it('真实链路：mock provider → AI 调用（run×2 + chat×1）→ ProviderUsage 落 3 行 → summary 非 0', async () => {
+describe('ProviderUsage 采集接线（P16 P1：正式结构化输入 onUsage → record）', () => {
+  it('真实链路：mock provider → run×2 → ProviderUsage 落 2 行，且不装配旧 Agent', async () => {
     const teacherId = unique('usage-wiring');
     await prisma.teacherRegistry.create({
       data: {
@@ -133,23 +126,11 @@ describe('ProviderUsage 采集接线（P16 P1：onUsage → record，两处 crea
     expect(rawResult.ok).toBe(true);
     expect(runCalls).toBe(2); // intent_recognition + information_extraction
 
-    // 路径 B：第二处 createRoutingAiClient（agentConverse）——chat() ×1
-    const conversation = await deps.conversations.conversations.createConversation({ teacherId });
-    expect(conversation.ok).toBe(true);
-    const agentResult = await runAsTeacher(teacherId, () =>
-      deps.agent.agentConverse.execute({
-        teacherId,
-        conversationId: conversation.ok ? conversation.value.id : '',
-        message: '你好',
-        clientRequestId: 'req-usage-wiring-1',
-      }),
-    );
-    expect(agentResult.ok).toBe(true);
-    expect(chatCalls).toBe(1);
+    expect(deps.agent).toBeUndefined();
 
-    // ProviderUsage 落行：3 行（2 run + 1 chat），tokens 全部非 0（修复前恒 0）
+    // ProviderUsage 落行：2 行（2 run），tokens 全部非 0（修复前恒 0）
     const rows = await prisma.providerUsage.findMany({ where: { teacherId } });
-    expect(rows).toHaveLength(3);
+    expect(rows).toHaveLength(2);
     for (const row of rows) {
       expect(row.promptTokens).toBeGreaterThan(0);
       expect(row.completionTokens).toBeGreaterThan(0);
@@ -160,9 +141,9 @@ describe('ProviderUsage 采集接线（P16 P1：onUsage → record，两处 crea
     const from = new Date(Date.now() - 3600 * 1000);
     const to = new Date(Date.now() + 3600 * 1000);
     const summary = await deps.provider.providerUsageService.summary(teacherId, from, to);
-    expect(summary.totals.requests).toBe(3);
-    expect(summary.totals.promptTokens).toBe(25 + 25 + 30);
-    expect(summary.totals.completionTokens).toBe(7 + 7 + 8);
-    expect(summary.totals.totalTokens).toBe(25 + 25 + 30 + 7 + 7 + 8);
+    expect(summary.totals.requests).toBe(2);
+    expect(summary.totals.promptTokens).toBe(25 + 25);
+    expect(summary.totals.completionTokens).toBe(7 + 7);
+    expect(summary.totals.totalTokens).toBe(25 + 25 + 7 + 7);
   });
 });
