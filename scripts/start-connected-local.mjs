@@ -3,7 +3,7 @@
 import { createHmac, randomBytes } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
-import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import net from 'node:net';
 
@@ -11,10 +11,11 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const requested = process.argv[2];
 if (!requested || !isAbsolute(requested)) throw new Error('请指定源码树外的绝对数据目录。');
 const directory = resolve(requested);
-if (directory === root || directory.startsWith(root + '/') || directory === '/' || directory.length < 20) throw new Error('拒绝不安全的数据目录。');
+const relationship = relative(root, directory);
+if (!relationship || (!isAbsolute(relationship) && relationship !== '..' && !relationship.startsWith(`..${sep}`)) || directory === resolve(directory, '..') || directory.length < 20) throw new Error('拒绝不安全的数据目录。');
 const marker = join(directory, 'connected-local.json');
 const run = (command, args, env) => {
-  const result = spawnSync(command, args, { cwd: root, env, stdio: 'inherit' });
+  const result = spawnSync(command, args, { cwd: root, env, stdio: 'inherit', windowsHide: true });
   if (result.error || result.status !== 0) throw new Error(`${command} 执行失败，数据目录保留供排查。`);
 };
 const freePort = () => new Promise((resolvePort, reject) => {
@@ -41,6 +42,7 @@ if (existsSync(directory)) {
 }
 if (!Number.isInteger(configuration.port) || configuration.port < 1024 || [5432, 55432, 3000, 3001, 5173].includes(configuration.port)) throw new Error('数据库端口不安全。');
 const env = {
+  ...Object.fromEntries(['SystemRoot', 'SYSTEMROOT', 'PATHEXT', 'TEMP', 'TMP'].flatMap(key => process.env[key] === undefined ? [] : [[key, process.env[key]]])),
   PATH: process.env.PATH, LANG: 'C', LC_ALL: 'C', NODE_ENV: 'development',
   DATABASE_URL: `postgresql://postgres@127.0.0.1:${configuration.port}/teacher_platform`,
   ENCRYPTION_KEY: configuration.encryptionKey, ACTION_TOKEN_SECRET: configuration.actionSecret,
@@ -63,7 +65,7 @@ try {
   if (fresh) run('createdb', ['teacher_platform'], pgEnv);
   run(process.execPath, [join(root, 'node_modules/prisma/build/index.js'), 'migrate', 'deploy', '--schema', join(root, 'packages/contracts/prisma')], env);
   run(process.execPath, [join(root, 'scripts/seed-connected-local.mjs')], env);
-  child = spawn(process.execPath, [join(root, 'packages/backend/dist/index.js')], { cwd: root, env, stdio: 'inherit' });
+  child = spawn(process.execPath, [join(root, 'packages/backend/dist/index.js')], { cwd: root, env, stdio: 'inherit', windowsHide: true });
   console.log(`本地实测后端：http://127.0.0.1:3001；持久数据：${directory}；仅合成验收，外部服务关闭。`);
   const code = await new Promise((resolveExit, reject) => { child.once('error', reject); child.once('exit', (value) => resolveExit(value ?? 0)); });
   process.exitCode = code;

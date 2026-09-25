@@ -27,6 +27,27 @@ npm run test:governance
 
 正式网页需登录；`/preview.html` 是独立合成体验，不代表真实业务保存。运行时接入、可用能力和真实验收见项目日志，不在本文件维护另一份状态。
 
+### Windows 本地恢复
+
+在仓库根目录运行，先准备锁定版本的依赖并完成构建。便携运行时分别位于 `.data/tools/node-v22.14.0-win-x64` 和 `.data/tools/postgresql17/pgsql/bin`，不提交 Git，不替换系统 Node。
+
+```powershell
+$env:Path = "$PWD\.data\tools\node-v22.14.0-win-x64;$PWD\.data\tools\postgresql17\pgsql\bin;$env:Path"
+npm.cmd ci --no-audit --no-fund
+npm.cmd run build
+.\scripts\start-connected-windows.ps1
+```
+
+另开终端，在仓库根目录启动前端：
+
+```powershell
+& .\.data\tools\node-v22.14.0-win-x64\node.exe .\node_modules\vite\bin\vite.js packages/frontend --host 127.0.0.1
+```
+
+打开 `http://127.0.0.1:5173/`，合成验收账号 `a@example.test` / `12345678`。后端监听本机 3001，持久合成资料及加密配置保存在仓库同级的 `teacher-platform-local-data`；这不是旧机器真实数据库的备份恢复。不要删除该目录或公开其中的配置。外部模型、微信及真实消息默认关闭。
+
+再次启动使用同一目录，保留合成资料；先从原启动终端停止服务再重启，不结束无关进程。Windows 运行 `npm.cmd run check` 或重新构建前先停止后端，避免 Prisma 引擎 DLL 被占用。
+
 ## 查阅压缩历史
 
 ```sh

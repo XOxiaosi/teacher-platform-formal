@@ -64,6 +64,8 @@ describe.sequential('L0 local-safe provider isolation', () => {
       expect(resolver.resolve).not.toHaveBeenCalled();
       expect(fetchSpy).not.toHaveBeenCalled();
     } finally {
+      // Windows cannot remove a process's current directory; afterEach runs too late.
+      process.chdir(originalCwd);
       await rm(fixtureDir, { recursive: true, force: true });
     }
   });

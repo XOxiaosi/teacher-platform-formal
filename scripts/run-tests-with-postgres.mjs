@@ -22,7 +22,7 @@ export const BASE_DATABASE = 'teacher_platform';
 export const RESERVED_PORTS = new Set(['5432', '55432']);
 export const HARNESS_SENTINEL_PREFIX = 'teacher-platform-pg17:';
 export const SYSTEM_ENV_ALLOWLIST = [
-  'LANG', 'LC_ALL', 'PATH', 'PATHEXT', 'SystemRoot', 'SYSTEMROOT', 'TZ',
+  'LANG', 'LC_ALL', 'PATH', 'PATHEXT', 'SystemRoot', 'SYSTEMROOT', 'ComSpec', 'COMSPEC', 'TZ',
 ];
 
 const prismaBin = resolve(PROJECT_ROOT, 'node_modules/prisma/build/index.js');
@@ -127,8 +127,16 @@ export function makeDatabaseUrl(port) {
 }
 
 export function childCommand() {
+  // .cmd is not an executable for spawn() on Windows (EINVAL). Run npm's
+  // JavaScript entry with this Node binary, without a shell or command quoting.
+  if (process.platform === 'win32') {
+    const npmCli = process.env.npm_execpath
+      ?? resolve(dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js');
+    if (!existsSync(npmCli)) throw new Error('SETUP_FAILED: npm CLI 不存在');
+    return { command: process.execPath, args: [npmCli, 'run', 'test:with-database'] };
+  }
   return {
-    command: process.platform === 'win32' ? 'npm.cmd' : 'npm',
+    command: 'npm',
     args: ['run', 'test:with-database'],
   };
 }

@@ -6,7 +6,7 @@ import legacyBaseline from './file-size-legacy-baseline.json' with { type: 'json
 
 const MAX_LINES = 500;
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
-const ignoredDirectories = new Set(['.git', 'coverage', 'dist', 'node_modules']);
+const ignoredDirectories = new Set(['.git', '.data', 'coverage', 'dist', 'node_modules']);
 const generatedFiles = new Set(['package-lock.json']);
 const checkedExtensions = new Set([
   '.cjs',
@@ -62,7 +62,7 @@ for (const file of files) {
   const content = await readFile(file, 'utf8');
   const lines = countLines(content);
   if (lines > MAX_LINES) {
-    const path = relative(root, file);
+    const path = relative(root, file).replaceAll('\\', '/');
     const baseline = legacyBaseline.files[path];
     const sha256 = createHash('sha256').update(content).digest('hex');
     if (baseline?.lines === lines && baseline.sha256 === sha256) {

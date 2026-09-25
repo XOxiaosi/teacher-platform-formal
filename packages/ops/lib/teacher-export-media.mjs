@@ -75,9 +75,15 @@ export function createTeacherExportStorage(env, defaultRoot, teacherId) {
     try {
       // Repeat path checks after opening to catch a replaced directory or file.
       await verifyLocalMediaPath(root, key);
-      const [actual, named] = await Promise.all([file.stat(), lstat(path)]);
-      if (!actual.isFile() || actual.dev !== named.dev || actual.ino !== named.ino) throw unsafeSource();
-      return await file.readFile();
+      // Windows lstat may report dev=0 while fstat reports the volume ID.
+      // Compare two handles, retaining device/inode checks without number rounding.
+      const namedFile = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
+      try {
+        const [actual, named] = await Promise.all([file.stat({ bigint: true }), namedFile.stat({ bigint: true })]);
+        if (!actual.isFile() || !named.isFile() || actual.dev !== named.dev || actual.ino !== named.ino) throw unsafeSource();
+        await verifyLocalMediaPath(root, key);
+        return await file.readFile();
+      } finally { await namedFile.close(); }
     } finally { await file.close(); }
   } };
 }

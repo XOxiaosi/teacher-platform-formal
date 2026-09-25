@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
+import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 import { existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -83,8 +84,15 @@ test('refuses unsafe ports and unsafe cleanup targets', () => {
 
 test('child command is exactly the full test sequence, not a shell or external database command', () => {
   const command = childCommand();
-  assert.match(command.command, /^npm(?:\.cmd)?$/);
-  assert.deepEqual(command.args, ['run', 'test:with-database']);
+  assert.deepEqual(command.args.slice(-2), ['run', 'test:with-database']);
+  if (process.platform === 'win32') {
+    assert.equal(command.command, process.execPath);
+    const result = spawnSync(command.command, [command.args[0], '--version'], { encoding: 'utf8' });
+    assert.equal(result.status, 0, result.error?.message ?? result.stderr);
+    assert.match(result.stdout.trim(), /^\d+\.\d+\.\d+$/);
+  } else {
+    assert.equal(command.command, 'npm');
+  }
 });
 
 test('lifecycle always cleans up after child failure and preserves the failing exit status', async () => {
@@ -96,6 +104,23 @@ test('lifecycle always cleans up after child failure and preserves the failing e
   });
   assert.equal(status, 17);
   assert.deepEqual(calls, ['setup', 'child', 'cleanup:true']);
+});
+
+test('Windows npm scripts run inside the isolated environment', { skip: process.platform !== 'win32' }, () => {
+  const temporaryDirectory = mkdtempSync(join(tmpdir(), TEMP_PREFIX));
+  try {
+    const environment = buildHarnessEnvironment({
+      source: process.env, databaseUrl: makeDatabaseUrl('55439'), tempDirectory: temporaryDirectory,
+    });
+    const command = childCommand();
+    const result = spawnSync(command.command, [command.args[0], 'run', 'check:governance'], {
+      cwd: PROJECT_ROOT, env: environment, encoding: 'utf8',
+    });
+    assert.equal(result.status, 0, result.error?.message ?? result.stderr);
+    assert.match(result.stdout, /Project governance check passed/);
+  } finally {
+    removeTemporaryDirectory(temporaryDirectory);
+  }
 });
 
 test('lifecycle cleans up after setup error and does not run the child', async () => {

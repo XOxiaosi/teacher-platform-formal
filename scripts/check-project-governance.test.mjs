@@ -129,13 +129,13 @@ test('reject weakening of new-project Git requirements and repository boundaries
   ]) rejects(changed('AGENTS.md', rule, '可自行省略'), /缺少必要约束/);
 });
 
-test('reject loss of continuous orchestration, stop checks and scope boundaries', () => {
+test('reject loss of single-agent, item confirmation and scope boundaries', () => {
   for (const rule of [
-    '单个工作包、测试通过、commit 或子 Agent 完成都不是长任务结束条件',
-    '选择并立即执行下一个已授权且依赖满足的任务',
-    '阶段汇报使用进度消息，不以最终回复结束执行',
-    '主 Agent 必须检查、整合和安排后续任务',
-    '局部阻塞只暂停受影响任务',
+    '关闭多 Agent：本项目由当前 Agent 单独执行',
+    '一次只推进一个用户确认的事项',
+    '等待用户确认，再开始下一事项',
+    '当前 Agent 负责实现与复核',
+    '只继续当前事项内不依赖该阻塞的必要工作',
     '最终回复前检查剩余任务',
     '只修改规则、评估或回答问题，不自动启动文档中列出的业务长任务',
     '不以连续推进扩大授权',

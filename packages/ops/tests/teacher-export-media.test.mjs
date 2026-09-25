@@ -19,7 +19,7 @@ test('media rows: deduplicate owned paths, fail closed on damaged rows and cross
   }
 });
 
-test('P13 t2 单测：exportTeacherMedia（local）——文件副本 + manifest.media {path,sha256,sizeBytes} 与源一致', async () => {
+test('P13 t2 单测：exportTeacherMedia（local）——跨平台文件身份校验通过，副本与 manifest 均与源一致', async () => {
   const root = await mkdtemp(join(tmpdir(), 'ops-export-media-'));
   try {
     const storageRoot = join(root, 'storage');
