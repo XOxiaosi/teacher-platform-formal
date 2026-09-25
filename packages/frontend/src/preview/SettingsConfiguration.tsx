@@ -22,13 +22,13 @@ function settingsRoute(): SettingsRoute {
 export function SettingsPage({ actions, modelSettings }: { actions: PreviewActions; modelSettings?: ReactNode }) {
   const [route, setRoute] = useState<SettingsRoute>(settingsRoute);
   useEffect(() => { const onHashChange = () => setRoute(settingsRoute()); addEventListener('hashchange', onHashChange); return () => removeEventListener('hashchange', onHashChange); }, []);
-  const subtitles: Record<SettingsRoute, string> = { studio: '管理工作室和常用支持。', models: actions.connected ? '查看平台 DeepSeek 服务状态。' : 'DSH + DeepSeek 的演示配置入口。', wechat: '连接状态与扫码步骤清楚可见。', privacy: '了解数据使用与服务边界。' };
-  const title = route === 'studio' ? '设置' : route === 'models' ? modelSettings ? 'AI 服务' : '模型设置' : route === 'wechat' ? '微信连接' : '数据与隐私';
-  return <section className="page preview-page settings-configuration"><header className="page-header"><div><h1>{title}</h1><p>{subtitles[route]}</p></div><Button asChild variant="outline"><a href="#/today">返回工作台</a></Button></header><div className="settings-layout"><SettingsNav route={route} connectedModels={Boolean(modelSettings)} /><div>{route === 'studio' && <div className="settings-stack"><StudioSettings actions={actions} /><ConnectionShortcuts connected={Boolean(actions.connected)} /><WorkspaceSupport actions={actions} /></div>}{route === 'models' && (modelSettings || (actions.connected ? <Card className="white-card settings-form"><CardContent><h2>DeepSeek 服务</h2><p role="status">暂无法获取服务状态，请稍后重试。教师无需填写自己的 API Key。</p></CardContent></Card> : <DeepSeekSettings />))}{route === 'wechat' && <WechatConnectionSettings actions={actions} />}{route === 'privacy' && <PrivacySettings actions={actions} />}</div></div></section>;
+  const subtitles: Record<SettingsRoute, string> = { studio: '管理工作室和常用支持。', models: actions.connected ? '查看平台 DeepSeek 服务状态。' : '平台 AI 服务的只读演示。', wechat: '连接状态与扫码步骤清楚可见。', privacy: '了解数据使用与服务边界。' };
+  const title = route === 'studio' ? '设置' : route === 'models' ? 'AI 服务' : route === 'wechat' ? '微信连接' : '数据与隐私';
+  return <section className="page preview-page settings-configuration"><header className="page-header"><div><h1>{title}</h1><p>{subtitles[route]}</p></div><Button asChild variant="outline"><a href="#/today">返回工作台</a></Button></header><div className="settings-layout"><SettingsNav route={route} /><div>{route === 'studio' && <div className="settings-stack"><StudioSettings actions={actions} /><ConnectionShortcuts connected={Boolean(actions.connected)} /><WorkspaceSupport actions={actions} /></div>}{route === 'models' && (modelSettings || (actions.connected ? <Card className="white-card settings-form"><CardContent><h2>DeepSeek 服务</h2><p role="status">暂无法获取服务状态，请稍后重试。教师无需填写自己的 API Key。</p></CardContent></Card> : <DeepSeekSettings />))}{route === 'wechat' && <WechatConnectionSettings actions={actions} />}{route === 'privacy' && <PrivacySettings actions={actions} />}</div></div></section>;
 }
 
-function SettingsNav({ route, connectedModels }: { route: SettingsRoute; connectedModels: boolean }) {
-  const links: Array<[SettingsRoute, string]> = [['studio', '工作室'], ['models', connectedModels ? 'AI 服务' : '模型设置'], ['wechat', '微信连接'], ['privacy', '数据与隐私']];
+function SettingsNav({ route }: { route: SettingsRoute }) {
+  const links: Array<[SettingsRoute, string]> = [['studio', '工作室'], ['models', 'AI 服务'], ['wechat', '微信连接'], ['privacy', '数据与隐私']];
   return <nav className="settings-nav" aria-label="设置分类">{links.map(([key, label]) => <a key={key} className={route === key ? 'active' : ''} aria-current={route === key ? 'page' : undefined} href={`#/settings/${key}`}>{label}</a>)}</nav>;
 }
 
@@ -40,7 +40,7 @@ function StudioSettings({ actions }: { actions: PreviewActions }) {
 }
 
 function ConnectionShortcuts({ connected }: { connected: boolean }) {
-  return <Card className="white-card settings-form connection-shortcuts"><CardContent><h2>连接与服务</h2><p>{connected ? '查看 AI 服务与微信连接状态。' : '模型与微信连接分别管理，演示配置不会改变真实服务状态。'}</p><div className="button-row"><Button asChild variant="outline"><a href="#/settings/models">{connected ? 'DeepSeek 服务' : 'DeepSeek 演示配置'}</a></Button><Button asChild variant="outline"><a href="#/settings/wechat">连接微信</a></Button></div></CardContent></Card>;
+  return <Card className="white-card settings-form connection-shortcuts"><CardContent><h2>连接与服务</h2><p>{connected ? '查看 AI 服务与微信连接状态。' : '演示状态不代表真实服务已连接，AI 由平台统一提供。'}</p><div className="button-row"><Button asChild variant="outline"><a href="#/settings/models">DeepSeek 服务</a></Button><Button asChild variant="outline"><a href="#/settings/wechat">连接微信</a></Button></div></CardContent></Card>;
 }
 
 function PrivacySettings({ actions }: { actions: PreviewActions }) {

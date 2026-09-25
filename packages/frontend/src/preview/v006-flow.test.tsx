@@ -37,10 +37,14 @@ describe('V006 前端完整操作', () => {
     const { container } = render(path === 'today' ? <TodayPage actions={actions} /> : path.startsWith('settings/') ? <SettingsPage actions={actions} /> : <PreviewApp />);
     expect(container).not.toHaveTextContent(/测试版|演示|示例|内存|刷新还原|伪造/);
   });
-  it.each(['today', 'settings/models', 'settings/wechat'])('设计预览 %s 明确演示边界', path => {
+  it.each([
+    ['today', /合成演示|演示界面/],
+    ['settings/models', /演示页面，未连接真实 AI 服务。/],
+    ['settings/wechat', /演示配置|演示界面/],
+  ] as const)('设计预览 %s 明确演示边界', (path, notice) => {
     window.history.replaceState(null, '', '#/' + path);
     const { container } = render(<PreviewApp />);
-    expect(container).toHaveTextContent(/合成演示|演示配置|演示界面/);
+    expect(container).toHaveTextContent(notice);
     expect(container).not.toHaveTextContent('微信发送已确认');
   });
 });

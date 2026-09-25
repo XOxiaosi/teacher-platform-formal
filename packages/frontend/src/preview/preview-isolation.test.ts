@@ -42,15 +42,13 @@ describe('独立免登录原型的运行边界', () => {
     // Vite 的开发热更新不属于原型业务；构建后的入口无需后端和 U 盘。
   });
 
-  it('预留密钥只存在指定演示组件，其余页面不引入凭据或文件上传', () => {
-    const otherRuntime = runtimeFiles.filter(name => name !== 'DeepSeekSettings.tsx')
-      .map(name => readFileSync(join(directory, name), 'utf8')).join('\n');
-    expect(otherRuntime).not.toMatch(/type=["'](?:password|file)["']/);
-    expect(otherRuntime).not.toMatch(/(?:setApiKey|apiKey\s*:|accessToken\s*:)/);
+  it('所有演示页面均不引入教师凭据输入或文件上传', () => {
+    expect(runtime).not.toMatch(/type=["'](?:password|file)["']/);
+    expect(runtime).not.toMatch(/(?:setApiKey|apiKey\s*:|accessToken\s*:)/);
     const deepseek = readFileSync(join(directory, 'DeepSeekSettings.tsx'), 'utf8');
-    expect(deepseek).toContain('type="password"');
+    expect(deepseek).not.toMatch(/<form|<Input|<input|type="password"/);
     expect(deepseek).not.toMatch(/usePreviewState|setUi|savePreferences/);
-    expect(deepseek).toContain('未保存或验证 API Key');
+    expect(deepseek).toContain('由平台统一提供');
     expect(runtime).toContain('真实收发未验证');
     expect(runtime).not.toMatch(/伪造成功|微信发送已确认/);
   });

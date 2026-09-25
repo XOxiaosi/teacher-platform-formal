@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import net from 'node:net';
+import { connectedPlatformAI } from './connected-platform-ai.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const requested = process.argv[2];
@@ -14,6 +15,7 @@ const directory = resolve(requested);
 const relationship = relative(root, directory);
 if (!relationship || (!isAbsolute(relationship) && relationship !== '..' && !relationship.startsWith(`..${sep}`)) || directory === resolve(directory, '..') || directory.length < 20) throw new Error('拒绝不安全的数据目录。');
 const marker = join(directory, 'connected-local.json');
+const platformAI = connectedPlatformAI(directory, root);
 const run = (command, args, env) => {
   const result = spawnSync(command, args, { cwd: root, env, stdio: 'inherit', windowsHide: true });
   if (result.error || result.status !== 0) throw new Error(`${command} 执行失败，数据目录保留供排查。`);
@@ -65,8 +67,8 @@ try {
   if (fresh) run('createdb', ['teacher_platform'], pgEnv);
   run(process.execPath, [join(root, 'node_modules/prisma/build/index.js'), 'migrate', 'deploy', '--schema', join(root, 'packages/contracts/prisma')], env);
   run(process.execPath, [join(root, 'scripts/seed-connected-local.mjs')], env);
-  child = spawn(process.execPath, [join(root, 'packages/backend/dist/index.js')], { cwd: root, env, stdio: 'inherit', windowsHide: true });
-  console.log(`本地实测后端：http://127.0.0.1:3001；持久数据：${directory}；仅合成验收，外部服务关闭。`);
+  child = spawn(process.execPath, [join(root, 'packages/backend/dist/index.js')], { cwd: root, env: { ...env, ...platformAI }, stdio: 'inherit', windowsHide: true });
+  console.log(`本地实测后端：http://127.0.0.1:3001；持久数据：${directory}；${platformAI.DSH_RUNTIME_ENABLED ? '已加载平台 AI 配置，发送消息可能产生模型费用；微信关闭。' : '外部服务关闭。'}`);
   const code = await new Promise((resolveExit, reject) => { child.once('error', reject); child.once('exit', (value) => resolveExit(value ?? 0)); });
   process.exitCode = code;
 } finally {

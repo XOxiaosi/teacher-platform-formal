@@ -18,19 +18,17 @@ function setup(hash = '#/settings/models', options?: { connected?: boolean; mode
 }
 
 describe('SettingsConfiguration UI-005', () => {
-  it('keeps the DSH + DeepSeek key in local component state and clears it after the demo submit', () => {
+  it('shows platform-owned AI without any teacher API configuration, even in preview', () => {
     const fetchSpy = vi.spyOn(window, 'fetch');
     setup();
-    const key = screen.getByLabelText('DeepSeek API Key');
-    fireEvent.change(key, { target: { value: 'sk-demo-only' } });
-    fireEvent.click(screen.getByRole('button', { name: '提交演示配置' }));
-    expect(key).toHaveValue('');
-    expect(screen.getByRole('status')).toHaveTextContent('演示配置已清空，未保存或验证 API Key');
-    expect(screen.getByLabelText('DSH 到 DeepSeek 的演示连接路径')).toHaveTextContent('DSH');
-    expect(screen.getByText('DeepSeek')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'AI 服务' })).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('演示页面，未连接真实 AI 服务');
+    expect(screen.getByText(/由平台统一提供/)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/API Key/)).not.toBeInTheDocument();
+    expect(document.querySelector('input, textarea, select')).toBeNull();
+    expect(screen.queryByRole('button', { name: /提交|保存|配置/ })).not.toBeInTheDocument();
     expect(screen.queryByText(/Base URL|供应商列表|模型列表/)).not.toBeInTheDocument();
     expect(fetchSpy).not.toHaveBeenCalled();
-    expect(JSON.stringify(sessionStorage)).not.toContain('sk-demo-only');
     fetchSpy.mockRestore();
   });
 
@@ -61,8 +59,8 @@ describe('SettingsConfiguration UI-005', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     await waitFor(() => expect(screen.getByText('连接成功（演示）· 真实收发未验证')).toBeInTheDocument());
     await waitFor(() => expect(screen.getByRole('button', { name: '重新连接（演示）' })).toHaveFocus());
-    fireEvent.click(screen.getByRole('link', { name: '模型设置' }));
-    await screen.findByRole('heading', { name: '模型设置' });
+    fireEvent.click(screen.getByRole('link', { name: 'AI 服务' }));
+    await screen.findByRole('heading', { name: 'AI 服务' });
     fireEvent.click(screen.getByRole('link', { name: '微信连接' }));
     await screen.findByRole('heading', { name: '微信连接' });
     expect(await screen.findByText('连接成功（演示）· 真实收发未验证')).toBeInTheDocument();

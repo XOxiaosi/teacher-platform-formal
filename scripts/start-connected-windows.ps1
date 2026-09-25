@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$nodeDirectory = Join-Path $projectRoot '.data\tools\node-v22.14.0-win-x64'
+$nodeDirectory = Join-Path $projectRoot '.data\tools\node-v22.19.0-win-x64'
 $postgresDirectory = Join-Path $projectRoot '.data\tools\postgresql17\pgsql\bin'
 if (-not (Test-Path -LiteralPath (Join-Path $nodeDirectory 'node.exe'))) { throw 'Project Node 22 runtime is missing.' }
 if (-not (Test-Path -LiteralPath (Join-Path $postgresDirectory 'pg_ctl.exe'))) { throw 'Project PostgreSQL 17 runtime is missing.' }

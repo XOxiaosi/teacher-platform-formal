@@ -29,10 +29,10 @@ npm run test:governance
 
 ### Windows 本地恢复
 
-在仓库根目录运行，先准备锁定版本的依赖并完成构建。便携运行时分别位于 `.data/tools/node-v22.14.0-win-x64` 和 `.data/tools/postgresql17/pgsql/bin`，不提交 Git，不替换系统 Node。
+在仓库根目录运行，先准备锁定版本的依赖并完成构建。便携运行时分别位于 `.data/tools/node-v22.19.0-win-x64` 和 `.data/tools/postgresql17/pgsql/bin`，不提交 Git，不替换系统 Node。Node 22.19 满足固定 DSH 的最低版本，配套 npm 保持 10.9.2。
 
 ```powershell
-$env:Path = "$PWD\.data\tools\node-v22.14.0-win-x64;$PWD\.data\tools\postgresql17\pgsql\bin;$env:Path"
+$env:Path = "$PWD\.data\tools\node-v22.19.0-win-x64;$PWD\.data\tools\postgresql17\pgsql\bin;$env:Path"
 npm.cmd ci --no-audit --no-fund
 npm.cmd run build
 .\scripts\start-connected-windows.ps1
@@ -41,12 +41,20 @@ npm.cmd run build
 另开终端，在仓库根目录启动前端：
 
 ```powershell
-& .\.data\tools\node-v22.14.0-win-x64\node.exe .\node_modules\vite\bin\vite.js packages/frontend --host 127.0.0.1
+& .\.data\tools\node-v22.19.0-win-x64\node.exe .\node_modules\vite\bin\vite.js packages/frontend --host 127.0.0.1
 ```
 
 打开 `http://127.0.0.1:5173/`，合成验收账号 `a@example.test` / `12345678`。后端监听本机 3001，持久合成资料及加密配置保存在仓库同级的 `teacher-platform-local-data`；这不是旧机器真实数据库的备份恢复。不要删除该目录或公开其中的配置。外部模型、微信及真实消息默认关闭。
 
 再次启动使用同一目录，保留合成资料；先从原启动终端停止服务再重启，不结束无关进程。Windows 运行 `npm.cmd run check` 或重新构建前先停止后端，避免 Prisma 引擎 DLL 被占用。
+
+### 平台统一 AI（仅由运维配置）
+
+教师页面只显示 AI 服务状态，不提供个人密钥、地址或模型配置表单，演示页面也不收集凭据。平台管理员在源码树外准备固定版本 DSH（`c291e7961a515f6d7af9304e7fd1d257929aef26`）及其锁定依赖，并单独保存仅当前用户可读的 `DEEPSEEK_API_KEY=...` 凭据文件，不将真实值写入仓库或聊天。
+
+在上述持久数据目录新建 `platform-ai.json`，只填写两个绝对路径：`runtimeRoot` 指向 DSH checkout，`apiKeyFile` 指向凭据文件。二者都必须位于本项目源码树外，凭据不能放在 DSH 源码内。重启同一个启动脚本并刷新正式网页；原数据库与会话保留，DSH 会话另存于数据目录的 `dsh-sessions`。开启后教师发送消息会调用平台模型并可能产生费用；微信仍关闭。
+
+没有此配置文件时维持 AI 关闭；配置无效时启动报错，不回退到教师个人凭据。回退到原本地模式时移走该配置文件再重启，不删除数据库。状态可用只代表运行配置就绪，真实连通性需用不含教学资料的最小消息验证。
 
 ## 查阅压缩历史
 
