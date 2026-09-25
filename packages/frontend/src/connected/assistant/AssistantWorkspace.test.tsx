@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AssistantWorkspace } from './AssistantWorkspace';
 import { clearAssistantDrafts } from './drafts';
 import { detail, deferred, makeTransport, userTurn } from './assistant-test-support';
-import type { ConfirmationTurnDto, ConversationResponse } from '../../api/conversations';
+import type { ConfirmationTurnDto, ConversationResponse, ToolTurnDto } from '../../api/conversations';
 
 const api = vi.hoisted(() => ({ create: vi.fn(), list: vi.fn(), detail: vi.fn(), turns: vi.fn(), archive: vi.fn(), getLegacy: vi.fn(), confirmLegacy: vi.fn(), cancelLegacy: vi.fn() }));
 vi.mock('../../api/conversations', () => ({
@@ -159,6 +159,19 @@ describe('A03 server-backed assistant conversations', () => {
     await screen.findByText('已收到，AI 服务尚不可用');
     expect(screen.getByLabelText('交给教学助手的工作')).toHaveValue('');
     expect(screen.queryByText('已完成')).not.toBeInTheDocument();
+  });
+  it('does not present a persisted runtime state marker as a completed tool result', async () => {
+    const runtimeMarker: ToolTurnDto = {
+      id: 'runtime-marker', conversationId: 'one', taskId: 'task-unavailable', executionId: 'execution-1', seq: 2,
+      eventKind: 'task_state', kind: 'tool', createdAt: '2026-09-15T12:00:00Z', toolCallId: '', toolName: 'unknown',
+      displayName: '未知工具', sideEffect: 'read', status: 'success', inputSummary: {}, resultSummary: '任务状态已更新', references: [], error: null,
+    };
+    api.turns.mockResolvedValue({ items: [runtimeMarker], previousCursor: null });
+    const transport = makeTransport();
+    transport.getTasks.mockResolvedValue([{ id: 'task-unavailable', status: 'unavailable', summary: '内容已收到，等待服务恢复。', canResume: false }]);
+    render(<AssistantWorkspace teacherId="teacher-a" transport={transport} />);
+    await screen.findByText('已收到，AI 服务尚不可用'); expect(screen.queryByText('任务状态已更新')).not.toBeInTheDocument();
+    expect(screen.queryByText('已处理')).not.toBeInTheDocument();
   });
   it('shows a local submission echo before the durable turn arrives, then retires it after persistence', async () => {
     const transport = makeTransport(); const pending = deferred<{ accepted: true; task: { id: string; status: 'queued'; summary: string } }>();

@@ -61,6 +61,10 @@ function mergePendingTurn(turns: AgentTurnDto[], pendingTurn: UserTurnDto | unde
   return [...turns, pendingTurn].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
 }
 
+function isRuntimeStateMarker(turn: AgentTurnDto): boolean {
+  return turn.kind === 'tool' && turn.eventKind === 'task_state';
+}
+
 const LIVE_TASK_STATUSES = new Set(['queued', 'running', 'waiting_input', 'waiting_confirmation']);
 const WORKSPACE_REFRESH_TERMINAL_STATUSES = new Set(['succeeded', 'partial', 'failed']);
 const BATCH_CONFIRMABLE_ACTIONS = new Set(['scheduling.create', 'memos.create']);
@@ -119,7 +123,10 @@ export function ConversationPanel({ teacherId, conversationId, transport, messag
     setRequestChangesErrors({});
     setRevisionBusyBatchId(null);
   }, [teacherId, conversationId]);
-  const visibleTurns = mergePendingTurn(session.turns, messageState?.pendingTurn);
+  const visibleTurns = mergePendingTurn(
+    session.turns.filter(turn => !isRuntimeStateMarker(turn)),
+    messageState?.pendingTurn,
+  );
   const confirmationBatches = groupConfirmationsByTask(visibleTurns);
   const confirmationBatchStarts = new Map<string, ConfirmationTurnDto[]>();
   const confirmationBatchStartByHiddenTurn = new Map<string, string>();

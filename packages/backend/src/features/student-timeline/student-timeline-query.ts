@@ -224,7 +224,7 @@ function toLessonEntry(lesson: LessonLike, cipher: FieldCipher | undefined): Tim
     type: 'lesson',
     id: lesson.id,
     occurredAt: lesson.dateTs,
-    title: `课次 ${lesson.dateTs}`,
+    title: '课次记录',
     summary: lesson.progress !== null
       ? decryptFieldValue(cipher, lesson.progress)
       : (lesson.teacherNote !== null ? decryptFieldValue(cipher, lesson.teacherNote) : null),

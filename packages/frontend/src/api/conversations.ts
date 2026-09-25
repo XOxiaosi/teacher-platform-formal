@@ -33,6 +33,10 @@ interface BaseTurnDto {
   conversationId: string;
   /** Present for turns emitted by the persisted teaching-task runtime. */
   taskId?: string | null;
+  /** Runtime event metadata is optional for legacy conversation turns. */
+  executionId?: string | null;
+  seq?: number | null;
+  eventKind?: string | null;
   kind: AgentTurnKind;
   createdAt: string;
 }

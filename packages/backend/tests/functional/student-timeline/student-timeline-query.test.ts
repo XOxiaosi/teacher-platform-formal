@@ -195,7 +195,8 @@ describe('studentTimelineService.getStudentTimeline', () => {
 
     expect(lessonEntry.id).toBe(lesson.id);
     expect(lessonEntry.occurredAt).toEqual(new Date('2026-01-03T00:00:00Z'));
-    expect(lessonEntry.title).toBe(`课次 ${lesson.dateTs}`);
+    expect(lessonEntry.title).toBe('课次记录');
+    expect(lessonEntry.title).not.toContain('GMT');
     expect(lessonEntry.summary).toBe('复习函数');
     expect(lessonEntry.status).toBe('attended');
     expect(lessonEntry.category).toBeNull();
