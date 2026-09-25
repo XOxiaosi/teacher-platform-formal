@@ -6,6 +6,18 @@
 .student-timeline-eyebrow { margin: 0 0 4px; color: var(--primary-active); font-size: 11px; letter-spacing: .08em; }
 .student-timeline-caption, .student-timeline-count { margin: 6px 0 0; color: var(--text-muted); font-size: 12px; line-height: 1.6; }
 .student-timeline-count { margin: 22px 0 0; }
+.student-timeline-filters { display: grid; gap: 14px; margin-top: 20px; padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-soft); }
+.student-timeline-date-fields { display: flex; flex-wrap: wrap; gap: 12px; }
+.student-timeline-date-fields label { display: grid; gap: 5px; color: var(--foreground); font-size: 12px; font-weight: 600; }
+.student-timeline-date-fields input { min-height: 34px; border: 1px solid var(--border); border-radius: 7px; padding: 0 8px; background: var(--surface); color: var(--foreground); font: inherit; font-weight: 400; }
+.student-timeline-filters fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.student-timeline-filters legend { color: var(--foreground); font-size: 12px; font-weight: 600; }
+.student-timeline-filter-options { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 7px; }
+.student-timeline-filter-options label { display: inline-flex; align-items: center; gap: 6px; color: var(--foreground); font-size: 12px; }
+.student-timeline-filter-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.student-timeline-filter-actions button, .student-timeline-load-more { border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--foreground); padding: 8px 12px; font: inherit; cursor: pointer; }
+.student-timeline-filter-actions button:first-child { border-color: var(--primary-active); background: var(--primary-active); color: white; }
+.student-timeline-filter-actions button:disabled, .student-timeline-load-more:disabled { cursor: wait; opacity: .6; }
 .student-timeline-error { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 18px; padding: 12px; border: 1px solid #e4b8b1; border-radius: 9px; background: #fff8f6; color: #8d3026; font-size: 13px; line-height: 1.6; }
 .student-timeline-state, .student-timeline-empty { padding: 25px 0; color: var(--text-muted); font-size: 13px; }
 .student-timeline-entries { margin: 14px 0 0; padding: 0; list-style: none; }
@@ -20,4 +32,18 @@
 .student-timeline-metadata dt, .student-timeline-communication dt { color: var(--text-muted); }
 .student-timeline-metadata dd, .student-timeline-communication dd { margin: 0; color: var(--foreground); overflow-wrap: anywhere; }
 .student-timeline-communication { padding-top: 10px; border-top: 1px dashed var(--border); }
-@media (max-width: 640px) { .student-timeline-heading, .student-timeline-entry-heading, .student-timeline-error { align-items: flex-start; flex-direction: column; } }
+.student-timeline-open { margin-top: 12px; border: 0; padding: 0; background: transparent; color: var(--primary-active); font: inherit; font-size: 12px; cursor: pointer; }
+.student-timeline-load-more { display: block; margin: 16px auto 0; }
+.student-timeline-detail-backdrop { position: fixed; z-index: 20; inset: 0; display: grid; place-items: center; padding: 20px; background: rgb(0 0 0 / 35%); }
+.student-timeline-detail { box-sizing: border-box; width: min(620px, 100%); max-height: min(720px, 90vh); overflow: auto; padding: 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--foreground); box-shadow: 0 16px 45px rgb(0 0 0 / 20%); }
+.student-timeline-detail > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.student-timeline-detail h2 { margin: 3px 0 0; font-size: 18px; }
+.student-timeline-detail > header button { border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--foreground); padding: 6px 10px; font: inherit; cursor: pointer; }
+.student-timeline-detail-fields { display: grid; gap: 10px; margin: 18px 0; }
+.student-timeline-detail-fields > div { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 8px; font-size: 13px; line-height: 1.6; }
+.student-timeline-detail-fields dt { color: var(--text-muted); }
+.student-timeline-detail-fields dd { min-width: 0; margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.student-timeline-source-note { padding: 10px 12px; border-radius: 8px; background: var(--surface-soft); color: var(--text-muted); font-size: 12px; line-height: 1.6; }
+.student-timeline-source-meta { color: var(--text-muted); font-size: 12px; }
+.student-timeline-source pre { max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 10px; border-radius: 8px; background: var(--surface-soft); font: inherit; font-size: 13px; line-height: 1.6; }
+@media (max-width: 640px) { .student-timeline-heading, .student-timeline-entry-heading, .student-timeline-error { align-items: flex-start; flex-direction: column; } .student-timeline-detail-backdrop { padding: 8px; place-items: end center; } .student-timeline-detail { max-height: 92vh; border-radius: 12px 12px 0 0; padding: 16px; } .student-timeline-detail-fields > div { grid-template-columns: 76px minmax(0, 1fr); } }

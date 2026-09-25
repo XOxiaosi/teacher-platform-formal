@@ -105,7 +105,10 @@ async function fetchJson<T>(path: string, options: FetchJsonOptions): Promise<T>
       sessionExpiredHandler?.();
     }
 
-    const payload = await response.json() as ApiResponse<T>;
+    const payload = await response.json().catch(() => null) as ApiResponse<T> | null;
+    if (!payload || typeof payload.ok !== 'boolean' || (payload.ok && response.ok === false)) {
+      throw new ApiError({ code: 'INTERNAL_ERROR', message: '服务暂时不可用，请稍后重试。' }, response.status);
+    }
 
     if (!payload.ok) throw new ApiError(payload.error, response.status);
     return payload.data;

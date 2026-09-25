@@ -4,18 +4,18 @@ import { ConnectedWorkspace } from './ConnectedWorkspace';
 import { createDemoData } from '../preview/data';
 import { clearPendingPaymentRequests, readPendingPaymentRequest } from './payments/pending-payment';
 
-const mock = vi.hoisted(() => ({ availability: vi.fn(), load: vi.fn(), command: vi.fn(), schedule: vi.fn(), payment: vi.fn(), balance: vi.fn(), ledger: vi.fn(), update: vi.fn(), logout: vi.fn(), records: vi.fn(), timeline: vi.fn(), createFeedback: vi.fn(), updateFeedback: vi.fn(), feedbackSnapshot: vi.fn(), createDraftTask: vi.fn(), listDraftTasks: vi.fn(), getDraftTask: vi.fn(), retryDraftTask: vi.fn(), updateDraftTask: vi.fn(), prepareCorrection: vi.fn(), confirmCorrection: vi.fn() }));
+const mock = vi.hoisted(() => ({ availability: vi.fn(), load: vi.fn(), command: vi.fn(), schedule: vi.fn(), payment: vi.fn(), balance: vi.fn(), ledger: vi.fn(), update: vi.fn(), logout: vi.fn(), records: vi.fn(), timeline: vi.fn(), timelineDetail: vi.fn(), createFeedback: vi.fn(), updateFeedback: vi.fn(), feedbackSnapshot: vi.fn(), createDraftTask: vi.fn(), listDraftTasks: vi.fn(), getDraftTask: vi.fn(), retryDraftTask: vi.fn(), updateDraftTask: vi.fn(), prepareCorrection: vi.fn(), confirmCorrection: vi.fn() }));
 vi.mock('../app/teacher-context', () => ({ useAuth: () => ({ teacherId: 'teacher-a', displayName: '验收老师', email: 'a@example.test', logout: mock.logout }) }));
 vi.mock('./workspace-api', () => ({ loadWorkspace: mock.load, workspaceCommand: mock.command, schedulingCommand: mock.schedule }));
 vi.mock('../api/payments', () => ({ createPayment: mock.payment, listLessonLedgerEntries: mock.ledger }));
 vi.mock('../api/lesson-status-corrections', () => ({ prepareLessonStatusCorrection: mock.prepareCorrection, confirmLessonStatusCorrection: mock.confirmCorrection }));
-vi.mock('../api/students', () => ({ updateStudentProfile: mock.update, getStudentBalance: mock.balance, listStudentRecords: mock.records, getStudentTimeline: mock.timeline, reviewStudentRecord: vi.fn(), getStudentRecordSource: vi.fn() }));
+vi.mock('../api/students', () => ({ updateStudentProfile: mock.update, getStudentBalance: mock.balance, listStudentRecords: mock.records, getStudentTimeline: mock.timeline, getStudentTimelineDetail: mock.timelineDetail, reviewStudentRecord: vi.fn(), getStudentRecordSource: vi.fn() }));
 vi.mock('../api/feedback', () => ({ createFeedback: mock.createFeedback, getFeedbackSnapshot: mock.feedbackSnapshot, updateFeedbackContent: mock.updateFeedback, createFeedbackDraftTask: mock.createDraftTask, listFeedbackDraftTasks: mock.listDraftTasks, getFeedbackDraftTask: mock.getDraftTask, retryFeedbackDraftTask: mock.retryDraftTask, updateFeedbackDraftTask: mock.updateDraftTask }));
 vi.mock('../api/teaching-tasks', () => ({ getTeachingRuntimeAvailability: mock.availability }));
 vi.mock('../connected/assistant', () => ({ AssistantWorkspace: ({ teacherId }: { teacherId: string }) => <section aria-label="正式教学助手入口"><h1>教学助手</h1><p>当前账号：{teacherId}</p></section> }));
 
 const snapshot = () => ({ data: createDemoData(), studentVersions: { s1: 'v1', s2: 'v2' }, feedbackVersions: {}, memoVersions: { m1: 'm1-v1' }, preferenceVersion: null });
-beforeEach(() => { vi.clearAllMocks(); clearPendingPaymentRequests('teacher-a'); mock.availability.mockResolvedValue({ runtimeAvailability: 'unavailable' }); location.hash = '#/students'; mock.load.mockResolvedValue(snapshot()); mock.command.mockResolvedValue({}); mock.schedule.mockResolvedValue({}); mock.balance.mockResolvedValue({ purchased: 8, attended: 1, adjustments: 2, remaining: 9 }); mock.ledger.mockResolvedValue([]); mock.timeline.mockResolvedValue({ items: [], total: 0 }); mock.listDraftTasks.mockResolvedValue({ items: [] }); mock.prepareCorrection.mockResolvedValue({ confirmation: { id: 'correction-1', status: 'pending', lessonId: 'lesson-1', studentId: 's1', fromStatus: 'attended', toStatus: 'absent', reason: '签到复核' }, balanceBefore: { purchased: 10, attended: 1, adjustments: 0, remaining: 9 }, balanceAfter: { purchased: 10, attended: 0, adjustments: 0, remaining: 10 }, plannedLedgerEntry: null }); mock.confirmCorrection.mockResolvedValue({ confirmation: { id: 'correction-1', status: 'confirmed' }, lesson: { id: 'lesson-1', studentId: 's1', status: 'absent', updatedAt: 'v2' }, balance: { purchased: 10, attended: 0, adjustments: 0, remaining: 10 } }); });
+beforeEach(() => { vi.clearAllMocks(); clearPendingPaymentRequests('teacher-a'); mock.availability.mockResolvedValue({ runtimeAvailability: 'unavailable' }); location.hash = '#/students'; mock.load.mockResolvedValue(snapshot()); mock.command.mockResolvedValue({}); mock.schedule.mockResolvedValue({}); mock.balance.mockResolvedValue({ purchased: 8, attended: 1, adjustments: 2, remaining: 9 }); mock.ledger.mockResolvedValue([]); mock.timeline.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 50, hasMore: false }); mock.listDraftTasks.mockResolvedValue({ items: [] }); mock.prepareCorrection.mockResolvedValue({ confirmation: { id: 'correction-1', status: 'pending', lessonId: 'lesson-1', studentId: 's1', fromStatus: 'attended', toStatus: 'absent', reason: '签到复核' }, balanceBefore: { purchased: 10, attended: 1, adjustments: 0, remaining: 9 }, balanceAfter: { purchased: 10, attended: 0, adjustments: 0, remaining: 10 }, plannedLedgerEntry: null }); mock.confirmCorrection.mockResolvedValue({ confirmation: { id: 'correction-1', status: 'confirmed' }, lesson: { id: 'lesson-1', studentId: 's1', status: 'absent', updatedAt: 'v2' }, balance: { purchased: 10, attended: 0, adjustments: 0, remaining: 10 } }); });
 
 describe('connected workspace server-backed writes', () => {
   async function preparePayment(amount = '200') {
@@ -192,13 +192,14 @@ describe('connected workspace server-backed writes', () => {
       title: '阶段测评', summary: '函数部分已掌握', category: 'assessment',
       reviewStatus: 'confirmed', visibility: 'internal_only', status: null,
       score: 88, fullScore: 100, examName: '九月测验', subject: '数学', communicationDetail: null,
-    }], total: 1 });
+      openTarget: { type: 'assessment', recordId: 'assessment-server', sourceRecordId: null },
+    }], total: 1, page: 1, pageSize: 50, hasMore: false });
     render(<ConnectedWorkspace />);
     const timeline = await screen.findByRole('region', { name: '学生长期时间线' });
     expect(timeline).toHaveTextContent('阶段测评');
     expect(timeline).toHaveTextContent('函数部分已掌握');
     expect(timeline).toHaveTextContent('88 / 100');
-    expect(mock.timeline).toHaveBeenCalledWith('teacher-a', 's1', 200);
+    expect(mock.timeline).toHaveBeenCalledWith('teacher-a', 's1', { page: 1, pageSize: 50 });
 
     const before = mock.timeline.mock.calls.length;
     mock.load.mockResolvedValue(snapshot());

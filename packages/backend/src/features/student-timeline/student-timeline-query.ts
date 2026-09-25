@@ -6,20 +6,47 @@ import {
   decryptJsonFieldValue,
   type FieldCipher,
 } from '../../shared/field-encryption/index.js';
-import type { StudentTimelineService, TimelineEntry } from './types.js';
+import type {
+  StudentTimelineAssessmentData,
+  StudentTimelineFeedbackData,
+  StudentTimelineLessonData,
+  StudentTimelineRecordData,
+  StudentTimelineService,
+  TimelineEntry,
+  TimelineEntryType,
+} from './types.js';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
+const TIMELINE_CATEGORIES = new Set([
+  'assessment', 'lesson_observation', 'parent_communication', 'learning_state', 'homework',
+  'goal', 'achievement', 'concern', 'agreement', 'follow_up', 'general_note',
+]);
+const TIMELINE_TYPE_ORDER: Record<TimelineEntryType, number> = {
+  record: 1,
+  assessment: 2,
+  lesson: 3,
+  feedback: 4,
+};
 
 type StudentTimelinePrismaClient = PrismaClient;
 
 interface RecordLike {
   id: string;
+  teacherId: string;
+  studentId: string;
+  sourceRecordId: string | null;
   category: string;
   occurredAtTs: Date;
   summary: string;
   reviewStatus: string;
   visibility: string;
+  structuredData: unknown;
+  confidence: string;
+  importance: string;
+  supersedesId: string | null;
+  createdAtTs: Date;
+  updatedAtTs: Date;
   communicationDetail: {
     direction: string;
     channel: string | null;
@@ -35,27 +62,54 @@ interface RecordLike {
 }
 
 interface AssessmentLike {
+  id: string;
+  teacherId: string;
+  studentRecordId: string;
   examName: string | null;
   subject: string | null;
+  examDateTs: Date | null;
   score: number | null;
   fullScore: number | null;
+  classRank: number | null;
+  gradeRank: number | null;
+  percentile: number | null;
+  previousScore: number | null;
+  note: string | null;
+  createdAtTs: Date;
+  updatedAtTs: Date;
 }
 
 interface LessonLike {
   id: string;
+  teacherId: string;
+  studentId: string;
+  scheduleId: string;
   dateTs: Date;
   status: string;
   progress: string | null;
+  studentState: string | null;
+  homework: string | null;
   teacherNote: string | null;
+  sourceNoteId: string | null;
+  createdAtTs: Date;
+  updatedAtTs: Date;
 }
 
 interface FeedbackLike {
   id: string;
+  teacherId: string;
+  studentId: string;
+  lessonId: string | null;
   title: string;
   content: string;
   status: string;
+  channel: string | null;
+  parentName: string | null;
   sentAtTs: Date | null;
+  moderationFlagged: boolean | null;
+  moderationReasons: unknown;
   createdAtTs: Date;
+  updatedAtTs: Date;
 }
 
 /**
@@ -90,9 +144,30 @@ export function createStudentTimelineService(
   return {
     async getStudentTimeline(input) {
       const prisma = await getClient();
-      const limit = input.limit ?? DEFAULT_LIMIT;
-      if (!Number.isInteger(limit) || limit < 1 || limit > MAX_LIMIT) {
+      const legacyLimit = input.limit;
+      const page = input.page ?? 1;
+      const pageSize = input.pageSize ?? legacyLimit ?? DEFAULT_LIMIT;
+      if (legacyLimit !== undefined && (!Number.isSafeInteger(legacyLimit) || legacyLimit < 1 || legacyLimit > MAX_LIMIT)) {
         return err(validationError('limit 必须在 1-200 之间', 'limit'));
+      }
+      if (!Number.isSafeInteger(page) || page < 1) {
+        return err(validationError('page 必须是大于等于 1 的整数', 'page'));
+      }
+      if (!Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > MAX_LIMIT) {
+        return err(validationError('pageSize 必须在 1-200 之间', 'pageSize'));
+      }
+      if (input.from && input.to && input.from.getTime() >= input.to.getTime()) {
+        return err(validationError('from 必须早于 to', 'from'));
+      }
+      if ((input.from && Number.isNaN(input.from.getTime())) || (input.to && Number.isNaN(input.to.getTime()))) {
+        return err(validationError('时间范围必须是有效时间', 'from'));
+      }
+      const allowedTypes = new Set<TimelineEntryType>(['record', 'assessment', 'lesson', 'feedback']);
+      if (input.types?.some((type) => !allowedTypes.has(type))) {
+        return err(validationError('types 包含不合法类型', 'types'));
+      }
+      if (input.categories?.some((category) => !TIMELINE_CATEGORIES.has(category))) {
+        return err(validationError('categories 包含不合法类别', 'categories'));
       }
 
       const student = await prisma.student.findFirst({
@@ -136,10 +211,56 @@ export function createStudentTimelineService(
       entries.sort((a, b) => {
         const byTime = b.occurredAt.getTime() - a.occurredAt.getTime();
         if (byTime !== 0) return byTime;
+        const byType = TIMELINE_TYPE_ORDER[a.type] - TIMELINE_TYPE_ORDER[b.type];
+        if (byType !== 0) return byType;
         return a.id.localeCompare(b.id);
       });
 
-      return ok({ items: entries.slice(0, limit), total: entries.length });
+      const filtered = entries.filter((entry) => {
+        if (input.from && entry.occurredAt < input.from) return false;
+        if (input.to && entry.occurredAt >= input.to) return false;
+        if (input.types && input.types.length > 0 && !input.types.includes(entry.type)) return false;
+        if (input.categories && input.categories.length > 0 && !input.categories.includes(entry.category ?? '')) return false;
+        return true;
+      });
+      const total = filtered.length;
+      const offset = (page - 1) * pageSize;
+      const items = filtered.slice(offset, offset + pageSize);
+      return ok({ items, total, page, pageSize, hasMore: offset + items.length < total });
+    },
+
+    async getStudentTimelineDetail(input) {
+      const prisma = await getClient();
+      const student = await prisma.student.findFirst({
+        where: { id: input.studentId, teacherId: input.teacherId },
+        select: { id: true },
+      });
+      if (!student) return err(notFound('学生不存在'));
+      if (input.entryType === 'record' || input.entryType === 'assessment') {
+        const record = await prisma.studentRecord.findFirst({
+          where: { id: input.entryId, teacherId: input.teacherId, studentId: input.studentId },
+          include: { assessment: true, communicationDetail: true },
+        });
+        if (!record || (input.entryType === 'assessment') !== Boolean(record.assessment)) {
+          return err(notFound('时间线记录不存在'));
+        }
+        const recordData = toStudentRecordDetail(record, cipher);
+        return input.entryType === 'assessment' && record.assessment
+          ? ok({ type: 'assessment' as const, record: recordData, assessment: toAssessmentDetail(record.assessment, cipher) })
+          : ok({ type: 'record' as const, record: recordData });
+      }
+      if (input.entryType === 'lesson') {
+        const lesson = await prisma.lesson.findFirst({
+          where: { id: input.entryId, teacherId: input.teacherId, studentId: input.studentId },
+        });
+        if (!lesson) return err(notFound('时间线课程不存在'));
+        return ok({ type: 'lesson' as const, lesson: toLessonDetail(lesson, cipher) });
+      }
+      const feedback = await prisma.parentFeedback.findFirst({
+        where: { id: input.entryId, teacherId: input.teacherId, studentId: input.studentId },
+      });
+      if (!feedback) return err(notFound('时间线反馈不存在'));
+      return ok({ type: 'feedback' as const, feedback: toFeedbackDetail(feedback, cipher) });
     },
   };
 }
@@ -162,6 +283,7 @@ function toRecordEntry(record: RecordLike, cipher: FieldCipher | undefined): Tim
     communicationDetail: record.category === 'parent_communication' && record.communicationDetail
       ? serializeCommunicationDetail(record.communicationDetail, cipher)
       : null,
+    openTarget: { type: 'record', recordId: record.id, sourceRecordId: record.sourceRecordId },
   };
 }
 
@@ -216,6 +338,7 @@ function toAssessmentEntry(record: RecordLike, assessment: AssessmentLike): Time
     examName: assessment.examName,
     subject: assessment.subject,
     communicationDetail: null,
+    openTarget: { type: 'assessment', recordId: record.id, sourceRecordId: record.sourceRecordId },
   };
 }
 
@@ -237,6 +360,7 @@ function toLessonEntry(lesson: LessonLike, cipher: FieldCipher | undefined): Tim
     examName: null,
     subject: null,
     communicationDetail: null,
+    openTarget: { type: 'lesson', lessonId: lesson.id },
   };
 }
 
@@ -256,5 +380,94 @@ function toFeedbackEntry(feedback: FeedbackLike, cipher: FieldCipher | undefined
     examName: null,
     subject: null,
     communicationDetail: null,
+    openTarget: { type: 'feedback', feedbackId: feedback.id },
+  };
+}
+
+function toStudentRecordDetail(record: RecordLike, cipher: FieldCipher | undefined): StudentTimelineRecordData {
+  return {
+    id: record.id,
+    teacherId: record.teacherId,
+    studentId: record.studentId,
+    sourceRecordId: record.sourceRecordId,
+    category: record.category,
+    occurredAt: record.occurredAtTs,
+    summary: decryptFieldValue(cipher, record.summary),
+    structuredData: decryptJsonFieldValue(cipher, record.structuredData) as Record<string, unknown> | null,
+    confidence: record.confidence,
+    reviewStatus: record.reviewStatus,
+    visibility: record.visibility,
+    importance: record.importance,
+    supersedesId: record.supersedesId,
+    createdAt: record.createdAtTs,
+    updatedAt: record.updatedAtTs,
+  };
+}
+
+function toAssessmentDetail(
+  assessment: AssessmentLike,
+  cipher: FieldCipher | undefined,
+): StudentTimelineAssessmentData {
+  return {
+    id: assessment.id,
+    teacherId: assessment.teacherId,
+    studentRecordId: assessment.studentRecordId,
+    examName: assessment.examName,
+    subject: assessment.subject,
+    examDate: assessment.examDateTs,
+    score: assessment.score,
+    fullScore: assessment.fullScore,
+    classRank: assessment.classRank,
+    gradeRank: assessment.gradeRank,
+    percentile: assessment.percentile,
+    previousScore: assessment.previousScore,
+    note: assessment.note === null ? null : decryptFieldValue(cipher, assessment.note),
+    createdAt: assessment.createdAtTs,
+    updatedAt: assessment.updatedAtTs,
+  };
+}
+
+function toLessonDetail(lesson: LessonLike, cipher: FieldCipher | undefined): StudentTimelineLessonData {
+  return {
+    id: lesson.id,
+    teacherId: lesson.teacherId,
+    studentId: lesson.studentId,
+    scheduleId: lesson.scheduleId,
+    date: lesson.dateTs,
+    status: lesson.status,
+    progress: lesson.progress === null ? null : decryptFieldValue(cipher, lesson.progress),
+    studentState: lesson.studentState === null ? null : decryptFieldValue(cipher, lesson.studentState),
+    homework: lesson.homework === null ? null : decryptFieldValue(cipher, lesson.homework),
+    teacherNote: lesson.teacherNote === null ? null : decryptFieldValue(cipher, lesson.teacherNote),
+    sourceNoteId: lesson.sourceNoteId,
+    createdAt: lesson.createdAtTs,
+    updatedAt: lesson.updatedAtTs,
+  };
+}
+
+function toFeedbackDetail(
+  feedback: FeedbackLike,
+  cipher: FieldCipher | undefined,
+): StudentTimelineFeedbackData {
+  const status = feedback.status === 'reviewed' || feedback.status === 'sent' || feedback.status === 'archived'
+    ? feedback.status
+    : 'draft';
+  return {
+    id: feedback.id,
+    teacherId: feedback.teacherId,
+    studentId: feedback.studentId,
+    lessonId: feedback.lessonId,
+    title: decryptFieldValue(cipher, feedback.title),
+    content: decryptFieldValue(cipher, feedback.content),
+    status,
+    channel: feedback.channel,
+    parentName: feedback.parentName === null ? null : decryptFieldValue(cipher, feedback.parentName),
+    sentAt: feedback.sentAtTs,
+    moderationFlagged: feedback.moderationFlagged,
+    moderationReasons: Array.isArray(feedback.moderationReasons)
+      ? feedback.moderationReasons.filter((reason): reason is string => typeof reason === 'string')
+      : null,
+    createdAt: feedback.createdAtTs,
+    updatedAt: feedback.updatedAtTs,
   };
 }

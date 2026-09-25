@@ -14,6 +14,7 @@ import {
   COMMUNICATION_CHANNELS,
   COMMUNICATION_PARENT_TYPES,
 } from '../../features/student-communications/index.js';
+import { registerStudentTimelineRoutes } from './student-timeline.routes.js';
 
 export interface StudentRecordsRouteDependencies {
   records: import('../../features/student-records/index.js').StudentRecordsService;
@@ -48,16 +49,7 @@ export function createStudentRecordsRouter(dependencies: StudentRecordsRouteDepe
     sendResult(res, result);
   });
 
-  router.get('/students/:studentId/timeline', async (req, res) => {
-    const teacher = getTeacherId(req);
-    if (!teacher.ok) return sendTeacherError(res, teacher.error);
-    const result = await dependencies.timeline.getStudentTimeline({
-      teacherId: teacher.value,
-      studentId: req.params.studentId,
-      limit: parseNumber(req.query.limit),
-    });
-    sendResult(res, result);
-  });
+  registerStudentTimelineRoutes(router, dependencies.timeline);
 
   router.get('/students/:studentId/records', async (req, res) => {
     const teacher = getTeacherId(req);

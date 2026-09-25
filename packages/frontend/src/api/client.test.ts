@@ -6,6 +6,14 @@ afterEach(() => {
 });
 
 describe('apiRequest', () => {
+  it('网关返回空白或非 JSON 错误时保留状态且不泄露解析异常', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({ status: 502, ok: false, json: async () => { throw new SyntaxError('Unexpected end of JSON'); } } as unknown as Response);
+    await expect(apiRequest('/students', {})).rejects.toMatchObject({ status: 502, message: '服务暂时不可用，请稍后重试。' });
+  });
+  it('HTTP 失败不接受伪装成功的响应体', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({ status: 500, ok: false, json: async () => ({ ok: true, data: {} }) } as Response);
+    await expect(apiRequest('/students', {})).rejects.toMatchObject({ status: 500, message: '服务暂时不可用，请稍后重试。' });
+  });
   it('发送 JSON 请求并返回 data；不再携带 x-teacher-id 头（身份唯一来源为 session cookie）', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,

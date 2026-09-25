@@ -260,7 +260,37 @@ export interface TimelineEntry {
   examName: string | null;
   subject: string | null;
   communicationDetail: TimelineCommunicationDetail | null;
+  openTarget: TimelineOpenTarget;
 }
+
+export type TimelineOpenTarget =
+  | { type: 'record'; recordId: string; sourceRecordId: string | null }
+  | { type: 'assessment'; recordId: string; sourceRecordId: string | null }
+  | { type: 'lesson'; lessonId: string }
+  | { type: 'feedback'; feedbackId: string };
+
+export interface StudentTimelineQuery {
+  page?: number;
+  pageSize?: number;
+  from?: string;
+  to?: string;
+  types?: TimelineEntryType[];
+  categories?: string[];
+}
+
+export interface StudentTimelineResult {
+  items: TimelineEntry[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+}
+
+export type TimelineEntryDetail =
+  | { type: 'record'; record: StudentRecordItem }
+  | { type: 'assessment'; record: StudentRecordItem; assessment: AssessmentDetailData }
+  | { type: 'lesson'; lesson: LessonData }
+  | { type: 'feedback'; feedback: ParentFeedbackData };
 
 // ---- 学生档案记录 ----
 export interface StudentRecordItem {

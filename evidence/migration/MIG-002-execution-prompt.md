@@ -100,7 +100,7 @@
 - MIG-001 及其来源锚定
 - `packages/api-contracts/**` 和 `packages/domain/**` 的源码、测试与配置
 - Result、CommonError、TrustedClock、Asia/Shanghai 业务时间规则
-- 新目标中的 `.devflow-project.json`、`evidence/ui-reference/**` 与其 provenance/hash
+- 新目标中的 `.devflow-project.json`；旧 UI 参考目录已于 2026-09-08 按用户要求退役，恢复信息仅见清场备份
 
 ## 六、回退与写入规则
 

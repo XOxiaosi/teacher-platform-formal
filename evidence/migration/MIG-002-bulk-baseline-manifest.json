@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "migrationId": "MIG-002",
-  "generatedAt": "2026-09-02T01:15:20.586Z",
+  "generatedAt": "2026-09-09T07:39:56.370Z",
   "target": "/Users/xiaosi/Developer/active/apps/teacher-platform-formal",
   "sources": {
     "A": {
@@ -27,44 +27,45 @@
   },
   "counts": {
     "sourceA": {
-      "H": 267,
-      "M1": 21,
-      "T": 873
+      "H": 367,
+      "M1": 88,
+      "T": 706
     },
     "sourceB": {
-      "H": 14,
-      "M1": 37,
+      "H": 18,
+      "M1": 33,
       "X": 28
     },
     "targetBaseline": {
-      "KEEP": 17
+      "H": 4,
+      "KEEP": 13
     }
   },
   "parts": [
     {
       "path": "evidence/migration/MIG-002-manifest-parts/source-a-001.jsonl",
       "entries": 400,
-      "sha256": "b2a43e3d152a2bfb1f5ffe5c56b5acba7bb490e026d8cf92555adbab4afdd1a5"
+      "sha256": "9c6b01fb39951bc4326b6832b8e958902b5d58e610c6a865634dd94d8385dec9"
     },
     {
       "path": "evidence/migration/MIG-002-manifest-parts/source-a-002.jsonl",
       "entries": 400,
-      "sha256": "e7cd163a60e26f0c95da7654d862af39f4aabe2f977c2138413956323d42fded"
+      "sha256": "7f50b57060afe91864c82f83a1675203b4adf0c11d957f6177d4f558e22e092a"
     },
     {
       "path": "evidence/migration/MIG-002-manifest-parts/source-a-003.jsonl",
       "entries": 361,
-      "sha256": "724d3b16701a4ccd49497d36994819e2de6dbd27a1c53bdefabab1eb0e82ada9"
+      "sha256": "3cdc214c8273112af25784a70ff8802b41faa65278bfeda873a102baaa3ae13d"
     },
     {
       "path": "evidence/migration/MIG-002-manifest-parts/source-b-001.jsonl",
       "entries": 79,
-      "sha256": "c4a866a3e54cac79550d31851377c29d8cf019fc93ec1aac2cd1143c62032a18"
+      "sha256": "33f6d65b6e72c29e6a88303c2dfe10355e4fce2e9dfc723b74f030cc3bc93d90"
     },
     {
       "path": "evidence/migration/MIG-002-manifest-parts/target-baseline-001.jsonl",
       "entries": 17,
-      "sha256": "30c4b2ebbc95ffc8681c237ac659fe2df66cdcd502c9f6f5cd22fde82b6e852c"
+      "sha256": "b1ca1952280b267eebefb334c6d5e48d120e9e6bad3915453bdf8d9e3303d726"
     }
   ],
   "invariants": [

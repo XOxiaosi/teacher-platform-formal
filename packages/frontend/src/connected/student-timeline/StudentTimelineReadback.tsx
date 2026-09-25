@@ -1,211 +1,88 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getStudentTimeline } from '../../api/students';
-import type { TimelineCommunicationDetail, TimelineEntry } from '../../api/types';
+import { getStudentRecordSource, getStudentTimeline, getStudentTimelineDetail } from '../../api/students';
+import type { StudentRecordItem, StudentRecordSource, StudentTimelineQuery, TimelineCommunicationDetail, TimelineEntry, TimelineEntryDetail } from '../../api/types';
 import { formatDateTime } from '../../shared/date-format';
 import './student-timeline.css';
 
-export interface StudentTimelineReadbackProps {
-  teacherId: string;
-  studentId: string;
-  refreshToken?: unknown;
-}
-
-const TYPE_LABELS: Record<string, string> = {
-  record: '档案记录',
-  assessment: '测评',
-  lesson: '课程',
-  feedback: '家长反馈',
-};
-
-const REVIEW_LABELS: Record<string, string> = {
-  candidate: '待审核',
-  pending: '待处理',
-  confirmed: '已确认',
-  rejected: '已拒绝',
-  superseded: '已被替代',
-};
-
-const VISIBILITY_LABELS: Record<string, string> = {
-  internal_only: '仅教师可见',
-  parent_shareable: '可与家长分享',
-  needs_review: '待核对',
-};
-
-const CATEGORY_LABELS: Record<string, string> = {
-  assessment: '测评',
-  lesson_observation: '课堂观察',
-  parent_communication: '家长沟通',
-  learning_state: '学习状态',
-  homework: '作业',
-  goal: '目标',
-  achievement: '进步与成果',
-  concern: '待关注',
-  agreement: '约定',
-  follow_up: '后续跟进',
-  general_note: '一般记录',
-};
-
-const LESSON_STATUS_LABELS: Record<string, string> = {
-  pending: '待核对出勤',
-  attended: '已出勤',
-  absent: '缺席',
-};
-
-const FEEDBACK_STATUS_LABELS: Record<string, string> = {
-  draft: '草稿',
-  reviewed: '已审核',
-  sent: '已发送',
-  archived: '已归档',
-};
-
-const DIRECTION_LABELS: Record<string, string> = {
-  inbound: '家长发来',
-  outbound: '教师发出',
-  two_way: '双向沟通',
-};
-
-const CHANNEL_LABELS: Record<string, string> = {
-  phone: '电话',
-  wechat: '微信',
-  offline: '线下',
-  other: '其他',
-};
-
-const PARENT_TYPE_LABELS: Record<string, string> = {
-  normal: '普通沟通',
-  scores: '关注成绩',
-  sensitive: '需谨慎沟通',
-};
-
-function messageOf(cause: unknown): string {
-  return cause instanceof Error && cause.message ? cause.message : '读取学生时间线失败，请稍后重试。';
-}
-
-function label(value: string | null, labels: Record<string, string>): string | null {
-  if (!value) return null;
-  return labels[value] ?? value;
-}
-
-function renderStringList(values: unknown): string | null {
-  if (!Array.isArray(values)) return null;
-  const present = values.filter((value): value is string => typeof value === 'string' && Boolean(value.trim()));
-  return present.length ? present.join('、') : null;
-}
+export interface StudentTimelineReadbackProps { teacherId: string; studentId: string; refreshToken?: unknown; }
+const PAGE_SIZE = 50;
+const TYPE_LABELS: Record<string, string> = { record: '档案记录', assessment: '测评', lesson: '课程', feedback: '家长反馈' };
+const REVIEW_LABELS: Record<string, string> = { candidate: '待审核', pending: '待处理', confirmed: '已确认', rejected: '已拒绝', superseded: '已被替代' };
+const VISIBILITY_LABELS: Record<string, string> = { internal_only: '仅教师可见', parent_shareable: '可用于家长表达', needs_review: '待核对' };
+const CATEGORY_LABELS: Record<string, string> = { assessment: '测评', lesson_observation: '课堂观察', parent_communication: '家长沟通', learning_state: '学习状态', homework: '作业', goal: '目标', achievement: '进步与成果', concern: '待关注', agreement: '约定', follow_up: '后续跟进', general_note: '一般记录' };
+const LESSON_STATUS_LABELS: Record<string, string> = { pending: '待核对出勤', attended: '已出勤', absent: '缺席' };
+const FEEDBACK_STATUS_LABELS: Record<string, string> = { draft: '草稿', reviewed: '已审核', sent: '已发送', archived: '已归档' };
+const DIRECTION_LABELS: Record<string, string> = { inbound: '家长发来', outbound: '教师发出', two_way: '双向沟通' };
+const CHANNEL_LABELS: Record<string, string> = { phone: '电话', wechat: '微信', offline: '线下', other: '其他' };
+const PARENT_TYPE_LABELS: Record<string, string> = { normal: '普通沟通', scores: '关注成绩', sensitive: '需谨慎沟通' };
+const CATEGORY_OPTIONS = Object.entries(CATEGORY_LABELS);
+type DraftFilters = { from: string; to: string; types: TimelineEntry['type'][]; categories: string[] };
+type TimelineData = { items: TimelineEntry[]; total: number; page: number; hasMore: boolean; filterKey: string };
+type DetailState = { entry: TimelineEntry; detail: TimelineEntryDetail | null; source: StudentRecordSource | null; sourceFailed: boolean; loading: boolean; error: string };
+type RetryRequest = { page: number; append: boolean };
+const EMPTY_FILTERS: DraftFilters = { from: '', to: '', types: [], categories: [] };
+function messageOf(cause: unknown): string { return cause instanceof Error && cause.message ? cause.message : '读取学生时间线失败，请稍后重试。'; }
+function label(value: string | null, labels: Record<string, string>): string | null { return value ? labels[value] ?? value : null; }
+function renderStringList(values: unknown): string | null { if (!Array.isArray(values)) return null; const present = values.filter((value): value is string => typeof value === 'string' && Boolean(value.trim())); return present.length ? present.join('、') : null; }
+function toBeijingBoundary(value: string, end = false): string | undefined { if (!value) return undefined; const [year, month, day] = value.split('-').map(Number); const date = new Date(Date.UTC(year, month - 1, day + (end ? 1 : 0))); return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}T00:00:00+08:00`; }
+function queryFromFilters(filters: DraftFilters): StudentTimelineQuery { return { page: 1, pageSize: PAGE_SIZE, ...(filters.from ? { from: toBeijingBoundary(filters.from) } : {}), ...(filters.to ? { to: toBeijingBoundary(filters.to, true) } : {}), ...(filters.types.length ? { types: filters.types } : {}), ...(filters.categories.length ? { categories: filters.categories } : {}) }; }
+function mergeEntries(current: TimelineEntry[], incoming: TimelineEntry[]): TimelineEntry[] { const seen = new Set<string>(); return [...current, ...incoming].filter((entry) => { const key = `${entry.type}:${entry.id}`; if (seen.has(key)) return false; seen.add(key); return true; }); }
+function detailTarget(entry: TimelineEntry): { type: TimelineEntry['type']; id: string } { const target = entry.openTarget; if (target.type === 'record' || target.type === 'assessment') return { type: target.type, id: target.recordId }; if (target.type === 'lesson') return { type: target.type, id: target.lessonId }; return { type: target.type, id: target.feedbackId }; }
+function detailMatches(detail: TimelineEntryDetail, target: ReturnType<typeof detailTarget>, teacherId: string, studentId: string): boolean { if (detail.type !== target.type) return false; const value = detail.type === 'record' || detail.type === 'assessment' ? detail.record : detail.type === 'lesson' ? detail.lesson : detail.feedback; return value.id === target.id && value.teacherId === teacherId && value.studentId === studentId; }
 
 function CommunicationDetail({ detail }: { detail: TimelineCommunicationDetail }) {
-  const fields: Array<[string, string | null]> = [
-    ['方向', label(detail.direction || null, DIRECTION_LABELS)],
-    ['渠道', label(detail.channel, CHANNEL_LABELS)],
-    ['家长类型', label(detail.parentType, PARENT_TYPE_LABELS)],
-    ['家长关注', renderStringList(detail.parentConcerns)],
-    ['教师回应', renderStringList(detail.teacherResponses)],
-    ['达成约定', renderStringList(detail.agreements)],
-    ['后续跟进', renderStringList(detail.followUps)],
-    ['下次联系', detail.nextContactAtTs ? formatDateTime(detail.nextContactAtTs) : null],
-    ['审核提示', detail.moderationFlagged ? renderStringList(detail.moderationReasons ?? []) ?? '需要关注' : null],
-  ];
+  const fields: Array<[string, string | null]> = [['方向', label(detail.direction || null, DIRECTION_LABELS)], ['渠道', label(detail.channel, CHANNEL_LABELS)], ['家长类型', label(detail.parentType, PARENT_TYPE_LABELS)], ['家长关注', renderStringList(detail.parentConcerns)], ['教师回应', renderStringList(detail.teacherResponses)], ['达成约定', renderStringList(detail.agreements)], ['后续跟进', renderStringList(detail.followUps)], ['下次联系', detail.nextContactAtTs ? formatDateTime(detail.nextContactAtTs) : null], ['审核提示', detail.moderationFlagged ? renderStringList(detail.moderationReasons ?? []) ?? '需要关注' : null]];
   const present = fields.filter(([, value]) => value);
-  if (!present.length) return null;
-  return (
-    <dl className="student-timeline-communication" aria-label="沟通明细">
-      {present.map(([name, value]) => <div key={name}><dt>{name}</dt><dd>{value}</dd></div>)}
-    </dl>
-  );
+  return present.length ? <dl className="student-timeline-communication" aria-label="沟通明细">{present.map(([name, value]) => <div key={name}><dt>{name}</dt><dd>{value}</dd></div>)}</dl> : null;
 }
 
-function TimelineEntryCard({ entry }: { entry: TimelineEntry }) {
-  const metadata: Array<[string, string | null]> = [
-    ['类别', label(entry.category, CATEGORY_LABELS)],
-    ['审核状态', label(entry.reviewStatus, REVIEW_LABELS)],
-    ['可见范围', label(entry.visibility, VISIBILITY_LABELS)],
-    ['课程状态', entry.type === 'lesson' ? label(entry.status, LESSON_STATUS_LABELS) : null],
-    ['反馈状态', entry.type === 'feedback' ? label(entry.status, FEEDBACK_STATUS_LABELS) : null],
-    ['科目', entry.subject],
-    ['考试名称', entry.examName],
-    ['成绩', entry.score === null ? null : `${entry.score}${entry.fullScore === null ? '' : ` / ${entry.fullScore}`}`],
-  ];
-  return (
-    <li className="student-timeline-entry">
-      <div className="student-timeline-entry-heading">
-        <div>
-          <span className="student-timeline-entry-type">{TYPE_LABELS[entry.type] ?? entry.type}</span>
-          <h3>{entry.title}</h3>
-        </div>
-        <time dateTime={entry.occurredAt}>{formatDateTime(entry.occurredAt)}</time>
-      </div>
-      {entry.summary && <p className="student-timeline-summary">{entry.summary}</p>}
-      {metadata.some(([, value]) => value) && (
-        <dl className="student-timeline-metadata">
-          {metadata.filter(([, value]) => value).map(([name, value]) => <div key={name}><dt>{name}</dt><dd>{value}</dd></div>)}
-        </dl>
-      )}
-      {entry.communicationDetail && <CommunicationDetail detail={entry.communicationDetail} />}
-    </li>
-  );
+function TimelineEntryCard({ entry, onOpen }: { entry: TimelineEntry; onOpen: (entry: TimelineEntry) => void }) {
+  const metadata: Array<[string, string | null]> = [['类别', label(entry.category, CATEGORY_LABELS)], ['审核状态', label(entry.reviewStatus, REVIEW_LABELS)], ['可见范围', label(entry.visibility, VISIBILITY_LABELS)], ['课程状态', entry.type === 'lesson' ? label(entry.status, LESSON_STATUS_LABELS) : null], ['反馈状态', entry.type === 'feedback' ? label(entry.status, FEEDBACK_STATUS_LABELS) : null], ['科目', entry.subject], ['考试名称', entry.examName], ['成绩', entry.score === null ? null : `${entry.score}${entry.fullScore === null ? '' : ` / ${entry.fullScore}`}`]];
+  return <li className="student-timeline-entry"><div className="student-timeline-entry-heading"><div><span className="student-timeline-entry-type">{TYPE_LABELS[entry.type] ?? entry.type}</span><h3>{entry.title}</h3></div><time dateTime={entry.occurredAt}>{formatDateTime(entry.occurredAt)}</time></div>{entry.summary && <p className="student-timeline-summary">{entry.summary}</p>}{metadata.some(([, value]) => value) && <dl className="student-timeline-metadata">{metadata.filter(([, value]) => value).map(([name, value]) => <div key={name}><dt>{name}</dt><dd>{value}</dd></div>)}</dl>}{entry.communicationDetail && <CommunicationDetail detail={entry.communicationDetail} />}<button type="button" className="student-timeline-open" onClick={() => onOpen(entry)}>查看原记录与来源</button></li>;
 }
+
+function DetailPanel({ state, onClose, onRetry }: { state: DetailState; onClose: () => void; onRetry: () => void }) {
+  const { entry, detail, source, sourceFailed, loading, error } = state;
+  const dialogRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const dialog = dialogRef.current;
+    if (!dialog) return undefined;
+    const focusable = () => Array.from(dialog.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')).filter((element) => !element.hasAttribute('disabled'));
+    (focusable()[0] ?? dialog).focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); onClose(); return; }
+      if (event.key !== 'Tab') return;
+      const items = focusable();
+      if (!items.length) { event.preventDefault(); dialog.focus(); return; }
+      const first = items[0]; const last = items[items.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => { document.removeEventListener('keydown', handleKeyDown); if (previous?.isConnected) previous.focus(); };
+  }, [onClose]);
+  return <div className="student-timeline-detail-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) onClose(); }}><section ref={dialogRef} className="student-timeline-detail" role="dialog" aria-modal="true" aria-label="时间线原记录详情" tabIndex={-1}><header><div><span className="student-timeline-entry-type">{TYPE_LABELS[entry.type] ?? entry.type}</span><h2>{entry.title}</h2></div><button type="button" onClick={onClose} aria-label="关闭详情">关闭</button></header>{loading && <p role="status">正在读取原记录…</p>}{error && <p role="alert">{error} <button type="button" onClick={onRetry}>重试</button></p>}{detail && <DetailContent detail={detail} source={source} sourceFailed={sourceFailed} />}</section></div>;
+}
+function DetailContent({ detail, source, sourceFailed }: { detail: TimelineEntryDetail; source: StudentRecordSource | null; sourceFailed: boolean }) {
+  if (detail.type === 'record') return <RecordDetail record={detail.record} source={source} sourceFailed={sourceFailed} />;
+  if (detail.type === 'assessment') return <><RecordDetail record={detail.record} source={source} sourceFailed={sourceFailed} /><dl className="student-timeline-detail-fields"><div><dt>考试名称</dt><dd>{detail.assessment.examName ?? '未提供'}</dd></div><div><dt>科目</dt><dd>{detail.assessment.subject ?? '未提供'}</dd></div><div><dt>成绩</dt><dd>{detail.assessment.score === null ? '未提供' : `${detail.assessment.score}${detail.assessment.fullScore === null ? '' : ` / ${detail.assessment.fullScore}`}`}</dd></div></dl></>;
+  if (detail.type === 'lesson') return <><dl className="student-timeline-detail-fields"><div><dt>上课日期</dt><dd>{formatDateTime(detail.lesson.date)}</dd></div><div><dt>课程状态</dt><dd>{label(detail.lesson.status, LESSON_STATUS_LABELS) ?? detail.lesson.status}</dd></div><div><dt>学习进度</dt><dd>{detail.lesson.progress ?? '未提供'}</dd></div><div><dt>教师备注</dt><dd>{detail.lesson.teacherNote ?? '未提供'}</dd></div></dl><p className="student-timeline-source-note">课程详情没有单独采集来源材料。</p></>;
+  return <><dl className="student-timeline-detail-fields"><div><dt>反馈标题</dt><dd>{detail.feedback.title}</dd></div><div><dt>反馈内容</dt><dd>{detail.feedback.content}</dd></div><div><dt>反馈状态</dt><dd>{label(detail.feedback.status, FEEDBACK_STATUS_LABELS) ?? detail.feedback.status}</dd></div><div><dt>渠道</dt><dd>{detail.feedback.channel ?? '未提供'}</dd></div></dl><p className="student-timeline-source-note">家长反馈没有单独采集来源材料。</p></>;
+}
+function RecordDetail({ record, source, sourceFailed }: { record: StudentRecordItem; source: StudentRecordSource | null; sourceFailed: boolean }) { return <><dl className="student-timeline-detail-fields"><div><dt>发生时间</dt><dd>{formatDateTime(record.occurredAt)}</dd></div><div><dt>记录类别</dt><dd>{label(record.category, CATEGORY_LABELS) ?? record.category}</dd></div><div><dt>记录内容</dt><dd>{record.summary}</dd></div><div><dt>审核状态</dt><dd>{label(record.reviewStatus, REVIEW_LABELS) ?? record.reviewStatus}</dd></div><div><dt>分享范围</dt><dd>{label(record.visibility, VISIBILITY_LABELS) ?? record.visibility}</dd></div></dl><SourceState source={source} failed={sourceFailed} /></>; }
+function SourceState({ source, failed }: { source: StudentRecordSource | null; failed: boolean }) { if (failed) return <p className="student-timeline-source-note">来源读取失败，请重试后核对。</p>; if (!source) return <p className="student-timeline-source-note">正在读取来源状态…</p>; if (source.state === 'none') return <p className="student-timeline-source-note">无关联来源材料。</p>; if (source.state === 'deleted') return <p className="student-timeline-source-note">来源状态：原件已删除，原文不可查看。正式记录内容仍保留。</p>; if (source.state === 'unavailable') return <p className="student-timeline-source-note">来源状态：当前不可用，不能核对原文。</p>; return <div className="student-timeline-source"><p>来源状态：原文可查看</p><p className="student-timeline-source-meta">来源类型：{source.source?.sourceType ?? '未提供'}</p><pre>{source.source?.rawText ?? '来源未提供文本原文。'}</pre></div>; }
 
 export function StudentTimelineReadback({ teacherId, studentId, refreshToken }: StudentTimelineReadbackProps) {
-  const [data, setData] = useState<{ items: TimelineEntry[]; total: number } | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const sequence = useRef(0);
-  const live = useRef(false);
-
-  useEffect(() => {
-    live.current = true;
-    return () => { live.current = false; sequence.current += 1; };
-  }, []);
-
-  const reload = useCallback(async (preserveVisibleData = false) => {
-    const request = ++sequence.current;
-    setLoading(true);
-    setError('');
-    if (!preserveVisibleData) setData(null);
-    try {
-      const result = await getStudentTimeline(teacherId, studentId, 200);
-      if (!live.current || request !== sequence.current) return false;
-      setData(result);
-      return true;
-    } catch (cause) {
-      if (live.current && request === sequence.current) setError(messageOf(cause));
-      return false;
-    } finally {
-      if (live.current && request === sequence.current) setLoading(false);
-    }
-  }, [teacherId, studentId]);
-
-  useEffect(() => { void reload(); }, [reload, refreshToken]);
-
-  return (
-    <section className="student-timeline-readback" aria-label="学生长期时间线">
-      <header className="student-timeline-heading">
-        <div>
-          <p className="student-timeline-eyebrow">正式档案</p>
-          <h2>学生时间线</h2>
-          <p className="student-timeline-caption">权威记录按发生时间读取，显示最近最多 200 条；时间均为北京时间。</p>
-        </div>
-        <button type="button" onClick={() => { void reload(Boolean(data)); }} disabled={loading}>
-          {loading ? '正在读取…' : '刷新'}
-        </button>
-      </header>
-
-      {error && (
-        <div className="student-timeline-error" role="alert">
-          <span>{error}{data ? ' 已保留上次成功读取的数据。' : ''}</span>
-          <button type="button" onClick={() => { void reload(Boolean(data)); }} disabled={loading}>重试</button>
-        </div>
-      )}
-      {loading && !data && <p className="student-timeline-state" role="status">正在读取学生时间线…</p>}
-      {data && (
-        <>
-          <p className="student-timeline-count" role="status">显示 {data.items.length} / {data.total} 条（最多显示 200 条）</p>
-          {!data.items.length ? <p className="student-timeline-empty">暂无学生时间线记录</p> : (
-            <ol className="student-timeline-entries" aria-label="学生时间线记录">
-              {data.items.map((entry) => <TimelineEntryCard key={`${entry.type}-${entry.id}`} entry={entry} />)}
-            </ol>
-          )}
-        </>
-      )}
-    </section>
-  );
+  const [draft, setDraft] = useState<DraftFilters>(EMPTY_FILTERS); const [filters, setFilters] = useState<DraftFilters>(EMPTY_FILTERS); const [data, setData] = useState<TimelineData | null>(null); const [loading, setLoading] = useState(true); const [error, setError] = useState(''); const [retryRequest, setRetryRequest] = useState<RetryRequest | null>(null); const [filterError, setFilterError] = useState(''); const [detail, setDetail] = useState<DetailState | null>(null); const sequence = useRef(0); const detailSequence = useRef(0); const live = useRef(false); const scope = useRef(''); const filterKey = JSON.stringify(filters);
+  useEffect(() => { live.current = true; return () => { live.current = false; sequence.current += 1; detailSequence.current += 1; }; }, []);
+  const loadPage = useCallback(async (page: number, append: boolean) => { const request = ++sequence.current; const nextScope = `${teacherId}:${studentId}`; if (scope.current !== nextScope) { scope.current = nextScope; setData(null); } setLoading(true); setError(''); setRetryRequest(null); try { const result = await getStudentTimeline(teacherId, studentId, { ...queryFromFilters(filters), page }); if (!live.current || request !== sequence.current) return; setData((old) => ({ items: append && old?.filterKey === filterKey ? mergeEntries(old.items, result.items) : result.items, total: result.total, page: result.page, hasMore: result.hasMore, filterKey })); } catch (cause) { if (live.current && request === sequence.current) { setError(messageOf(cause)); setRetryRequest({ page, append }); } } finally { if (live.current && request === sequence.current) setLoading(false); } }, [filterKey, filters, studentId, teacherId]);
+  useEffect(() => { void loadPage(1, false); }, [loadPage, refreshToken]);
+  const applyFilters = () => { if (draft.from && draft.to && draft.from > draft.to) { setFilterError('开始日期不能晚于结束日期。'); return; } setFilterError(''); setFilters({ ...draft, types: [...draft.types], categories: [...draft.categories] }); };
+  const clearFilters = () => { setDraft(EMPTY_FILTERS); setFilterError(''); setFilters(EMPTY_FILTERS); };
+  const openDetail = async (entry: TimelineEntry) => { const request = ++detailSequence.current; const target = detailTarget(entry); setDetail({ entry, detail: null, source: null, sourceFailed: false, loading: true, error: '' }); try { const detailResult = await getStudentTimelineDetail(teacherId, studentId, target.type, target.id); if (!detailMatches(detailResult, target, teacherId, studentId)) throw new Error('原记录归属或类型不匹配，请刷新时间线。'); let source: StudentRecordSource | null = null; if (detailResult.type === 'record' || detailResult.type === 'assessment') { if (entry.openTarget.type !== 'record' && entry.openTarget.type !== 'assessment') throw new Error('原记录类型不匹配，请刷新时间线。'); try { source = await getStudentRecordSource(teacherId, studentId, entry.openTarget.recordId); if (source.recordId !== entry.openTarget.recordId) throw new Error('来源归属不匹配，请刷新时间线。'); } catch (cause) { if (live.current && request === detailSequence.current) setDetail((old) => old ? { ...old, detail: detailResult, sourceFailed: true, loading: false, error: `原记录已读取，但来源读取失败：${messageOf(cause)}` } : old); return; } } if (live.current && request === detailSequence.current) setDetail({ entry, detail: detailResult, source, sourceFailed: false, loading: false, error: '' }); } catch (cause) { if (live.current && request === detailSequence.current) setDetail((old) => old ? { ...old, loading: false, error: messageOf(cause) } : old); } };
+  const closeDetail = useCallback(() => { detailSequence.current += 1; setDetail(null); }, []); const retryDetail = () => { if (detail) void openDetail(detail.entry); }; const toggleType = (type: TimelineEntry['type']) => setDraft((old) => ({ ...old, types: old.types.includes(type) ? old.types.filter((value) => value !== type) : [...old.types, type] })); const toggleCategory = (category: string) => setDraft((old) => ({ ...old, categories: old.categories.includes(category) ? old.categories.filter((value) => value !== category) : [...old.categories, category] })); const hasFilters = Boolean(filters.from || filters.to || filters.types.length || filters.categories.length); const dataIsCurrent = data?.filterKey === filterKey;
+  return <section className="student-timeline-readback" aria-label="学生长期时间线"><header className="student-timeline-heading"><div><p className="student-timeline-eyebrow">正式档案</p><h2>学生时间线</h2><p className="student-timeline-caption">服务端按条件读取，时间均为北京时间。</p></div><button type="button" onClick={() => { void loadPage(1, false); }} disabled={loading}>{loading ? '正在读取…' : '刷新'}</button></header>
+    <form className="student-timeline-filters" onSubmit={(event) => { event.preventDefault(); applyFilters(); }} aria-label="时间线筛选"><div className="student-timeline-date-fields"><label>开始日期<input type="date" value={draft.from} onChange={(event) => setDraft((old) => ({ ...old, from: event.target.value }))} /></label><label>结束日期<input type="date" value={draft.to} onChange={(event) => setDraft((old) => ({ ...old, to: event.target.value }))} /></label></div><fieldset><legend>内容来源</legend><div className="student-timeline-filter-options">{(Object.entries(TYPE_LABELS) as Array<[TimelineEntry['type'], string]>).map(([type, text]) => <label key={type}><input type="checkbox" checked={draft.types.includes(type)} onChange={() => toggleType(type)} />{text}</label>)}</div></fieldset><fieldset><legend>正式记录类别</legend><div className="student-timeline-filter-options">{CATEGORY_OPTIONS.map(([category, text]) => <label key={category}><input type="checkbox" checked={draft.categories.includes(category)} onChange={() => toggleCategory(category)} />{text}</label>)}</div></fieldset>{filterError && <p role="alert">{filterError}</p>}<div className="student-timeline-filter-actions"><button type="submit">应用筛选</button><button type="button" onClick={clearFilters} disabled={!draft.from && !draft.to && !draft.types.length && !draft.categories.length}>清除筛选</button></div></form>
+    {error && <div className="student-timeline-error" role="alert"><span>{error}{data ? ' 当前显示上一结果。' : ''}</span><button type="button" onClick={() => { const retry = retryRequest ?? { page: 1, append: false }; void loadPage(retry.page, retry.append); }} disabled={loading}>重试</button></div>}{loading && !data && <p className="student-timeline-state" role="status">正在读取学生时间线…</p>}{loading && data && <p className="student-timeline-state" role="status">正在更新时间线，已保留上一结果…</p>}{data && <><p className="student-timeline-count" role="status">已显示 {data.items.length} / {data.total} 条{dataIsCurrent && hasFilters ? '（当前筛选结果）' : !dataIsCurrent ? '（上一结果）' : ''}</p>{!data.items.length ? <p className="student-timeline-empty">{dataIsCurrent && hasFilters ? '当前筛选条件下暂无记录' : '暂无学生时间线记录'}</p> : <ol className="student-timeline-entries" aria-label="学生时间线记录">{data.items.map((entry) => <TimelineEntryCard key={`${entry.type}-${entry.id}`} entry={entry} onOpen={openDetail} />)}</ol>}{data.hasMore && dataIsCurrent && <button type="button" className="student-timeline-load-more" onClick={() => { void loadPage(data.page + 1, true); }} disabled={loading}>加载更多</button>}</>}{detail && <DetailPanel state={detail} onClose={closeDetail} onRetry={retryDetail} />}</section>;
 }

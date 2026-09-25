@@ -17,8 +17,6 @@ const targetFiles = [
   'packages/backend/src/app/presentation/presentation-envelope.ts',
   'packages/backend/src/app/presentation/tool-result-presenters.ts',
   'packages/backend/src/app/presentation/index.ts',
-  'packages/frontend/src/features/agent/PresentationDocumentView.tsx',
-  'packages/frontend/src/features/agent/presentation-routing.ts',
 ] as const;
 
 const contractsIndex = source('packages/contracts/src/index.ts');
@@ -26,7 +24,10 @@ const frontendPackage = source('packages/frontend/package.json');
 const agentConverse = source('packages/backend/src/app/use-cases/agent-converse/agent-converse-use-case.ts');
 const conversationResponse = source('packages/backend/src/app/routes/conversation-response.ts');
 const frontendApi = source('packages/frontend/src/api/conversations.ts');
-const turnList = source('packages/frontend/src/features/agent/TurnList.tsx');
+const frontendPlaceholder = source('packages/frontend/src/app/App.tsx');
+const previewHtml = source('packages/frontend/preview.html');
+const previewMain = source('packages/frontend/src/preview/main.tsx');
+const previewRuntime = source('packages/frontend/src/preview/PreviewApp.tsx');
 
 function presentationBackendSource(): string {
   return targetFiles
@@ -63,8 +64,20 @@ describe('A2 PresentationDocument结构边界', () => {
     expect(frontendApi).toMatch(/AssistantTurnDto[\s\S]*presentation\??:\s*PresentationDocument/);
   });
 
-  it('TurnList只通过PresentationDocumentView渲染结构化Assistant', () => {
-    expect(turnList).toContain('PresentationDocumentView');
+  it('正式认证壳不加载已退役 renderer，认证前不挂载 workspace', () => {
+    expect(frontendPlaceholder).toContain('TeacherProvider');
+    expect(frontendPlaceholder).toContain('LoginPage');
+    expect(frontendPlaceholder).toContain('ConnectedWorkspace');
+    expect(frontendPlaceholder).toContain("auth.status === 'anon'");
+    expect(frontendPlaceholder).toMatch(/if \(auth\.status === 'anon'\)[\s\S]*?return <LoginPage[\s\S]*?return <ConnectedWorkspace/);
+    expect(frontendPlaceholder).not.toMatch(/PresentationDocumentView|TurnList|fetch\s*\(/);
+  });
+
+  it('独立 preview 只挂载 PreviewApp，不调用 API 或认证壳', () => {
+    expect(previewHtml).toContain('/src/preview/main.tsx');
+    expect(previewMain).toContain("import { PreviewApp } from './PreviewApp'");
+    expect(previewRuntime).not.toMatch(/\b(?:fetch|XMLHttpRequest|WebSocket|EventSource)\s*\(/);
+    expect(previewRuntime).not.toMatch(/TeacherProvider|useAuth|\.\.\/api\//);
   });
 
   it('共享协议不携带Web route、actionToken或任意payload字段', () => {

@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { basename, join, relative, resolve } from 'node:path';
+import { createUiRetirementDisposition, gitBlobSha, parseGitTree, walk } from './manifest-helpers.mjs';
 
 const targetRoot = resolve(new URL('../../../', import.meta.url).pathname);
 const outputRoot = resolve(targetRoot, 'evidence/migration');
@@ -13,6 +14,8 @@ const baselineCommit = '5d73dd8fc6757aa637084ab88380b6c7003f1cea';
 const backupPath = '/Users/xiaosi/Developer/migration-backups/teacher-platform-formal/pre-mig-2026-09-01.tar.gz';
 const backupSha256 = 'e35c17395a93f788e045e67e96982e3f77b83914e6dca9271f5e8cbda59aac56';
 const chunkSize = 400;
+const uiRetirement = JSON.parse(await readFile(resolve(outputRoot, 'UI-RESET-retired-files.json'), 'utf8'));
+const uiRetirementDisposition = createUiRetirementDisposition(uiRetirement);
 
 const includedRootScripts = new Set([
   'scripts/launcher-core.mjs',
@@ -34,6 +37,76 @@ const omittedLegacyPackageFiles = new Set([
   'packages/frontend/PRODUCT.md',
 ]);
 
+const captureAdaptedPackageFiles = new Set([
+  'packages/backend/src/app/composition/core-route-dependencies.ts',
+  'packages/backend/src/app/composition/types.ts',
+  'packages/backend/src/app/routes/core.routes.ts',
+  'packages/backend/tests/boundary/d48-historical-time-source-boundary.test.ts',
+  'packages/backend/tests/fixtures/d47-audit-time-field-matrix.ts',
+  'packages/backend/tests/fixtures/d48-historical-time-source-matrix.ts',
+  'packages/contracts/prisma/schema.prisma',
+  'packages/contracts/scripts/verify-empty-migration.mjs',
+  'packages/frontend/src/app/App.tsx',
+  'packages/frontend/src/app/routes.test.ts',
+  'packages/frontend/src/app/routes.ts',
+  'packages/frontend/src/features/ai-input/AiInputPage.test.tsx',
+  'packages/frontend/src/features/ai-input/AiInputPage.tsx',
+  'packages/frontend/src/features/ai-input/ai-input.css',
+  'packages/ops/tests/db-tools.test.mjs',
+]);
+
+const identityAdaptedPackageFiles = new Set([
+  'packages/admin/src/api/adminActions.test.ts',
+  'packages/admin/src/api/adminActions.ts',
+  'packages/admin/src/app/App.test.tsx',
+  'packages/admin/src/pages/TeachersPage.test.tsx',
+  'packages/admin/src/pages/TeachersPage.tsx',
+  'packages/backend/src/app/middleware/rate-limit.ts',
+  'packages/backend/src/app/routes/auth.routes.ts',
+  'packages/backend/src/features/admin/admin-actions.ts',
+  'packages/backend/src/features/admin/admin-auth-service.ts',
+  'packages/backend/src/features/admin/admin.routes.ts',
+  'packages/backend/src/features/admin/index.ts',
+  'packages/backend/src/features/auth/index.ts',
+  'packages/backend/tests/boundary/audit-time-field-matrix-boundary.test.ts',
+  'packages/backend/tests/boundary/d48-historical-time-source-boundary.test.ts',
+  'packages/backend/tests/e2e/admin-mount-smoke.test.ts',
+  'packages/backend/tests/e2e/auth-boundary.test.ts',
+  'packages/backend/tests/e2e/auth-flow.test.ts',
+  'packages/backend/tests/e2e/idor-regression.test.ts',
+  'packages/backend/tests/e2e/llm-line-workflow.test.ts',
+  'packages/backend/tests/e2e/register-rate-limit.test.ts',
+  'packages/backend/tests/e2e/wechat-mount-smoke.test.ts',
+  'packages/backend/tests/fixtures/d47-audit-time-field-matrix.ts',
+  'packages/backend/tests/fixtures/d48-historical-time-source-matrix.ts',
+  'packages/backend/tests/functional/admin/admin-actions.test.ts',
+  'packages/backend/tests/functional/admin/admin-audit-db.test.ts',
+  'packages/backend/tests/functional/admin/admin-auth.test.ts',
+  'packages/backend/tests/functional/admin/admin-usage-summary.test.ts',
+  'packages/backend/tests/functional/admin/feedback-board.test.ts',
+  'packages/backend/tests/functional/admin/feedback-summary.test.ts',
+  'packages/backend/tests/functional/admin/interactions-health.test.ts',
+  'packages/backend/tests/functional/admin/teacher-overview.test.ts',
+  'packages/backend/tests/functional/auth/auth-service.test.ts',
+  'packages/backend/tests/functional/privacy/privacy-api.test.ts',
+  'packages/backend/tests/functional/provider-configs/provider-config-routes.test.ts',
+  'packages/backend/tests/functional/provider-usage/usage-routes.test.ts',
+  'packages/backend/tests/functional/wechat/wechat-ilink-login.test.ts',
+  'packages/contracts/prisma/schema.prisma',
+  'packages/contracts/scripts/verify-empty-migration.mjs',
+  'packages/frontend/src/api/auth.test.ts',
+  'packages/frontend/src/api/auth.ts',
+  'packages/frontend/src/app/App.test.tsx',
+  'packages/frontend/src/app/App.tsx',
+  'packages/frontend/src/app/routes.test.ts',
+  'packages/frontend/src/app/routes.ts',
+  'packages/frontend/src/features/auth/LoginPage.test.tsx',
+  'packages/frontend/src/features/auth/LoginPage.tsx',
+  'packages/frontend/src/features/auth/RegisterPage.test.tsx',
+  'packages/frontend/src/features/auth/RegisterPage.tsx',
+  'packages/ops/tests/db-tools.test.mjs',
+]);
+
 const safetyAdaptedPackageFiles = new Set([
   'packages/admin/vite.config.ts',
   'packages/backend/src/app/composition/core-route-dependencies.ts',
@@ -53,6 +126,59 @@ const safetyAdaptedPackageFiles = new Set([
   'packages/frontend/vite.config.ts',
   'packages/ops/tests/runtime-baseline.test.mjs',
   'scripts/smoke-built-backend.mjs',
+]);
+
+const productAdaptedPackageFiles = new Set([
+  'packages/backend/src/app/agenda/agenda-query.ts',
+  'packages/backend/src/app/routes/schedules.routes.ts',
+  'packages/backend/src/app/use-cases/create-planned-schedule/create-planned-schedule-use-case.ts',
+  'packages/backend/src/app/use-cases/create-planned-schedule/types.ts',
+  'packages/backend/src/app/use-cases/schedule-complete/index.ts',
+  'packages/backend/src/app/use-cases/schedule-complete/schedule-complete-use-case.ts',
+  'packages/backend/src/app/use-cases/schedule-complete/types.ts',
+  'packages/backend/src/features/lessons/lesson-service.ts',
+  'packages/backend/src/features/lessons/types.ts',
+  'packages/backend/src/features/scheduling/schedule-rescheduler.ts',
+  'packages/backend/src/features/scheduling/schedule-service.ts',
+  'packages/backend/src/features/scheduling/types.ts',
+  'packages/backend/tests/e2e/api-core-workflow.test.ts',
+  'packages/backend/tests/functional/agenda/agenda-query.test.ts',
+  'packages/backend/tests/functional/lessons/lesson-service.test.ts',
+  'packages/backend/tests/functional/use-cases/daily-review-assemble.test.ts',
+  'packages/backend/tests/functional/use-cases/schedule-complete-audit-atomicity.test.ts',
+  'packages/frontend/src/api/modules.test.ts',
+  'packages/frontend/src/api/schedules.ts',
+  'packages/frontend/src/api/types.ts',
+  'packages/backend/src/app/agenda/agenda-projection.ts',
+  'packages/backend/tests/functional/agenda/agenda-projection.test.ts',
+  'packages/contracts/src/agenda.ts',
+  'packages/frontend/package.json',
+  'packages/frontend/src/app/App.test.tsx',
+  'packages/frontend/src/app/App.tsx',
+  'packages/frontend/src/app/AppShell.test.tsx',
+  'packages/frontend/src/app/AppShell.tsx',
+  'packages/frontend/src/app/routes.test.ts',
+  'packages/frontend/src/app/routes.ts',
+  'packages/frontend/src/features/agenda/agenda-time.test.ts',
+  'packages/frontend/src/features/agenda/agenda-time.ts',
+  'packages/frontend/src/features/agent/AgentTodayContext.test.tsx',
+  'packages/frontend/src/features/agent/AgentTodayContext.tsx',
+  'packages/frontend/src/features/ai-input/AiInputPage.test.tsx',
+  'packages/frontend/src/features/ai-input/AiInputPage.tsx',
+  'packages/frontend/src/features/ai-input/ai-input.css',
+  'packages/frontend/src/features/dashboard/DashboardPage.test.tsx',
+  'packages/frontend/src/features/dashboard/DashboardPage.tsx',
+  'packages/frontend/src/features/daily-review/DailyReviewPage.test.tsx',
+  'packages/frontend/src/features/daily-review/DailyReviewPage.tsx',
+  'packages/frontend/src/features/schedules/SchedulesPage.test.tsx',
+  'packages/frontend/src/features/schedules/SchedulesPage.tsx',
+  'packages/frontend/src/features/schedules/WeekScheduleView.mobile.test.tsx',
+  'packages/frontend/src/features/schedules/WeekScheduleView.test.tsx',
+  'packages/frontend/src/features/schedules/WeekScheduleView.tsx',
+  'packages/frontend/src/shared/agenda/AgendaItemView.tsx',
+  'packages/frontend/src/shared/agenda/agenda-time.ts',
+  'packages/frontend/src/styles/globals.css',
+  'packages/frontend/src/styles/responsive-boundary.test.ts',
 ]);
 
 function adaptationReason(path) {
@@ -77,11 +203,40 @@ function adaptationReason(path) {
   return 'adapted in target to make local-safe external-provider and credential behavior fail closed';
 }
 
+function productAdaptationReason(path) {
+  if (
+    path === 'packages/contracts/src/agenda.ts'
+    || path === 'packages/backend/src/app/agenda/agenda-projection.ts'
+    || path === 'packages/backend/tests/functional/agenda/agenda-projection.test.ts'
+  ) {
+    return 'adapted in target for the confirmed five-field course display contract without exposing legacy course titles';
+  }
+  if (path.startsWith('packages/frontend/src/features/ai-input/')) {
+    return 'adapted in target for the confirmed mobile record-to-candidate interaction';
+  }
+  return 'adapted in target for the confirmed V002/V003 responsive web shell and Today interaction';
+}
+
+function captureAdaptationReason(path) {
+  if (path.startsWith('packages/frontend/')) {
+    return 'adapted in target for the confirmed T-015 web text draft, persisted capture review, and deletion-receipt flow';
+  }
+  if (path.includes('/composition/') || path.endsWith('/core.routes.ts')) {
+    return 'adapted in target to mount the T-015 capture API while keeping legacy AI and media routes default closed';
+  }
+  return 'adapted in target for the T-015 persisted capture lifecycle, trusted timestamps, migration counts, and verification boundary';
+}
+
 function sha256(content) {
   return createHash('sha256').update(content).digest('hex');
 }
 
 function classifySourceA(path) {
+  const retired = uiRetirementDisposition(path);
+  if (retired) return retired;
+  if (['packages/frontend/src/app/App.tsx', 'packages/frontend/src/app/App.test.tsx', 'packages/frontend/src/main.tsx', 'packages/backend/tests/boundary/presentation-document-boundary.test.ts'].includes(path)) {
+    return { disposition: 'M1', targetPath: path, reason: 'V004 teacher UI retirement: neutral non-operational entry and retained backend protocol boundaries; no replacement UI claimed' };
+  }
   if (omittedLegacyPackageFiles.has(path)) {
     return {
       disposition: 'H',
@@ -96,11 +251,35 @@ function classifySourceA(path) {
     };
   }
 
+  if (captureAdaptedPackageFiles.has(path)) {
+    return {
+      disposition: 'M1',
+      targetPath: path,
+      reason: captureAdaptationReason(path),
+    };
+  }
+
+  if (identityAdaptedPackageFiles.has(path)) {
+    return {
+      disposition: 'M1',
+      targetPath: path,
+      reason: 'adapted for V003 invitation-only access, minimum-permission admin operations, session invalidation, and teacher isolation',
+    };
+  }
+
   if (safetyAdaptedPackageFiles.has(path)) {
     return {
       disposition: 'M1',
       targetPath: path,
       reason: adaptationReason(path),
+    };
+  }
+
+  if (productAdaptedPackageFiles.has(path)) {
+    return {
+      disposition: 'M1',
+      targetPath: path,
+      reason: productAdaptationReason(path),
     };
   }
 
@@ -154,35 +333,11 @@ function classifySourceA(path) {
   return { disposition: 'H', targetPath: null, reason: 'legacy root material retained by commit reference' };
 }
 
-function parseGitTree(buffer) {
-  return buffer
-    .toString('utf8')
-    .split('\0')
-    .filter(Boolean)
-    .map((record) => {
-      const match = record.match(/^(\d+)\s+(\w+)\s+([0-9a-f]+)\s+(-|\d+)\t([\s\S]+)$/u);
-      if (!match) throw new Error(`Cannot parse git tree record: ${record}`);
-      const [, mode, type, blob, sizeText, path] = match;
-      return { mode, type, blob, size: sizeText === '-' ? null : Number(sizeText), path };
-    });
-}
 
-async function walk(directory, relativeRoot = '') {
-  const entries = await readdir(directory, { withFileTypes: true });
-  const files = [];
-  for (const entry of entries) {
-    const relativePath = relativeRoot === '' ? entry.name : join(relativeRoot, entry.name);
-    if (entry.isDirectory()) {
-      if (entry.name === '.git' || entry.name === 'node_modules') continue;
-      files.push(...(await walk(resolve(directory, entry.name), relativePath)));
-    } else if (entry.isFile()) {
-      files.push(relativePath);
-    }
-  }
-  return files;
-}
 
 function classifySourceB(path) {
+  const retired = uiRetirementDisposition(path);
+  if (retired) return retired;
   if (path.includes('/dist/') || path.startsWith('dist/')) {
     return { disposition: 'X', targetPath: null, reason: 'generated build output; rebuild in target' };
   }
@@ -210,10 +365,6 @@ async function writeParts(prefix, entries) {
   return parts;
 }
 
-function gitBlobSha(content) {
-  const header = Buffer.from(`blob ${content.length}\0`, 'utf8');
-  return createHash('sha1').update(header).update(content).digest('hex');
-}
 
 async function targetState(targetPath, sourceIdentity = {}) {
   if (!targetPath) return { targetStatus: 'omitted' };
@@ -285,6 +436,7 @@ const targetBaselineEntries = baselinePaths.map((path) => ({
   disposition: 'KEEP',
   targetPath: path,
   reason: 'protected pre-migration target asset',
+  ...uiRetirementDisposition(path),
 }));
 for (const entry of targetBaselineEntries) {
   Object.assign(entry, await targetState(entry.targetPath));

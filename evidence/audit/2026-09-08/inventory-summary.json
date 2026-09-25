@@ -1,0 +1,78 @@
+{
+  "generatedAt": "2026-09-09T00:09:21.083Z",
+  "root": "/Users/xiaosi/Developer/active/apps/teacher-platform-formal/",
+  "head": "4acb7a6f033ae48db2f40d7600673d587f633e5e",
+  "files": 1041,
+  "textFiles": 1009,
+  "bytes": 10253940,
+  "textLines": 157449,
+  "categories": {
+    "configuration-and-assets": 26,
+    "root-reference-document": 12,
+    "evidence": 64,
+    "test-and-fixture": 387,
+    "implementation": 489,
+    "schema-and-migration": 36,
+    "tooling-and-ops": 25,
+    "canonical-facts": 2
+  },
+  "worktree": {
+    "trackedChanges": 146,
+    "untrackedFiles": 67
+  },
+  "exclusions": [
+    {
+      "path": ".data",
+      "reason": "dependency-generated-private-or-audit-output"
+    },
+    {
+      "path": ".git",
+      "reason": "dependency-generated-private-or-audit-output"
+    },
+    {
+      "path": "evidence/audit/2026-09-08",
+      "reason": "dependency-generated-private-or-audit-output"
+    },
+    {
+      "path": "node_modules",
+      "reason": "dependency-generated-private-or-audit-output"
+    },
+    {
+      "path": "packages/admin/dist",
+      "reason": "dependency-generated-private-or-audit-output"
+    },
+    {
+      "path": "packages/admin/node_modules",
+      "reason": "dependency-generated-private-or-audit-output"
+    },
+    {
+      "path": "packages/api-contracts/dist",
+      "reason": "dependency-generated-private-or-audit-output"
+    },
+    {
+      "path": "packages/backend/dist",
+      "reason": "dependency-generated-private-or-audit-output"
+    },
+    {
+      "path": "packages/backend/node_modules",
+      "reason": "dependency-generated-private-or-audit-output"
+    },
+    {
+      "path": "packages/contracts/dist",
+      "reason": "dependency-generated-private-or-audit-output"
+    },
+    {
+      "path": "packages/domain/dist",
+      "reason": "dependency-generated-private-or-audit-output"
+    },
+    {
+      "path": "packages/frontend/dist",
+      "reason": "dependency-generated-private-or-audit-output"
+    },
+    {
+      "path": "packages/frontend/node_modules",
+      "reason": "dependency-generated-private-or-audit-output"
+    }
+  ],
+  "limitation": "Full byte-level inventory is not a claim of semantic review of every line. Audit outputs are excluded to avoid self-referential hashes. Never follow symlinks or read runtime credentials/data."
+}

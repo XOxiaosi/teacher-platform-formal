@@ -2,32 +2,85 @@
   "sourceCommit": "8673884f57c9d23abdb26715913d6199b1b4d16b",
   "exitTask": "T-033",
   "files": {
-  "packages/admin/src/pages/FeedbackBoardPage.tsx": { "lines": 653, "sha256": "2ac71596b07a8cd984d71cc3492efaa1f2004a2365da1b62cf13d164eab63a3b" },
-  "packages/admin/src/styles/admin.css": { "lines": 647, "sha256": "3a85185b1b6c1c72787af7e73b6e456f7a4e46b5ca3a2c4043f15efb37abd92b" },
-  "packages/backend/src/app/routes/privacy.routes.ts": { "lines": 509, "sha256": "826dd0832927e3a344b88ddee6b11261e5955b358e639258c5bf5dfe085c500a" },
-  "packages/backend/src/app/routes/student-records.routes.ts": { "lines": 544, "sha256": "508038ebeb4b5e06f0b44ad559ee9ae4fe40155b8045e8399a558839d58cd81d" },
-  "packages/backend/src/features/admin/admin.routes.ts": { "lines": 550, "sha256": "b2d8f021692a7f3cf349148d0c17f6aac7bfd067994e54112ee4fdb69f1b7c78" },
-  "packages/backend/src/features/feedback/feedback-service.ts": { "lines": 510, "sha256": "733496a55a9901ff08366808bcf56df31a2bb6037fe3d28bfc0ad69905496d9f" },
-  "packages/backend/src/features/media/media-asset-service.ts": { "lines": 1116, "sha256": "30e5c86123d43aa005e0218ef854c226666f96b7efe0539561397a19a047c6ad" },
-  "packages/backend/tests/functional/assessments/assessment-service.test.ts": { "lines": 730, "sha256": "5726bc2c0cf56d65260df8b674032b0daeee3d5d73a7535e06474cdc9495cc38" },
-  "packages/backend/tests/functional/feedback/feedback-service.test.ts": { "lines": 1344, "sha256": "a9274d3cd9672f10b002cec238388d5e08b04442365ad51ebfb8f2d2d069fe79" },
-  "packages/backend/tests/functional/media/media-asset-service.test.ts": { "lines": 524, "sha256": "3003a8d7d817b194473a7519ed6ab03e5b7bc763736c1d77760466952209261d" },
-  "packages/backend/tests/functional/media/media-ocr.test.ts": { "lines": 504, "sha256": "4eef4ed3d2da49181d033c0a336ab67072dd0187a8e4178b116ef47186de4317" },
-  "packages/backend/tests/functional/media/media-scan.test.ts": { "lines": 679, "sha256": "fbf64a2bd10469bb81b0744bb9fec0a32286fd7e50596a5653bb05900e46e657" },
-  "packages/backend/tests/functional/media/media-transcription.test.ts": { "lines": 563, "sha256": "d15e64baea8a0eb917967b5e4a07f8b346c8b375f48e2ce21bd8796d4de2ecde" },
-  "packages/backend/tests/functional/routes/feedback-generate.routes.test.ts": { "lines": 635, "sha256": "637da1d2a259d8e01cc6cc64943a4c66797c3be09ea4c7125a9901614e9f90e7" },
-  "packages/backend/tests/functional/scheduling/schedule-service.test.ts": { "lines": 647, "sha256": "0cdf985a8fe5b96b890bc57f6b97aa417bdc27dc7c2b758beeef44be22a063ff" },
-  "packages/backend/tests/functional/student-records/student-record-service.test.ts": { "lines": 653, "sha256": "fc3f2f50e73d3debd5976507b6c91dcc5f209650a4f959b85f7f2c24a5b21f55" },
-  "packages/backend/tests/functional/use-cases/generate-feedback-draft-use-case.test.ts": { "lines": 750, "sha256": "56a88728adf11501f1bfba698e0c287b9daa50f2cfaee6bfcb780286744f2280" },
-  "packages/backend/tests/functional/wechat/w0-ilink-transport.test.ts": { "lines": 538, "sha256": "6ab6d4715b0f591b83381bde8d806fda474f750d3340bee7670bbdd6a94ed3f5" },
-  "packages/contracts/prisma/schema.prisma": { "lines": 669, "sha256": "ba24cdd813d013de73543f420a0400058014f9da20227b0a2abe718257be97f2" },
-  "packages/frontend/src/features/feedback/FeedbackPage.test.tsx": { "lines": 514, "sha256": "53b919ee366b047d600565bfb3159a4a492b9be827c52102391325a04a980e7d" },
-  "packages/frontend/src/features/llm-config/LlmConfigPage.tsx": { "lines": 814, "sha256": "76e840163e71054f40bdbaff68fd637b64d269abaeffba3de783fd95977cef1d" },
-  "packages/frontend/src/features/llm-config/llm-config.css": { "lines": 564, "sha256": "22729765d4aaae0e2ec6a1f77c754c7bb2b423fe306717e7ad77cb659c610049" },
-  "packages/frontend/src/features/students/StudentDetailPage.test.tsx": { "lines": 850, "sha256": "2bac4fdbd55d298aa4a62c0071e9f64a3da76fe9dcc1365060beb428e67523a6" },
-  "packages/frontend/src/features/students/StudentDetailPage.tsx": { "lines": 955, "sha256": "c20bea63d9d2c9e6fbb39595a5d30b8bc50984c4967bcfe99335ba9da56786b0" },
-  "packages/frontend/src/features/students/student-detail.css": { "lines": 543, "sha256": "60bcc34a46bf1cfb1c36113707e580dde40a3f777c4f919a26e432c2543d001b" },
-  "packages/ops/tests/export-teacher-data.test.mjs": { "lines": 522, "sha256": "abaa4275b68a9a554c1f03ff228bec52e10858e17612ebce6e0ae54f7d025deb" },
-  "scripts/windows-controller.mjs": { "lines": 504, "sha256": "59991ce08571caa4fc8089f7226141f392d6f9b2836d8d9afa567f5c8e407cc8" }
+    "packages/admin/src/pages/FeedbackBoardPage.tsx": {
+      "lines": 653,
+      "sha256": "2ac71596b07a8cd984d71cc3492efaa1f2004a2365da1b62cf13d164eab63a3b"
+    },
+    "packages/admin/src/styles/admin.css": {
+      "lines": 647,
+      "sha256": "3a85185b1b6c1c72787af7e73b6e456f7a4e46b5ca3a2c4043f15efb37abd92b"
+    },
+    "packages/backend/src/app/routes/privacy.routes.ts": {
+      "lines": 509,
+      "sha256": "826dd0832927e3a344b88ddee6b11261e5955b358e639258c5bf5dfe085c500a"
+    },
+    "packages/backend/src/app/routes/student-records.routes.ts": {
+      "lines": 544,
+      "sha256": "508038ebeb4b5e06f0b44ad559ee9ae4fe40155b8045e8399a558839d58cd81d"
+    },
+    "packages/backend/src/features/feedback/feedback-service.ts": {
+      "lines": 510,
+      "sha256": "733496a55a9901ff08366808bcf56df31a2bb6037fe3d28bfc0ad69905496d9f"
+    },
+    "packages/backend/src/features/media/media-asset-service.ts": {
+      "lines": 1116,
+      "sha256": "30e5c86123d43aa005e0218ef854c226666f96b7efe0539561397a19a047c6ad"
+    },
+    "packages/backend/tests/functional/assessments/assessment-service.test.ts": {
+      "lines": 730,
+      "sha256": "5726bc2c0cf56d65260df8b674032b0daeee3d5d73a7535e06474cdc9495cc38"
+    },
+    "packages/backend/tests/functional/feedback/feedback-service.test.ts": {
+      "lines": 1344,
+      "sha256": "a9274d3cd9672f10b002cec238388d5e08b04442365ad51ebfb8f2d2d069fe79"
+    },
+    "packages/backend/tests/functional/media/media-asset-service.test.ts": {
+      "lines": 524,
+      "sha256": "3003a8d7d817b194473a7519ed6ab03e5b7bc763736c1d77760466952209261d"
+    },
+    "packages/backend/tests/functional/media/media-ocr.test.ts": {
+      "lines": 504,
+      "sha256": "4eef4ed3d2da49181d033c0a336ab67072dd0187a8e4178b116ef47186de4317"
+    },
+    "packages/backend/tests/functional/media/media-scan.test.ts": {
+      "lines": 679,
+      "sha256": "fbf64a2bd10469bb81b0744bb9fec0a32286fd7e50596a5653bb05900e46e657"
+    },
+    "packages/backend/tests/functional/media/media-transcription.test.ts": {
+      "lines": 563,
+      "sha256": "d15e64baea8a0eb917967b5e4a07f8b346c8b375f48e2ce21bd8796d4de2ecde"
+    },
+    "packages/backend/tests/functional/routes/feedback-generate.routes.test.ts": {
+      "lines": 635,
+      "sha256": "637da1d2a259d8e01cc6cc64943a4c66797c3be09ea4c7125a9901614e9f90e7"
+    },
+    "packages/backend/tests/functional/scheduling/schedule-service.test.ts": {
+      "lines": 647,
+      "sha256": "0cdf985a8fe5b96b890bc57f6b97aa417bdc27dc7c2b758beeef44be22a063ff"
+    },
+    "packages/backend/tests/functional/student-records/student-record-service.test.ts": {
+      "lines": 653,
+      "sha256": "fc3f2f50e73d3debd5976507b6c91dcc5f209650a4f959b85f7f2c24a5b21f55"
+    },
+    "packages/backend/tests/functional/use-cases/generate-feedback-draft-use-case.test.ts": {
+      "lines": 750,
+      "sha256": "56a88728adf11501f1bfba698e0c287b9daa50f2cfaee6bfcb780286744f2280"
+    },
+    "packages/backend/tests/functional/wechat/w0-ilink-transport.test.ts": {
+      "lines": 538,
+      "sha256": "6ab6d4715b0f591b83381bde8d806fda474f750d3340bee7670bbdd6a94ed3f5"
+    },
+    "packages/contracts/prisma/schema.prisma": {
+      "lines": 804,
+      "sha256": "a9f53b726fcea074e41f616b45519054fc434c6dcb4d3c67fd1d48e2ff4e8c2b"
+    },
+    "packages/ops/tests/export-teacher-data.test.mjs": {
+      "lines": 522,
+      "sha256": "abaa4275b68a9a554c1f03ff228bec52e10858e17612ebce6e0ae54f7d025deb"
+    },
+    "scripts/windows-controller.mjs": {
+      "lines": 504,
+      "sha256": "59991ce08571caa4fc8089f7226141f392d6f9b2836d8d9afa567f5c8e407cc8"
+    }
   }
 }

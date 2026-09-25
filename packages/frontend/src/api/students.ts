@@ -11,6 +11,9 @@ import type {
   StudentProfileView,
   StudentRecordItem,
   StudentRecordSource,
+  StudentTimelineQuery,
+  StudentTimelineResult,
+  TimelineEntryDetail,
   TimelineEntry,
 } from './types';
 
@@ -54,9 +57,30 @@ export function updateStudentProfile(
 export function getStudentTimeline(
   teacherId: string,
   studentId: string,
-  limit = 200,
-): Promise<ListResult<TimelineEntry>> {
-  return apiRequest(`/students/${encodeURIComponent(studentId)}/timeline?limit=${limit}`, {
+  options: StudentTimelineQuery | number = {},
+): Promise<StudentTimelineResult> {
+  const normalized: StudentTimelineQuery = typeof options === 'number'
+    ? { page: 1, pageSize: options }
+    : options;
+  const query = new URLSearchParams();
+  if (normalized.page !== undefined) query.set('page', String(normalized.page));
+  if (normalized.pageSize !== undefined) query.set('pageSize', String(normalized.pageSize));
+  if (normalized.from !== undefined) query.set('from', normalized.from);
+  if (normalized.to !== undefined) query.set('to', normalized.to);
+  normalized.types?.forEach((type) => query.append('types', type));
+  normalized.categories?.forEach((category) => query.append('categories', category));
+  return apiRequest(`/students/${encodeURIComponent(studentId)}/timeline${query.size ? `?${query}` : ''}`, {
+    teacherId,
+  });
+}
+
+export function getStudentTimelineDetail(
+  teacherId: string,
+  studentId: string,
+  entryType: TimelineEntry['type'],
+  entryId: string,
+): Promise<TimelineEntryDetail> {
+  return apiRequest(`/students/${encodeURIComponent(studentId)}/timeline/${encodeURIComponent(entryType)}/${encodeURIComponent(entryId)}/detail`, {
     teacherId,
   });
 }

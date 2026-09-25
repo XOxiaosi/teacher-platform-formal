@@ -1,6 +1,6 @@
 # 教师 AI 工作平台｜旧资产迁移处置规则
 
-> 状态：MIG-002 整体基线迁入中；执行状态只写入 `PROJECT_LOG.md`
+> 状态说明（2026-09-08）：整体基线已迁入，legacy/T 类资产仍待 T-033 退出；本文件保存处置规则与历史来源，当前执行状态只写入 `PROJECT_LOG.md`。
 >
 > 旧运行来源：`/Users/xiaosi/Desktop/OH-WorkSpace/teacher-platform@8673884f57c9d23abdb26715913d6199b1b4d16b`
 >
@@ -112,7 +112,7 @@ MIG-002 manifest 覆盖固定提交的每个受管文件。强制字段为：来
 
 - 旧 `backend/frontend/admin/contracts/ops` 只作为统一 workspace 内的 legacy-only 包存在；所有包保持 `private`，不得被正式包反向依赖。
 - 旧微信、push、morning brief、evening review、OCR/ASR 占位与外部 provider 源码可为编译和测试暂存，但不得进入 local-safe 的路由、调度器、provider 或外发装配图。
-- 旧教师端和管理端可用于构建与 loopback 最小可达性检查，不代表正式 UI、正式契约或产品完成。
+- V004 已退役旧教师 UI，`packages/frontend` 仅保留可构建的中性重构入口和业务基础；管理端暂保留。最小可达不代表产品可用。
 - 旧超长文件只允许按路径、行数和 SHA-256 精确登记；任何修改都会使豁免失效。
 - 每条 T manifest 记录 `exitTask: T-033` 和退出条件；正式模块替换后删除对应 legacy 文件和精确豁免，再复验完整 Gate。
 
@@ -135,7 +135,7 @@ MIG-002 manifest 覆盖固定提交的每个受管文件。强制字段为：来
 - 旧视觉 token、静态 CSS 字符串测试和绑定旧文件路径的边界测试；
 - `StudentDetailPage.tsx`、`LlmConfigPage.tsx` 等超 500 行页面。
 
-MIG-002 可把旧 TSX/CSS、内存路由和视觉实现作为 T 兼容源码暂存，但不能把它们当作正式视觉或产品验收。后续逐页提取功能、流程、状态、文案语义和异常路径，登记来源 SHA；正式版在 `apps/teacher-web` 中实现真实 URL 路由、Session 壳、Today、Students / Student detail 和上下文 AI，并由 T-018/T-033 退出旧页面。
+2026-09-08 用户要求旧教师页面及设计资料全部退出。退役清单与删除前哈希见 `evidence/migration/UI-RESET-retired-files.json`；完整脏工作树备份在源码树外，旧来源不变。保留 `packages/frontend` 的构建入口、API 和必要业务基础；新原型确认后在此重建教师网页，不创建平行应用目录。旧 UI 历史不再作为设计依据；清场不等于 T-018/T-033 完整 Gate 通过。
 
 ### 敏感、生成和机器状态
 
