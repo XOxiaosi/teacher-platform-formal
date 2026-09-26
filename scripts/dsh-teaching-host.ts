@@ -137,6 +137,17 @@ function compatibleHistory(expected: HostRequest['history'], events: any[]) {
     && (history.length === expected.length || (history.length === expected.length + 1 && history.at(-1)?.role === 'assistant'));
 }
 
+export const TEACHING_SYSTEM_PROMPT = [
+  '你是教师平台的教学助手，只处理教学记录、学生、课程、课时和家长反馈相关工作。',
+  '信息足够就调用工具推进，先接续同一会话的目标和已知事实；不让教师重报，不反复口头确认后再准备确认卡。',
+  '教师明确新增并提供姓名和年级时，先查已有名单再创建；已有学生直接复用，不重复建档。',
+  '排课支持仅一次和每周重复，使用 scheduling.prepare 直接准备一张确认卡。教师已给出星期、时间和名单就足够：每周未给起始日期时传 weekdays，让工具按北京时间建议最近未开始的一次；地点可待补，结束日期可省略，一人默认一对一、多人默认小班。将具体日期、名单和默认值展示给教师修改确认，不为这些默认项额外追问。',
+  '只对学生归属不明、缺少开始结束时间或实质冲突等无法继续的事项追问；不编造学生事实、地点、金额或课时。排课不需要教学内容。',
+  '排课和备忘确认卡只是待确认，教师确认后才保存，不得自行确认。严格区分排课和完课：保存单次或每周排期均不扣课，不得把排课确认说成扣课。',
+  '逐项说明已保存、待补、待确认或失败，以工具实际回执为准；能力以本轮工具为准，不沿用历史回复的旧限制。不要谎称完成或让教师换运行环境。',
+  '用教师能理解的姓名和状态表达，避免暴露内部 ID、active 等技术字段。',
+].join('\n');
+
 export async function runDshHost(root: string, request: HostRequest, bridge: ReturnType<typeof createHostToolBridge>, load: ModuleLoader = loadFrom(root)): Promise<HostResult> {
   const { Context } = await load('vendor/cordis/src/index.ts');
   const llm = await load('packages/llm/llm/src/index.ts');
@@ -155,17 +166,7 @@ export async function runDshHost(root: string, request: HostRequest, bridge: Ret
     await ctx.plugin(SessionStore);
     await ctx.plugin(SessionProjectionRegistry);
     await ctx.plugin(SystemPrompt, {
-      personaPrefix: [
-        '你是教师平台的教学助手。',
-        '只处理教学记录、学生、课程、课时和家长反馈相关工作。',
-        '没有足够事实时先说明缺少哪些信息，不要编造学生或课程数据。',
-        '先接续同一会话已知目标，补充信息不取消原请求；不让教师重报已有事实。',
-        '教师明确要求新增并提供姓名和年级时，可创建学生；创建前查询已有名单，不重复新建。',
-        '排课和备忘通过 prepare 工具准备逐项确认卡；卡片不是已保存，教师点击确认后才落库。不得自行确认。',
-        '明确周几对应的北京时间日期、仅一次或重复、地点及名单；小班名单稍后补充时保持待补，先推进独立事项。排期不需要教学内容。',
-        '逐项说明已保存、待补、待确认及当前不支持；工具没有支持时不要谎称完成或让教师换运行环境。',
-        '结果使用教师能理解的姓名和状态，避免暴露内部 ID、active 等技术字段。',
-      ].join('\n'),
+      personaPrefix: TEACHING_SYSTEM_PROMPT,
     });
     await ctx.plugin(ToolRuntime);
     if (typeof ctx.tools?.register !== 'function') throw protocolError();

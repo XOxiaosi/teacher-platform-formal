@@ -14,6 +14,7 @@ import { createConversationService } from '../../../src/features/conversation/in
 import { extractToolCallIds, toAgentTurnDtos } from '../../../src/app/routes/conversation-response.js';
 import { createTeachingRegistry } from '../../../src/app/teaching-runtime/create-teaching-registry.js';
 import { parseCreateCandidate } from '../../../src/app/confirmation/teaching-create-actions.js';
+import { createSchedulingWebService } from '../../../src/features/scheduling-web/index.js';
 
 let database: IsolatedPostgres;
 let prisma: PrismaClient;
@@ -27,7 +28,7 @@ async function setup() {
   const tasks = createTeachingTaskService({ prisma, cipher, runtimeAvailability: 'test_only' });
   const conversation = await tasks.createConversation({ teacherId }); if (!conversation.ok) throw new Error('conversation');
   const conversationId = conversation.value.id;
-  const students = await Promise.all(['合成甲', '合成乙'].map(name => prisma.student.create({ data: { teacherId, name, grade: '高一' } })));
+  const students = await Promise.all(['合成甲', '合成乙', '合成丙', '合成丁'].map(name => prisma.student.create({ data: { teacherId, name, grade: '高一' } })));
   const conversations = createConversationService({ prisma, cipher });
   const pending = createPendingActionService({ prisma, cipher, actionTokenSigner: signer,
     conversationOwner: { getOwnedConversation: input => conversations.getConversation(input) } });
@@ -63,6 +64,49 @@ async function setup() {
 }
 
 describe('CHAT-003 proposal to teacher confirmation', () => {
+  it('prepares weekly group lessons without interrogating for date, location or format, then confirms once', async () => {
+    const s = await setup();
+    const args = { recurrence: 'weekly', weekdays: [6], start: '16:00', end: '18:00', participants: s.students.map(student => student.id) };
+    expect((await s.prepare('scheduling.prepare', args)).result.ok).toBe(true);
+    expect(await prisma.recurrenceRule.count({where:{teacherId:s.teacherId}})).toBe(0);
+    const { action, input } = await s.card();
+    expect(action.pendingAction.afterSummary).toContain('每周六');
+    expect(action.pendingAction.afterSummary).toContain('地点：待补充');
+    expect(action.pendingAction.afterSummary).toContain('未设置结束日期');
+    expect(action.pendingAction.afterSummary).toContain('保存不扣课');
+    const result = await s.confirm.confirm(input);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('weekly confirmation failed');
+    const rule = await prisma.recurrenceRule.findFirstOrThrow({where:{teacherId:s.teacherId},include:{participants:true}});
+    expect(rule).toMatchObject({weekdays:[6],startTime:'16:00',endTime:'18:00',classFormat:'small_group',endDate:null});
+    expect(rule.participants).toHaveLength(4);
+    expect(result.value.result.references).toContainEqual({type:'RecurrenceRule',id:rule.id});
+    expect((await s.confirm.confirm(input)).ok).toBe(false);
+    expect((await s.prepare('scheduling.prepare', args)).result.ok).toBe(true);
+    expect(await prisma.pendingAction.count({where:{teacherId:s.teacherId}})).toBe(1);
+    expect(await prisma.recurrenceRule.count({where:{teacherId:s.teacherId}})).toBe(1);
+    expect(await Promise.all([
+      prisma.schedule.count({where:{teacherId:s.teacherId}}), prisma.lesson.count({where:{teacherId:s.teacherId}}),
+      prisma.lessonLedgerEntry.count({where:{teacherId:s.teacherId}}), prisma.payment.count({where:{teacherId:s.teacherId}}),
+    ])).toEqual([0,0,0,0]);
+    const scheduling = createSchedulingWebService({getClient:async()=>prisma,cipher,completionFactory:()=>({completeSchedule:async()=>{throw new Error('must not complete');}})});
+    const state = await scheduling.state(s.teacherId);
+    expect(state.ok && state.value.recurrenceRules).toEqual([expect.objectContaining({id:rule.id,weekdays:[6],location:'待补充',format:'小班'})]);
+  });
+
+  it('rechecks weekly conflicts and preserves the pending card without any ledger write', async () => {
+    const s = await setup();
+    const args = {day:'2090-09-23',recurrence:'weekly',weekdays:[6],start:'16:00',end:'18:00',participants:s.students.map(student=>student.id)};
+    expect((await s.prepare('scheduling.prepare',args)).result.ok).toBe(true);
+    const card = await s.card();
+    const scheduling = createSchedulingWebService({getClient:async()=>prisma,cipher,completionFactory:()=>({completeSchedule:async()=>{throw new Error('must not complete');}})});
+    expect((await scheduling.createRule(s.teacherId,{startDate:args.day,weekdays:[6],start:'17:00',end:'19:00',participants:args.participants,format:'小班',location:'合成教室',clientRequestId:randomUUID()})).ok).toBe(true);
+    expect((await s.confirm.confirm(card.input)).ok).toBe(false);
+    expect(await prisma.pendingAction.findUnique({where:{id:card.input.pendingActionId}})).toMatchObject({status:'pending'});
+    expect(await prisma.recurrenceRule.count({where:{teacherId:s.teacherId}})).toBe(1);
+    expect(await prisma.lessonLedgerEntry.count({where:{teacherId:s.teacherId}})).toBe(0);
+  });
+
   it('prepares a persisted card without writing, then saves once without deducting lessons', async () => {
     const s = await setup(); expect((await s.prepare()).result.ok).toBe(true);
     expect(await prisma.schedule.count({ where: { teacherId: s.teacherId } })).toBe(0);
@@ -100,11 +144,13 @@ describe('CHAT-003 proposal to teacher confirmation', () => {
   it('rejects empty group membership, ambiguous recurrence and foreign students', async () => {
     const s = await setup(); const fields = { day: '2090-09-23', start: '10:00', end: '12:00', location: '教室', recurrence: 'once' };
     expect((await s.prepare('scheduling.prepare', { ...fields, participants: [], format: '小班' })).result.ok).toBe(false);
-    expect((await s.prepare('scheduling.prepare', { ...fields, participants: [s.students[0].id], format: '一对一', recurrence: 'weekly' })).result.ok).toBe(false);
+    expect((await s.prepare('scheduling.prepare', { ...fields, participants: [s.students[0].id], format: '一对一', recurrence: 'monthly' })).result.ok).toBe(false);
     const other = await setup();
     expect((await s.prepare('scheduling.prepare', { ...fields, participants: [other.students[0].id], format: '一对一' })).result.ok).toBe(false);
+    expect((await s.prepare('scheduling.prepare', { ...fields, recurrence: 'weekly', weekdays: [6], participants: [s.students[0].id, other.students[0].id] })).result.ok).toBe(false);
     expect(await prisma.pendingAction.count({ where: { teacherId: s.teacherId } })).toBe(0);
     expect(await prisma.schedule.count({ where: { teacherId: s.teacherId } })).toBe(0);
+    expect(await prisma.recurrenceRule.count({ where: { teacherId: s.teacherId } })).toBe(0);
   });
 
   it('rejects token, identity, cancelled and expired actions with no business writes', async () => {

@@ -4,14 +4,30 @@ import { createSchedulingWebService, type WebFields } from '../../features/sched
 import { createMemoService } from '../../features/memos/index.js';
 import { createChangelogService } from '../../shared/changelog/index.js';
 import type { FieldCipher } from '../../shared/field-encryption/index.js';
-import type { ConfirmableActionExecutor } from './types.js';
+import type { ConfirmableActionExecutor, ConfirmationObjectReference } from './types.js';
 
 export type CreateAction = 'scheduling.create' | 'memos.create';
-export type Candidate = (WebFields & { kind: 'schedule'; recurrence: 'once' })
+export type Candidate = (WebFields & { kind: 'schedule' } & ({ recurrence: 'once' } | { recurrence: 'weekly'; weekdays: number[]; endDate?: string }))
   | { kind: 'memo'; title: string; content: string; dueAt?: string };
 const invalid = (message: string) => err(validationError(message, 'parameters'));
 const text = (v: unknown, max = 2000): v is string => typeof v === 'string' && !!v.trim() && v.length <= max;
-export function parseCreateCandidate(action: CreateAction, raw: unknown): Result<Candidate, CommonError> {
+const validDay = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/u.test(v)
+  && Number.isFinite(Date.parse(`${v}T00:00:00Z`)) && new Date(`${v}T00:00:00Z`).toISOString().slice(0, 10) === v;
+const weekday = (day: string) => new Date(`${day}T00:00:00Z`).getUTCDay() || 7;
+
+/** Resolve a proposal, never a business write, against the database clock. */
+function nextWeeklyDay(days: number[], start: string, now?: Date): string | undefined {
+  if (!now || !Number.isFinite(now.getTime())) return undefined;
+  const date = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+  for (let offset = 0; offset <= 7; offset++) {
+    const day = date.toISOString().slice(0, 10);
+    if (days.includes(weekday(day)) && Date.parse(`${day}T${start}:00+08:00`) > now.getTime()) return day;
+    date.setUTCDate(date.getUTCDate() + 1);
+  }
+  return undefined;
+}
+
+export function parseCreateCandidate(action: CreateAction, raw: unknown, now?: Date): Result<Candidate, CommonError> {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return invalid('请补全待确认内容');
   const a = raw as Record<string, unknown>;
   if (action === 'memos.create') {
@@ -24,21 +40,33 @@ export function parseCreateCandidate(action: CreateAction, raw: unknown): Result
     }
     return ok({ kind: 'memo', title: a.title.trim(), content: a.content.trim(), ...(a.dueAt ? { dueAt: a.dueAt as string } : {}) });
   }
-  if (Object.keys(a).some(key => !['day', 'start', 'end', 'location', 'participants', 'format', 'note', 'recurrence'].includes(key))) return invalid('排期包含不支持的字段');
-  if (a.recurrence !== 'once') return invalid('请明确本次是否仅排一次；每周重复请使用课表的重复安排入口');
-  if (typeof a.day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/u.test(a.day)
-      || !Number.isFinite(Date.parse(`${a.day}T00:00:00Z`))
-      || new Date(`${a.day}T00:00:00Z`).toISOString().slice(0, 10) !== a.day) return invalid('请将周几核对为明确的北京时间日期');
+  if (Object.keys(a).some(key => !['day', 'start', 'end', 'location', 'participants', 'format', 'note', 'recurrence', 'weekdays', 'endDate'].includes(key))) return invalid('排期包含不支持的字段');
+  if (a.recurrence !== 'once' && a.recurrence !== 'weekly') return invalid('排期支持仅一次或每周重复');
   const time = (v: unknown): v is string => typeof v === 'string' && /^(?:[01]\d|2[0-3]):[0-5]\d$/u.test(v);
   if (!time(a.start) || !time(a.end) || a.end <= a.start) return invalid('请补充同一天内有效的开始和结束时间');
-  if (!text(a.location, 200)) return invalid('请补充上课地点');
-  if (a.format !== '一对一' && a.format !== '小班') return invalid('请明确一对一或小班');
+  if (a.day !== undefined && !validDay(a.day)) return invalid('请将周几核对为明确的北京时间日期');
+  let days: number[] = [];
+  if (a.recurrence === 'weekly') {
+    const supplied = a.weekdays ?? (validDay(a.day) ? [weekday(a.day)] : []);
+    if (!Array.isArray(supplied) || !supplied.length || !supplied.every(day => Number.isInteger(day) && day >= 1 && day <= 7)
+      || new Set(supplied).size !== supplied.length) return invalid('请明确每周上课的星期（周一为1，周日为7）');
+    days = [...supplied].sort((a, b) => a - b);
+  } else if (a.weekdays !== undefined || a.endDate !== undefined) return invalid('仅一次课程不能带重复规则');
+  const day = a.day ?? (a.recurrence === 'weekly' ? nextWeeklyDay(days, a.start, now) : undefined);
+  if (!validDay(day)) return invalid('请提供具体日期，或每周星期以准备最近一次上课的确认卡');
+  if (a.endDate !== undefined && (!validDay(a.endDate) || a.endDate < day)) return invalid('重复结束日期不得早于开始日期');
+  if (a.location !== undefined && (typeof a.location !== 'string' || a.location.length > 200)) return invalid('地点格式无效或过长');
   if (!Array.isArray(a.participants) || !a.participants.every(id => text(id, 128))
-      || new Set(a.participants).size !== a.participants.length
-      || (a.format === '一对一' ? a.participants.length !== 1 : a.participants.length < 2)) return invalid('参与名单待补充；不会保存空名单小班');
+      || !a.participants.length || new Set(a.participants).size !== a.participants.length) return invalid('请明确不重复的参与学生名单');
+  const format = a.format ?? (a.participants.length === 1 ? '一对一' : '小班');
+  if (format !== '一对一' && format !== '小班') return invalid('课程形式必须为一对一或小班');
+  if (format === '一对一' ? a.participants.length !== 1 : a.participants.length < 2) return invalid('参与名单与课程形式不一致');
   if (a.note !== undefined && (typeof a.note !== 'string' || a.note.length > 1000)) return invalid('备注过长或格式无效');
-  return ok({ kind: 'schedule', day: a.day, start: a.start, end: a.end, location: a.location.trim(),
-    participants: [...a.participants].sort(), format: a.format, note: typeof a.note === 'string' ? a.note.trim() : '', recurrence: 'once' });
+  const base: WebFields & { kind: 'schedule' } = { kind: 'schedule', day, start: a.start, end: a.end, location: typeof a.location === 'string' && a.location.trim() ? a.location.trim() : '待补充',
+    participants: [...a.participants].sort(), format, note: typeof a.note === 'string' ? a.note.trim() : '' };
+  return a.recurrence === 'weekly'
+    ? ok({ ...base, recurrence: 'weekly', weekdays: days, ...(typeof a.endDate === 'string' ? { endDate: a.endDate } : {}) })
+    : ok({ ...base, recurrence: 'once' });
 }
 
 export function createTeachingCreateExecutors(tx: Prisma.TransactionClient, cipher?: FieldCipher): Record<CreateAction, ConfirmableActionExecutor> {
@@ -50,16 +78,23 @@ export function createTeachingCreateExecutors(tx: Prisma.TransactionClient, ciph
       const parsed = parseCreateCandidate(action, wrapper.candidate); if (!parsed.ok) return parsed;
       const value = parsed.value;
       let id: string;
+      let referenceType: ConfirmationObjectReference['type'] = input.target.type;
       if (value.kind === 'schedule') {
         const students = await tx.student.findMany({ where: { teacherId: input.teacherId, id: { in: value.participants } } });
         if (students.length !== value.participants.length || students.some(student => wrapper.studentVersions?.[student.id] !== student.updatedAtTs.toISOString())) return err(versionConflict());
         const scheduling = createSchedulingWebService({ getClient: async () => tx, cipher,
           completionFactory: () => ({ completeSchedule: async () => invalid('创建排期不执行完课或扣课') }) });
-        const saved = await scheduling.saveOnce(input.teacherId, { ...value, clientRequestId: input.target.id });
+        const saved = value.recurrence === 'weekly'
+          ? await scheduling.createRule(input.teacherId, { startDate: value.day, weekdays: value.weekdays, endDate: value.endDate,
+            start: value.start, end: value.end, participants: value.participants, format: value.format, location: value.location, note: value.note, clientRequestId: input.target.id })
+          : await scheduling.saveOnce(input.teacherId, { ...value, clientRequestId: input.target.id });
         if (!saved.ok) return saved;
-        const row = await tx.schedule.findFirst({ where: { teacherId: input.teacherId, clientRequestId: input.target.id } });
+        const row = value.recurrence === 'weekly'
+          ? await tx.recurrenceRule.findFirst({ where: { teacherId: input.teacherId, clientRequestId: input.target.id } })
+          : await tx.schedule.findFirst({ where: { teacherId: input.teacherId, clientRequestId: input.target.id } });
         if (!row) return invalid('排期保存回执缺失');
         id = row.id;
+        if (value.recurrence === 'weekly') referenceType = 'RecurrenceRule';
       } else {
         const saved = await createMemoService({ prisma: tx, cipher }).createMemo({ teacherId: input.teacherId,
           title: value.title, content: value.content, dueAt: value.dueAt ? new Date(value.dueAt) : undefined, source: 'agent-confirmed' });
@@ -67,10 +102,10 @@ export function createTeachingCreateExecutors(tx: Prisma.TransactionClient, ciph
         id = saved.value.id;
       }
       const audit = await createChangelogService(tx, cipher).recordChange({ teacherId: input.teacherId,
-        module: value.kind === 'schedule' ? 'scheduling' : 'memos', action: 'create', targetType: input.target.type,
+        module: value.kind === 'schedule' ? 'scheduling' : 'memos', action: 'create', targetType: referenceType,
         targetId: id, before: null, after: { ...value }, source: 'agent-confirmed' });
       if (!audit.ok) return audit;
-      return ok({ summary: value.kind === 'schedule' ? '课程已保存到课表，未扣课时' : '备忘已保存到待办', references: [{ type: input.target.type, id }] });
+      return ok({ summary: value.kind === 'schedule' ? value.recurrence === 'weekly' ? '每周重复课程已保存到课表，未扣课时' : '课程已保存到课表，未扣课时' : '备忘已保存到待办', references: [{ type: referenceType, id }] });
     } };
   }
   return { 'scheduling.create': executor('scheduling.create'), 'memos.create': executor('memos.create') };

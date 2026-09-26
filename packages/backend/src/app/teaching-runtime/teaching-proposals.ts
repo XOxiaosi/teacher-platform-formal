@@ -20,14 +20,16 @@ export function registerTeachingProposals(registry: ToolRegistry, options: Optio
   for (const action of ['scheduling.create', 'memos.create'] as const) {
     const schedule = action === 'scheduling.create';
     registry.register({ name: schedule ? 'scheduling.prepare' : 'memos.prepare', sideEffect: 'create',
-      description: schedule ? '准备一节仅本次的课程确认卡，不保存课程、不扣课；日期必须明确为北京时间，小班名单不齐先补充；重复安排不支持' : '准备备忘确认卡，不直接保存待办；教师点击确认后才写入',
+      description: schedule ? '准备单次或每周重复课程的一张确认卡，不保存课程、不扣课。按已知名单和时间直接准备；地点可待补，形式按人数推定，每周未指定起始日期时按北京时间建议最近未开始的一次；教师确认后保存' : '准备备忘确认卡，不直接保存待办；教师点击确认后才写入',
       parameters: { type: 'object', additionalProperties: false,
         properties: schedule ? {
-          day: { type: 'string', description: '明确的北京时间日期 YYYY-MM-DD' }, start: { type: 'string' }, end: { type: 'string' },
-          location: { type: 'string' }, participants: { type: 'array', items: { type: 'string' } }, format: { type: 'string', enum: ['一对一', '小班'] },
-          recurrence: { type: 'string', enum: ['once'], description: '教师确认仅排一次' }, note: { type: 'string' },
+          day: { type: 'string', description: '北京时间 YYYY-MM-DD；单次必填，每周可省略由可信时钟计算最近一次' }, start: { type: 'string', description: 'HH:mm' }, end: { type: 'string', description: 'HH:mm' },
+          location: { type: 'string', description: '未提供可省略，显示待补充，不阻塞排课' }, participants: { type: 'array', items: { type: 'string' } }, format: { type: 'string', enum: ['一对一', '小班'], description: '可省略，一人默认一对一，多人默认小班' },
+          recurrence: { type: 'string', enum: ['once', 'weekly'] },
+          weekdays: { type: 'array', items: { type: 'integer', minimum: 1, maximum: 7 }, description: '每周的星期，周一1至周日7；未传时从明确day推定' },
+          endDate: { type: 'string', description: '每周重复的可选结束日期 YYYY-MM-DD；未提供不要追问或编造' }, note: { type: 'string' },
         } : { title: { type: 'string' }, content: { type: 'string' }, dueAt: { type: 'string', description: '带时区的明确时间，未明确时不要编造' } },
-        required: schedule ? ['day', 'start', 'end', 'location', 'participants', 'format', 'recurrence'] : ['title', 'content'],
+        required: schedule ? ['start', 'end', 'participants', 'recurrence'] : ['title', 'content'],
       },
     }, async (args, context) => {
       if (context.teacherId !== teacherId) return err(notFound('会话不存在'));
@@ -35,9 +37,10 @@ export function registerTeachingProposals(registry: ToolRegistry, options: Optio
     });
   }
   async function prepare(action: CreateAction, args: unknown) {
-    const parsed = parseCreateCandidate(action, args); if (!parsed.ok) return parsed;
-    const { kind, ...candidate } = parsed.value;
     const db = await options.getClient();
+    const now = await createDatabaseTrustedClock(db).now(); if (!now.ok) return now;
+    const parsed = parseCreateCandidate(action, args, now.value); if (!parsed.ok) return parsed;
+    const { kind, ...candidate } = parsed.value;
     const students = kind === 'schedule' ? await db.student.findMany({
       where: { teacherId, id: { in: (parsed.value as { participants: string[] }).participants } },
       orderBy: { id: 'asc' }, select: { id: true, name: true, updatedAtTs: true },
@@ -47,7 +50,6 @@ export function registerTeachingProposals(registry: ToolRegistry, options: Optio
     const candidateKey = `proposal:${createHash('sha256').update(JSON.stringify([teacherId, conversationId, action, parameters])).digest('hex')}`;
     // Reuse a live candidate or a committed receipt, but permit a fresh proposal
     // after cancellation/expiry. Student-version changes produce a new key.
-    const now = await createDatabaseTrustedClock(db).now(); if (!now.ok) return now;
     const previous = await db.pendingAction.findMany({ where: { teacherId, conversationId,
       toolCallId: { startsWith: candidateKey } }, orderBy: { createdAtTs: 'desc' } });
     const reusable = previous.find(row => row.status === 'consumed'
@@ -55,7 +57,7 @@ export function registerTeachingProposals(registry: ToolRegistry, options: Optio
     const toolCallId = reusable?.toolCallId ?? `${candidateKey}:${previous.length}`;
     const value = parsed.value;
     const summary = value.kind === 'schedule'
-      ? `${value.day} ${value.start}–${value.end}（北京时间），${students.map(student => student.name).join('、')}，${value.format}，地点：${value.location}；仅本次，保存不扣课${value.note ? `；备注：${value.note}` : ''}`
+      ? `${value.day}${value.recurrence === 'weekly' ? ` 起，${value.weekdays.map(day => `每周${'一二三四五六日'[day - 1]}`).join('、')}` : ''} ${value.start}–${value.end}（北京时间），${students.map(student => student.name).join('、')}，${value.format}，地点：${value.location}；${value.recurrence === 'weekly' ? value.endDate ? `至 ${value.endDate}` : '未设置结束日期' : '仅本次'}，保存不扣课${value.note ? `；备注：${value.note}` : ''}`
       : `${value.title}：${value.content}${value.dueAt ? `；时间：${new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', dateStyle: 'short', timeStyle: 'short' }).format(new Date(value.dueAt))}（北京时间）` : '；未设置提醒时间'}`;
     const pending = createPendingActionService({ prisma: db, cipher: options.cipher, actionTokenSigner: options.signer,
       conversationOwner: { async getOwnedConversation(input) {

@@ -18,10 +18,9 @@ import type { ScheduleData } from '../../features/scheduling/index.js';
 import type { LessonData } from '../../features/lessons/index.js';
 
 export interface ConfirmationObjectReference {
-  // P29-W1（第三最小切片）：创建型确认结果可引用新创建实体（StudentRecord /
-  // StudentSourceRecord）。PendingAction 自身 target 仍限于 PendingActionTargetType
-  // （运行时 TARGET_TYPES 不变），此扩展仅覆盖确认结果 references 的类型契约。
-  type: PendingActionTargetType | 'StudentRecord' | 'StudentSourceRecord';
+  // 创建型确认结果可引用新建记录、来源记录或重复规则。PendingAction 自身
+  // target 仍限于 PendingActionTargetType；此扩展只覆盖确认结果 references。
+  type: PendingActionTargetType | 'StudentRecord' | 'StudentSourceRecord' | 'RecurrenceRule';
   id: string;
 }
 

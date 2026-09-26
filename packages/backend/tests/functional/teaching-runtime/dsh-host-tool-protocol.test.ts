@@ -1,6 +1,6 @@
 import { PassThrough } from 'node:stream';
 import { describe, expect, it, vi } from 'vitest';
-import { createHostToolBridge, parseHostRequest, startHostProtocol } from '../../../../../scripts/dsh-teaching-host.js';
+import { createHostToolBridge, parseHostRequest, startHostProtocol, TEACHING_SYSTEM_PROMPT } from '../../../../../scripts/dsh-teaching-host.js';
 import type { DshHostRunRequest, DshHostToolCall } from '../../../src/app/teaching-runtime/dsh-adapter-contract.js';
 
 const request: DshHostRunRequest = {
@@ -11,6 +11,13 @@ const request: DshHostRunRequest = {
 const response = (callId = 1) => ({ type: 'tool_result', sessionId: request.sessionId, executionId: request.executionId, callId, result: { ok: true, value: { balance: 8 } } });
 
 describe('DSH host scoped bidirectional JSONL contract', () => {
+  it('instructs the actual host to prepare weekly proposals without nonessential clarification or charging', () => {
+    expect(TEACHING_SYSTEM_PROMPT).toContain('排课支持仅一次和每周重复');
+    expect(TEACHING_SYSTEM_PROMPT).toContain('地点可待补');
+    expect(TEACHING_SYSTEM_PROMPT).toContain('不为这些默认项额外追问');
+    expect(TEACHING_SYSTEM_PROMPT).toContain('不得把排课确认说成扣课');
+    expect(TEACHING_SYSTEM_PROMPT).toContain('不沿用历史回复的旧限制');
+  });
   it('accepts an explicit read-only request without teacher identity or credentials', () => {
     expect(parseHostRequest(request)).toEqual(request);
     expect(parseHostRequest({ ...request, tools: [] }).tools).toEqual([]);
