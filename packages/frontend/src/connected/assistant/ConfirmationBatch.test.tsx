@@ -60,7 +60,7 @@ describe('ConfirmationBatch', () => {
   it('把整批候选交回助手修改', () => {
     const onRequestChanges = vi.fn();
     render(<ConfirmationBatch turns={turns} onConfirm={vi.fn()} onRequestChanges={onRequestChanges} />);
-    fireEvent.click(screen.getByRole('button', { name: '让助手修改' }));
+    fireEvent.click(screen.getByRole('button', { name: '修改' }));
     expect(onRequestChanges).toHaveBeenCalledWith(turns);
   });
 

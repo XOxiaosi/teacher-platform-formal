@@ -92,12 +92,23 @@ export function useConversation(teacherId: string, conversationId: string, trans
     const request = ++version.current;
     setBusy(true); setError('');
     try {
-      const [detail, history] = await Promise.all([
+      const [detail, firstPage] = await Promise.all([
         (conversationApi?.detail ?? getConversation)(teacherId, conversationId),
         (conversationApi?.turns ?? listConversationTurns)(teacherId, conversationId),
       ]);
       if (!alive.current || version.current !== request) return;
-      setConversation(detail.conversation); setTurns(history.items); setPreviousCursor(history.previousCursor);
+      const allTurns = [...firstPage.items];
+      const visitedCursors = new Set<string>();
+      let cursor = firstPage.previousCursor;
+      while (cursor && !visitedCursors.has(cursor)) {
+        visitedCursors.add(cursor);
+        const olderPage = await (conversationApi?.turns ?? listConversationTurns)(teacherId, conversationId, { before: cursor });
+        if (!alive.current || version.current !== request) return;
+        allTurns.unshift(...olderPage.items.filter(turn => !allTurns.some(existing => existing.id === turn.id)));
+        if (olderPage.previousCursor === cursor || olderPage.items.length === 0) break;
+        cursor = olderPage.previousCursor;
+      }
+      setConversation(detail.conversation); setTurns(mergeTurns([], allTurns)); setPreviousCursor(null);
       setSyncError(''); setLastSyncedAt(new Date().toISOString());
     } catch { if (alive.current && version.current === request) setError('会话暂时无法读取，请重试。'); }
     finally {

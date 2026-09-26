@@ -7,6 +7,7 @@ export function useConversationList(teacherId: string, status: ConversationStatu
   const [items, setItems] = useState<ConversationSummaryDto[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
   const version = useRef(0);
@@ -32,6 +33,7 @@ export function useConversationList(teacherId: string, status: ConversationStatu
       if (!alive.current || request !== version.current) return;
       setItems(previous => append ? [...previous, ...result.items.filter(item => !previous.some(old => old.id === item.id))] : result.items);
       setCursor(result.nextCursor);
+      if (!append) setLoaded(true);
     } catch { if (alive.current && request === version.current) setError('会话列表暂时无法读取，请重试。'); }
     finally {
       if (request !== version.current) return;
@@ -44,7 +46,7 @@ export function useConversationList(teacherId: string, status: ConversationStatu
     }
   }
   useEffect(() => {
-    version.current += 1; lock.current = false; queuedRefresh.current = false; setItems([]); setCursor(null);
+    version.current += 1; lock.current = false; queuedRefresh.current = false; setItems([]); setCursor(null); setLoaded(false);
     void load();
     return () => { version.current += 1; };
     // A new scope must discard old responses before fetching its first page.
@@ -69,5 +71,5 @@ export function useConversationList(teacherId: string, status: ConversationStatu
     } catch { if (alive.current) setError('新会话未能创建，请重试。'); return null; }
     finally { createLock.current = false; if (alive.current) setCreating(false); }
   }
-  return { items, cursor, busy, creating, error, load, create };
+  return { items, cursor, busy, loaded, creating, error, load, create };
 }

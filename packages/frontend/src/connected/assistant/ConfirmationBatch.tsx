@@ -6,11 +6,13 @@ export interface ConfirmationBatchItemState {
   status?: ConfirmationStatus;
   busy?: boolean;
   error?: string | CommonError | null;
+  receipt?: string;
 }
 
 export interface ConfirmationBatchProps {
   turns: ConfirmationTurnDto[];
   itemStates?: Record<string, ConfirmationBatchItemState | undefined>;
+  receipts?: Record<string, string>;
   onConfirm: (selectedActionIds: string[], selectedTurns: ConfirmationTurnDto[]) => void;
   onRequestChanges?: (turns: ConfirmationTurnDto[]) => void;
   requestChangesError?: string;
@@ -48,7 +50,7 @@ function isEligible(turn: ConfirmationTurnDto, status: ConfirmationStatus): bool
   return status === 'pending' && Boolean(turn.actionToken) && Number.isFinite(expiresAt) && expiresAt > Date.now();
 }
 
-export function ConfirmationBatch({ turns, itemStates = EMPTY_ITEM_STATES, onConfirm, onRequestChanges, requestChangesError, requestChangesBusy = false, title = '确认这些教学安排' }: ConfirmationBatchProps) {
+export function ConfirmationBatch({ turns, itemStates = EMPTY_ITEM_STATES, receipts = {}, onConfirm, onRequestChanges, requestChangesError, requestChangesBusy = false, title = '确认这些教学安排' }: ConfirmationBatchProps) {
   const initialized = React.useRef(false);
   const knownActionIds = React.useRef<Set<string>>(new Set());
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(() => new Set(
@@ -105,7 +107,7 @@ export function ConfirmationBatch({ turns, itemStates = EMPTY_ITEM_STATES, onCon
         return <label className={`assistant-confirmation-batch-item${selectable ? '' : ' is-complete'}`} key={turn.actionId} htmlFor={id}>
           <input id={id} type="checkbox" checked={selectedIds.has(turn.actionId)} disabled={!selectable} onChange={event => toggle(turn.actionId, event.target.checked)} />
           <span className="assistant-confirmation-batch-copy"><strong>{actionLabel(turn.actionName)}</strong><span>{turn.afterSummary}</span>{error && <small role="alert">{error}</small>}</span>
-          <span className={`assistant-confirmation-batch-status status-${unavailableLabel.replace(/[^\u4e00-\u9fff\w]+/g, '-')}`}>{busy ? '处理中' : unavailableLabel}</span>
+          <span className={`assistant-confirmation-batch-status status-${unavailableLabel.replace(/[^\u4e00-\u9fff\w]+/g, '-')}`}>{busy ? '正在确认' : status === 'consumed' ? (receipts[turn.actionId] || '已保存') : unavailableLabel}</span>
         </label>;
       })}
     </div>
@@ -113,7 +115,7 @@ export function ConfirmationBatch({ turns, itemStates = EMPTY_ITEM_STATES, onCon
       <button type="button" className="assistant-confirmation-batch-submit" disabled={selectedTurns.length === 0 || selectedItemBusy} onClick={() => onConfirm(selectedTurns.map(turn => turn.actionId), selectedTurns)}>
         确认选中的 {selectedTurns.length} 项
       </button>
-      {onRequestChanges && revisable && <button type="button" className="assistant-confirmation-batch-revise" disabled={selectedItemBusy || requestChangesBusy} onClick={() => onRequestChanges(turns)}>{requestChangesBusy ? '正在准备修改…' : '让助手修改'}</button>}
+      {onRequestChanges && revisable && <button type="button" className="assistant-confirmation-batch-revise" disabled={selectedItemBusy || requestChangesBusy} onClick={() => onRequestChanges(turns)}>{requestChangesBusy ? '正在准备…' : '修改'}</button>}
     </div>
     {requestChangesError && <p role="alert" className="assistant-confirmation-batch-revise-error">{requestChangesError}</p>}
   </section>;

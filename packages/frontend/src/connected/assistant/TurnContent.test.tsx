@@ -40,7 +40,7 @@ describe('assistant turn presentation', () => {
       target: { type: 'Schedule', id: 'schedule-1' }, beforeSummary: null, afterSummary: '旧的排课提案', parameterSummary: {},
       status: 'pending', expiresAt: '2020-01-01T00:00:00Z', actionToken: 'not-rendered', error: null, createdAt: '2026-09-15T12:00:00Z',
     }} />);
-    expect(screen.getByText('确认已过期，请重新提出要求并核对当前资料。')).toBeInTheDocument();
+    expect(screen.getByText('这项确认已过期，请重新核对后提出。')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '确认保存' })).not.toBeInTheDocument();
     expect(document.body.textContent).not.toContain('not-rendered');
   });

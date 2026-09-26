@@ -2,11 +2,10 @@ import type { AgentTurnDto, ConfirmationStatus, ConfirmationTurnDto, ObjectRefer
 import type { PresentationDocument } from '@teacher-platform/contracts';
 import type { ReactNode } from 'react';
 import { formatDateTime } from '../../shared/date-format';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { CheckCircle2, CircleAlert, FileCheck2, Sparkles, UserRound, X } from 'lucide-react';
+import { CheckCircle2, FileCheck2, Pencil } from 'lucide-react';
 
 function collapseRepeatedBlocks(content: string): string {
   const normalized = content.replace(/\r\n/g, '\n');
@@ -87,8 +86,10 @@ interface ConfirmationActionProps {
   status?: ConfirmationStatus;
   busy?: boolean;
   error?: string;
+  receipt?: string;
+  modifying?: boolean;
   onConfirm?: () => void;
-  onCancel?: () => void;
+  onModify?: () => void;
 }
 
 const confirmableActions = new Set(['scheduling.create', 'memos.create']);
@@ -104,40 +105,36 @@ function ConfirmationContent({ turn, action, demoMode = false }: { turn: Confirm
   const saved = status === 'consumed' && confirmableActions.has(turn.actionName);
   const cancelled = status === 'cancelled' && confirmableActions.has(turn.actionName);
   const destination = turn.actionName === 'scheduling.create'
-    ? { href: '#/schedules', label: '查看课表', savedLabel: '课程已保存。' }
-    : { href: '#/today', label: '查看待办', savedLabel: '待办已保存。' };
+    ? { href: '#/schedules', label: '查看课表' }
+    : { href: '#/today', label: '查看待办' };
   return <Card className="assistant-confirmation"><CardContent>
-    <div className="assistant-confirmation-heading"><span className="assistant-confirmation-icon">{saved ? <CheckCircle2 size={17} /> : <FileCheck2 size={17} />}</span><div><h3>{eligible ? demoMode ? '演示确认' : '确认保存' : saved ? demoMode ? '演示已确认' : '已保存' : '历史操作记录'}</h3><p>{demoMode ? '演示确认仅改变本页状态，不写入正式资料。' : '这项操作会保存到正式教学资料。'}</p></div></div>
+    <div className="assistant-confirmation-heading"><span className="assistant-confirmation-icon">{saved ? <CheckCircle2 size={17} /> : <FileCheck2 size={17} />}</span><div><h3>{eligible ? demoMode ? '演示确认' : '确认变更' : saved ? demoMode ? '演示已确认' : '变更已保存' : '变更记录'}</h3><p>{demoMode ? '演示确认仅改变本页状态，不写入正式资料。' : eligible ? '确认后才会保存到教学资料。' : ''}</p></div></div>
     {turn.beforeSummary && <p className="assistant-change-before">原有内容：{turn.beforeSummary}</p>}
     <p className="assistant-change-after"><span>拟调整为</span>{turn.afterSummary}</p>
     {eligible && <div className="assistant-confirmation-actions">
-      <p>{demoMode ? '这是演示数据，不会写入资料。' : '核对无误后再保存到资料中。'}</p>
+      <p>{demoMode ? '这是演示数据，不会写入资料。' : '请核对具体内容后确认。'}</p>
       {action?.error && <p role="alert">{action.error}</p>}
-      <div><Button type="button" disabled={action?.busy} onClick={action?.onConfirm}><CheckCircle2 size={16} />{action?.busy ? demoMode ? '正在演示确认…' : '正在保存…' : demoMode ? '演示确认' : '确认保存'}</Button>
-      <Button type="button" variant="ghost" disabled={action?.busy} onClick={action?.onCancel}><X size={16} />取消</Button></div>
+      <div><Button type="button" disabled={action?.busy} onClick={action?.onConfirm}><CheckCircle2 size={16} />{action?.busy ? demoMode ? '正在演示确认…' : '正在保存…' : demoMode ? '演示确认' : '确认'}</Button>
+      <Button type="button" variant="ghost" disabled={action?.busy || action?.modifying} onClick={action?.onModify}><Pencil size={16} />{action?.busy && action?.modifying ? '正在修改…' : '修改'}</Button></div>
     </div>}
-    {saved && <p>{demoMode ? '演示已确认，未写入正式资料。' : <>{destination.savedLabel} <a href={destination.href}>{destination.label}</a></>}</p>}
+    {saved && <p>{demoMode ? '演示已确认，未写入正式资料。' : <>{action?.receipt || `已保存：${turn.afterSummary}`} <a href={destination.href}>{destination.label}</a></>}</p>}
     {cancelled && <p>该操作已取消。不会写入资料。</p>}
-    {!eligible && !saved && !cancelled && <p>{status === 'consumed' ? '历史记录显示此操作已处理。' : confirmationIsExpired(turn) ? '确认已过期，请重新提出要求并核对当前资料。' : '此历史操作不能在这里继续确认，请重新提出要求并核对当前资料。'}</p>}
+    {!eligible && !saved && !cancelled && <p>{confirmationIsExpired(turn) ? '这项确认已过期，请重新核对后提出。' : '这项变更暂时无法确认，请重新提出要求。'}</p>}
   </CardContent></Card>;
 }
 
-export function TurnContent({ turn, pendingLabel, confirmation, demoMode = false }: { turn: AgentTurnDto; pendingLabel?: string; confirmation?: ConfirmationActionProps; demoMode?: boolean }) {
+export function TurnContent({ turn, confirmation, demoMode = false }: { turn: AgentTurnDto; confirmation?: ConfirmationActionProps; demoMode?: boolean }) {
   const presentation = turn.kind === 'assistant' ? turn.presentation : undefined;
   const presentationSummaryIsTurnContent = turn.kind === 'assistant' && presentation
     ? presentation.summary.trim() === turn.content.trim()
     : false;
-  const role = turn.kind === 'user' ? '我' : '教学助手';
-  return <article className={`assistant-turn assistant-turn-${turn.kind}${pendingLabel ? ' assistant-turn-pending' : ''}`}>
-    <header><span className={`assistant-turn-role assistant-turn-role-${turn.kind === 'user' ? 'user' : 'assistant'}`}>{turn.kind === 'user' ? <UserRound size={14} /> : <Sparkles size={14} />}{role}</span><time dateTime={turn.createdAt}>{formatDateTime(turn.createdAt)}</time>{pendingLabel && <Badge variant="secondary" className="assistant-turn-pending-label" role="status">{pendingLabel}</Badge>}</header>
+  return <article className={`assistant-turn assistant-turn-${turn.kind}`}>
     {(turn.kind === 'user' || turn.kind === 'assistant') && (turn.kind === 'assistant' ? <MarkdownContent content={turn.content} /> : <p>{turn.content}</p>)}
     {turn.kind === 'assistant' && <>{presentation && <><Separator className="assistant-turn-separator" /><Presentation document={presentation} showSummary={!presentationSummaryIsTurnContent} /></>}<References references={turn.references} /></>}
-    {turn.kind === 'tool' && <>
-      {turn.resultSummary && <Card className="assistant-tool-result"><CardContent><Badge variant={turn.status === 'success' ? 'secondary' : 'outline'}>{turn.status === 'success' ? '已处理' : '处理未完成'}</Badge><p>{turn.resultSummary}</p></CardContent></Card>}
-      {turn.status === 'failed' && <p className="assistant-turn-note" role="status"><CircleAlert size={15} />这一步未完成。已保存的会话仍可回看。</p>}
-      <References references={turn.references} studentLinkLabel />
-    </>}
-    {turn.kind === 'error' && <p className="assistant-turn-note" role="status"><CircleAlert size={15} />这一步未完成。已保存的会话仍可回看。</p>}
+    {turn.kind === 'tool' && (turn.resultSummary || turn.references.length > 0) && <div className="assistant-tool-result">{turn.resultSummary && <p>{turn.resultSummary}</p>}<References references={turn.references} studentLinkLabel /></div>}
+    {turn.kind === 'tool' && turn.status === 'failed' && !turn.resultSummary && <p className="assistant-turn-note" role="status">这次没有取得结果，可以调整要求后重试。</p>}
+    {turn.kind === 'error' && <p className="assistant-turn-note" role="status">这次没有生成回复，可以稍后重试。</p>}
     {turn.kind === 'confirmation' && <ConfirmationContent turn={turn} action={confirmation} demoMode={demoMode} />}
+    {['user', 'assistant'].includes(turn.kind) && <time className="assistant-turn-time" dateTime={turn.createdAt}>{formatDateTime(turn.createdAt)}</time>}
   </article>;
 }

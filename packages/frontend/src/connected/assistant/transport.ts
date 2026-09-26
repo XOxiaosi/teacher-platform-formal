@@ -37,7 +37,7 @@ export interface AssistantConversationApi {
 /** Keeps the visual sample's confirmation controls inside its synthetic store. */
 export interface AssistantPendingActionApi {
   get?(input: { teacherId: string; actionId: string }): Promise<PendingActionResponse>;
-  confirm(input: { teacherId: string; actionId: string; actionToken: string }): Promise<void>;
+  confirm(input: { teacherId: string; actionId: string; actionToken: string }): Promise<void | { result?: { summary: string } }>;
   cancel(input: { teacherId: string; actionId: string }): Promise<void>;
 }
 export interface AssistantTransport {

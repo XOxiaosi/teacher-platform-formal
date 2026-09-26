@@ -61,12 +61,12 @@ export function AssistantComposer({ teacherId, draftScope, messageState, availab
         onChange={event => changeDraft(event.target.value)} onInput={event => resize(event.currentTarget)} placeholder={placeholder} />
       <div className="assistant-composer-footer">
         <span>Enter 发送 · Shift + Enter 换行</span>
-        <Button type="submit" aria-label={submitting ? '提交中' : messageError || draft.awaitingReceipt ? '重试发送' : '发送'} disabled={!available || !draft.text.trim() || submitting}>{submitting ? <><LoaderCircle className="assistant-spin" size={16} /><span className="sr-only">{busy && !messageState?.sending ? '正在创建会话' : '正在提交'}</span></> : messageError || draft.awaitingReceipt ? <><RotateCcw size={16} /><span className="sr-only">重试发送</span></> : <Send size={17} />}</Button>
+        <Button type="submit" aria-label={submitting ? '正在发送' : messageError || draft.awaitingReceipt ? '重试发送' : '发送'} disabled={!available || !draft.text.trim() || submitting}>{submitting ? <><LoaderCircle className="assistant-spin" size={16} /><span className="sr-only">正在发送</span></> : messageError || draft.awaitingReceipt ? <><RotateCcw size={16} /><span className="sr-only">重试发送</span></> : <Send size={17} />}</Button>
       </div>
     </div>
     <p className="assistant-hint">未发送的输入仅暂存在当前浏览器会话中，退出账号后清除。</p>
-    {draft.awaitingReceipt && !messageState?.sending && <p role="status">这条消息的接收情况尚未确认。请先重试确认接收，再编辑；重试不会重复提交同一项工作。</p>}
+    {draft.awaitingReceipt && !messageState?.sending && <p role="status">这条消息尚未确认发送成功。重试不会重复发送。</p>}
     {messageError && <p role="alert">{messageError}</p>}
-    {messageState?.sending && <p role="status">正在提交，等待接收回执…</p>}
+    {messageState?.sending && <p role="status">正在发送…</p>}
   </form>;
 }
