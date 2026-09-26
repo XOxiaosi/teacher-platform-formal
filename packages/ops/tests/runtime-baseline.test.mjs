@@ -45,7 +45,7 @@ test('M0 ops baseline：根测试入口执行受控数据库套件与 ops runner
   const rootPackage = readJson('package.json');
 
   assert.match(rootPackage.scripts.test, /node scripts\/run-tests-with-postgres\.mjs/);
-  assert.equal(rootPackage.scripts['test:infrastructure'], 'node --test scripts/run-tests-with-postgres.test.mjs scripts/check-file-size.test.mjs scripts/connected-platform-ai.test.mjs');
+  assert.equal(rootPackage.scripts['test:infrastructure'], 'node --test scripts/run-tests-with-postgres.test.mjs scripts/check-file-size.test.mjs scripts/connected-platform-ai.test.mjs scripts/seed-local-initial-account.test.mjs');
   assert.equal(typeof rootPackage.scripts['test:with-database'], 'string');
   assert.match(rootPackage.scripts['test:with-database'], /npm run test:infrastructure/);
   assert.match(rootPackage.scripts['test:with-database'], /@teacher-platform\/ops run test/);

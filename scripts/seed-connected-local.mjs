@@ -2,6 +2,7 @@ import { createRequire } from 'node:module';
 import { createHash, randomBytes } from 'node:crypto';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { seedLocalInitialAccount } from './seed-local-initial-account.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(`${root}/package.json`);
@@ -15,6 +16,7 @@ const { createPaymentService } = require(`${root}/packages/backend/dist/features
 const prisma = new PrismaClient();
 const unwrap = (result) => { if (!result.ok) throw new Error(result.error.code); return result.value; };
 try {
+  await seedLocalInitialAccount(prisma);
   const clock = createDatabaseTrustedClock(prisma); const now = unwrap(await clock.now());
   const auth = createAuthService({ prisma, clock });
   for (const key of ['a', 'b']) {

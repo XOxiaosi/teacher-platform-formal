@@ -58,12 +58,12 @@ describe('认证壳', () => {
     render(<App />);
 
     await screen.findByRole('heading', { name: '开启今天的教学工作' });
-    fireEvent.change(screen.getByLabelText('邮箱'), { target: { value: 'teacher@example.com' } });
+    fireEvent.change(screen.getByLabelText(/邮箱/), { target: { value: 'teacher@example.com' } });
     fireEvent.change(screen.getByLabelText('密码'), { target: { value: 'wrong-password' } });
     fireEvent.click(screen.getByRole('button', { name: '登录' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('邮箱或密码不正确');
-    expect(screen.getByLabelText('邮箱')).toHaveValue('teacher@example.com');
+    expect(screen.getByLabelText(/邮箱/)).toHaveValue('teacher@example.com');
     expect(screen.getByLabelText('密码')).toHaveValue('wrong-password');
     expect(screen.queryByRole('heading', { name: /欢迎回来/ })).not.toBeInTheDocument();
   });
@@ -74,7 +74,7 @@ describe('认证壳', () => {
     render(<App />);
 
     await screen.findByRole('heading', { name: '开启今天的教学工作' });
-    fireEvent.change(screen.getByLabelText('邮箱'), { target: { value: ' teacher@example.com ' } });
+    fireEvent.change(screen.getByLabelText(/邮箱/), { target: { value: ' teacher@example.com ' } });
     fireEvent.change(screen.getByLabelText('密码'), { target: { value: 'correct-password' } });
     fireEvent.click(screen.getByRole('button', { name: '登录' }));
 
