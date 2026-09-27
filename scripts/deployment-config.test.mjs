@@ -10,6 +10,9 @@ test('deployment builds both production apps and runs the API behind TLS nginx',
   const dockerfile = read('deploy/Dockerfile');
   const nginx = read('deploy/nginx.conf');
 
+  assert.match(dockerfile, /FROM node:22\.19\.0-bookworm-slim AS build/);
+  assert.match(dockerfile, /npm install --global npm@10\.9\.2/);
+  assert.match(dockerfile, /apt-get install -y --no-install-recommends ca-certificates openssl/);
   assert.match(dockerfile, /npm ci .*&& npm run build/);
   assert.match(dockerfile, /packages\/frontend\/dist/);
   assert.match(dockerfile, /packages\/admin\/dist/);

@@ -12,11 +12,11 @@
 | 更新时间 | 2026-09-27（香港；用户授权黑苹果部署 DEP-001） |
 | 需求版本 | V011；IC-14 已接受，UI-010 单会话已接受；D11 旧会话映射待确认；IC-15 样板待审 |
 | 当前任务 | DEP-001：黑苹果 Docker 部署并验证教师平台 |
-| 当前任务状态 | 进行中（数据库与媒体目录双持久卷修正已通过最终全量门禁，待修正提交及同步远端；容器构建、启动及网络可达性待验证） |
+| 当前任务状态 | 进行中（Node/npm/OpenSSL 镜像修正已通过最终全量门禁，待提交、远端重建及容器启动验证） |
 | 已有实现 | 保留现有教师网页、业务接口、数据库与会话；Windows 本地 Node 22.19.0 / npm 10.9.2 / PostgreSQL 17.11。外部固定版 DSH 已接入平台凭据；黑苹果计划以新空库运行，不迁移本机教师资料或凭据。 |
 | V009 进度 | 不报完成百分比；P0–P6 工程尚未按新版验收，方案完成不代表实现完成 |
 | 历史进度 | V008 工程基线 43%，只供追溯，不换算成 V009 进度 |
-| 交付门禁 | 双持久卷修正后的完整 `npm run check` 使用锁定 Node 22.19.0 / PostgreSQL 17.11 退出 0；远端构建、迁移、新容器状态、TLS/LAN 访问仍待实测。 |
+| 交付门禁 | Node 22.19.0/npm 10.9.2/OpenSSL 修正后的完整 `npm run check` 退出 0；远端修正版构建、迁移、新容器状态、TLS/LAN 访问仍待实测。 |
 | 验证概况 | 最终根门禁：治理、文件规模、类型、lint、隔离 PG17 全量测试和所有工作区构建退出 0；3105 后端、455 前端、85 管理端测试通过，ops 151 通过/1 条件跳过。部署配置 2 项通过。 |
 | 下一步 | 审阅并提交 DEP-001 文件；在 `~/docker-services/teacher-platform` 建立隔离部署、构建启动并逐项核验端口 8443、HTTPS 页面、健康检查和持续卷。 |
 | 当前执行子任务 | Mac 只读预检通过：macOS 15.7.7 x86_64、Docker 29.8.0 / Compose 5.5.1；8081/8082 忙、8443 空闲；目标目录无教师平台部署。新数据库和容器尚未创建。 |
@@ -153,7 +153,7 @@ D06 为范围约束；D07 已明确完整微信私聊，不重复列为待用户
 - 实现：新增根 `compose.yaml`、`deploy/Dockerfile`、`deploy/nginx.conf`、`.dockerignore`；教师 SPA 与管理 SPA 由 HTTPS Nginx 提供，`/api/` 反代到后端；PostgreSQL 17 和 `.data` 媒体目录均使用 Compose 命名卷且不发布数据库宿主端口，API 执行已有 `prisma migrate deploy`；容器使用 `unless-stopped`。模型、微信关闭，不执行合成 seed。TLS 采用含 IP SAN 的部署机自签证书，首次浏览器连接会提示证书不受公有 CA 信任。初始管理员凭据只计划以受限文件保存于 Mac，由管理员创建教师邀请；教师身份、学生、会话均不预建。
 - 新增验证：`scripts/deployment-config.test.mjs` 覆盖构建入口、TLS/API 代理、端口、持久数据库卷、服务关闭策略及凭据/数据构建上下文排除；纳入根 `test:infrastructure`，同步 `packages/ops/tests/runtime-baseline.test.mjs` 维护测试入口约定。
 - 本地验证：首次未加本仓库工具 PATH 的 `npm run check` 停在 `initdb` 前置检查；按 README 加入 `.data/tools/node-v22.19.0-win-x64` 和 `.data/tools/postgresql17/pgsql/bin` 后重跑。首轮重跑因 ops runtime-baseline 断言未纳入新增测试名而失败，已同步修正后最终 `npm.cmd run check` 退出 0：治理与文件规模通过，类型/lint 通过，隔离 PostgreSQL 全量迁移和 350 个后端测试文件/3105 项通过（既有 2 项条件跳过），前端 67 文件/455 项通过，admin 13 文件/85 项通过，ops 152 项中 151 通过、1 项因 Windows 文件 symlink privilege 不可用而按用例条件跳过；前后端生产构建通过。新增部署配置 2 项通过。最终全量日志仅在临时目录 `teacher-platform-deploy-release-check.log`，不入 Git。
-- 当前状态：首版配置已提交并上传源码，但未创建服务/数据库；启动前发现媒体文件默认在 `/app/.data` 且缺持久卷，已添加第二个命名卷。修正后的 `npm.cmd run check` 退出 0；最终日志仅在源码外临时目录 `teacher-platform-deploy-volume-check.log`。修正提交后将同步远端并完成 Compose 解析、镜像构建、容器运行、HTTPS/API/readiness 检查；管理员网页登录及局域网其他设备访问仍待实测。自签证书信任提示须如实呈现；完整模型/微信能力未验证且本部署保持关闭。部署完成后更新本条和当前投影，记录远端逐项命令与实际结果及 commit SHA。
+- 当前状态：Mac 源码包含已提交的双持久卷版本；部署私钥/证书与随机密钥权限为 0600，Compose 静态解析通过。首轮 `docker compose build` 退出 0，但 Debian slim 未装 OpenSSL 导致 Prisma 警告、基础 npm 10.9.9 与锁定 10.9.2 不同；未启动容器或创建数据库。现 Dockerfile 固定 Node 22.19.0/npm 10.9.2 并在 build/backend 镜像安装 OpenSSL；修正后的 `npm.cmd run check` 退出 0，最终日志 `teacher-platform-deploy-openssl-check.log` 位于源码树外临时目录。待修正提交后远端重建，再执行服务启动/迁移、容器健康、HTTPS/API/readiness 与 LAN 测试；管理员网页登录仍待教师邀请。模型和微信保持关闭。
 
 ### UI-010｜2026-09-27｜教师 AI 助手单会话重设计
 
