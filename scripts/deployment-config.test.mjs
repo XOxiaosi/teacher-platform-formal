@@ -25,7 +25,9 @@ test('deployment builds both production apps and runs the API behind TLS nginx',
   assert.doesNotMatch(compose, /5432:\d+/);
   assert.match(nginx, /listen 443 ssl/);
   assert.match(nginx, /proxy_pass http:\/\/backend:3001/);
+  assert.match(nginx, /server_name _;\s+root \/usr\/share\/nginx\/html;/);
   assert.match(nginx, /location \/admin\//);
+  assert.match(nginx, /try_files \$uri \$uri\/ \/admin\/index\.html;/);
 });
 
 test('deployment build context excludes local data, credentials, dependencies, and generated output', () => {
