@@ -12,16 +12,16 @@
 | 更新时间 | 2026-09-27（香港；用户授权黑苹果部署 DEP-001） |
 | 需求版本 | V011；IC-14 已接受，UI-010 单会话已接受；D11 旧会话映射待确认；IC-15 样板待审 |
 | 当前任务 | DEP-001：黑苹果 Docker 部署并验证教师平台 |
-| 当前任务状态 | 进行中（Node/npm/OpenSSL 镜像修正已通过最终全量门禁，待提交、远端重建及容器启动验证） |
+| 当前任务状态 | 等待确认（黑苹果部署、43 项迁移、容器健康与局域网 HTTPS 验证完成；等待用户验收） |
 | 已有实现 | 保留现有教师网页、业务接口、数据库与会话；Windows 本地 Node 22.19.0 / npm 10.9.2 / PostgreSQL 17.11。外部固定版 DSH 已接入平台凭据；黑苹果计划以新空库运行，不迁移本机教师资料或凭据。 |
 | V009 进度 | 不报完成百分比；P0–P6 工程尚未按新版验收，方案完成不代表实现完成 |
 | 历史进度 | V008 工程基线 43%，只供追溯，不换算成 V009 进度 |
-| 交付门禁 | Node 22.19.0/npm 10.9.2/OpenSSL 修正后的完整 `npm run check` 退出 0；远端修正版构建、迁移、新容器状态、TLS/LAN 访问仍待实测。 |
-| 验证概况 | 最终根门禁：治理、文件规模、类型、lint、隔离 PG17 全量测试和所有工作区构建退出 0；3105 后端、455 前端、85 管理端测试通过，ops 151 通过/1 条件跳过。部署配置 2 项通过。 |
-| 下一步 | 审阅并提交 DEP-001 文件；在 `~/docker-services/teacher-platform` 建立隔离部署、构建启动并逐项核验端口 8443、HTTPS 页面、健康检查和持续卷。 |
-| 当前执行子任务 | Mac 只读预检通过：macOS 15.7.7 x86_64、Docker 29.8.0 / Compose 5.5.1；8081/8082 忙、8443 空闲；目标目录无教师平台部署。新数据库和容器尚未创建。 |
+| 交付门禁 | 最终完整 `npm run check` 退出 0；DEP-001 的 43 项 Prisma 迁移已在 Mac 新空库应用；教师页、管理页、API readiness 和三个容器均通过实测。 |
+| 验证概况 | 完整根门禁：治理、文件规模、类型、lint、隔离 PG17 全量测试和所有工作区构建退出 0；3105 后端、455 前端、85 管理端测试通过，ops 151 通过/1 项因 Windows symlink 权限条件跳过。部署配置测试 2/2 通过。HTTPS 8443 从 Mac 本机和局域网工作站均返回 HTTP 200。 |
+| 下一步 | 等待用户在局域网设备打开教师首页，接受自签证书后检查实际页面；首次管理登录密码通过 Mac 上的受限文件读取。用户验收后再关闭 DEP-001。 |
+| 当前执行子任务 | DEP-001 代码与部署已提交；Mac 三个容器健康，教师端 `/`、管理端 `/admin/`、API `/api/v1/health/ready` 均从局域网返回 200；数据仅为空库 schema、系统管理员配置，无教师/学生演示记录。 |
 | 长任务目标及结束条件 | 将当前已提交教师平台部署到黑苹果 `~/docker-services/teacher-platform`；通过 HTTPS 8443 提供教师端与管理端，API/数据库保持容器内网、数据库和媒体使用持久卷、模型和微信关闭；新空库只运行已有迁移、不导入教师资料；容器健康、LAN HTTPS/API 响应和登录壳可达验证后记录提交并等待用户验收。 |
-| 当前可执行任务 | DEP-001 远端实际部署及验证；UI-010 改版代码仍待参考图/旧会话规则确认与用户验收，UI-008/009 原状态不变。 |
+| 当前可执行任务 | 等待用户验收 DEP-001 并决定下一事项；UI-010、UI-008/009 状态保持原样。 |
 | 被阻塞任务及解除条件 | B02 继续阻塞课程时长与计费课时的换算、普通完课扣课数量/步长以及“补录并完课”的扣课；真实教师资料、真实模型复测、设备/渠道与发布沿用既有边界，B01 仍阻塞反馈正文修改后的状态迁移。 |
 
 ### 当前授权和运行边界
@@ -75,7 +75,7 @@
 | UI-007 | F01、F18 | 本地初始账号 123 / 123；哈希存储、原账号不覆盖、正式邀请密码规则不变 | 用户 09-26 要求；IC-12/IC-13 | 等待确认 |
 | UI-008 | F04、F13、F18 | Agent 准备单次/每周排课；省略无关追问；确认时复核学生与冲突，幂等保存排期且零扣课 | UI-007 后顺序工作；IC-14 | 等待确认 |
 | UI-009 | F04 | 按 IC-15 整理重复规则卡片摘要、操作对齐及提示不遮挡；提交可审阅样板，视觉认可与工程实现分开记录 | UI-008；用户截图 2026-09-26 | 等待确认 |
-| DEP-001 | 治理；部署运维（PRODUCT V011 不变） | 将教师端、管理端、API、隔离 PostgreSQL 部署到黑苹果 Docker；HTTPS/LAN 可达、容器健康及持久卷验证；不复制真实资料/凭据 | 用户 2026-09-27 明确授权部署，端口重新选择 | 进行中 |
+| DEP-001 | 治理；部署运维（PRODUCT V011 不变） | 将教师端、管理端、API、隔离 PostgreSQL 部署到黑苹果 Docker；HTTPS/LAN 可达、容器健康及持久卷验证；不复制真实资料/凭据 | 用户 2026-09-27 明确授权部署，端口重新选择 | 等待确认 |
 | UI-010 | F13、F14、F18 | 每位教师唯一持续会话；自动恢复完整消息；隐藏会话管理、角色标签及内部处理；保留确认卡和真实回执；合成回归、桌面/窄屏与防重复验证 | 用户 2026-09-27 指令；PRODUCT V011/IC-16；旧会话映射 D11 待确认 | 进行中 |
 | UI-004 | F13、F14 | 完整会话窗口、直接输入首发、按需历史与既有任务链路兼容 | 用户 09-20 最新反馈 | 已完成 |
 | UI-003 | F01、F02、F03、F04、F10、F11、F13 | 官方 shadcn/ui 接入、完整教师网页重设计、业务回归及可审阅合成页面 | 用户 09-20 明确要求 | 已完成 |
@@ -150,11 +150,13 @@ D06 为范围约束；D07 已明确完整微信私聊，不重复列为待用户
 
 - 来源与授权：用户要求参考静态站点部署流程，将当前教师平台部署到 `xiaosi@192.168.31.56`，明确要求重新配置端口。授权新建独立部署目录、Compose 服务和空白数据库并执行已有 schema migrations；不授权搬运 Windows 本机 `.env`、真实教师数据、DSH/模型密钥或演示业务写入。
 - 远端预检：SSH 免密成功；主机 `xiaosideiMac.local`，macOS 15.7.7 x86_64，Docker 29.8.0，Compose 5.5.1。既有 mahjong-web 8082、dev-services-web 8081、mac-preview 8083 保持不动；最终启动前复核 8443 空闲；部署目录此前无教师平台同名部署。磁盘可用 700 GiB。
-- 实现：新增根 `compose.yaml`、`deploy/Dockerfile`、`deploy/nginx.conf`、`.dockerignore`；教师 SPA 与管理 SPA 由 HTTPS Nginx 提供，`/api/` 反代到后端；PostgreSQL 17 和 `.data` 媒体目录均使用 Compose 命名卷且不发布数据库宿主端口，API 执行已有 `prisma migrate deploy`；容器使用 `unless-stopped`。模型、微信关闭，不执行合成 seed。TLS 采用含 IP SAN 的部署机自签证书，首次浏览器连接会提示证书不受公有 CA 信任。初始管理员凭据只计划以受限文件保存于 Mac，由管理员创建教师邀请；教师身份、学生、会话均不预建。
-- 新增验证：`scripts/deployment-config.test.mjs` 覆盖构建入口、TLS/API 代理、端口、持久数据库卷、服务关闭策略及凭据/数据构建上下文排除；纳入根 `test:infrastructure`，同步 `packages/ops/tests/runtime-baseline.test.mjs` 维护测试入口约定。
-- 本地验证：首次未加本仓库工具 PATH 的 `npm run check` 停在 `initdb` 前置检查；按 README 加入 `.data/tools/node-v22.19.0-win-x64` 和 `.data/tools/postgresql17/pgsql/bin` 后重跑。首轮重跑因 ops runtime-baseline 断言未纳入新增测试名而失败，已同步修正后最终 `npm.cmd run check` 退出 0：治理与文件规模通过，类型/lint 通过，隔离 PostgreSQL 全量迁移和 350 个后端测试文件/3105 项通过（既有 2 项条件跳过），前端 67 文件/455 项通过，admin 13 文件/85 项通过，ops 152 项中 151 通过、1 项因 Windows 文件 symlink privilege 不可用而按用例条件跳过；前后端生产构建通过。新增部署配置 2 项通过。最终全量日志仅在临时目录 `teacher-platform-deploy-release-check.log`，不入 Git。
-- 当前状态：Mac 源码包含已提交的双持久卷版本；部署私钥/证书与随机密钥权限为 0600，Compose 静态解析通过。首轮 `docker compose build` 退出 0，但 Debian slim 未装 OpenSSL 导致 Prisma 警告、基础 npm 10.9.9 与锁定 10.9.2 不同；未启动容器或创建数据库。现 Dockerfile 固定 Node 22.19.0/npm 10.9.2 并在 build/backend 镜像安装 OpenSSL；修正后的 `npm.cmd run check` 退出 0，最终日志 `teacher-platform-deploy-openssl-check.log` 位于源码树外临时目录。待修正提交后远端重建，再执行服务启动/迁移、容器健康、HTTPS/API/readiness 与 LAN 测试；管理员网页登录仍待教师邀请。模型和微信保持关闭。
-
+- 实现：根 `compose.yaml`、`deploy/Dockerfile`、`deploy/nginx.conf`、`.dockerignore`；教师 SPA 与管理 SPA 由 HTTPS Nginx 提供，`/api/` 反代到后端；PostgreSQL 17 和媒体 `.data` 均使用 Compose 命名卷且不发布数据库端口，API 使用既有 `prisma migrate deploy`；容器 `unless-stopped`。模型、微信关闭，不执行合成 seed。Nginx 全局静态 root 修正后 `/admin/` 可正常读取管理端入口。TLS 采用含 IP SAN 的部署机自签证书，浏览器需接受不受公有 CA 信任的提示。初始管理员为 `xiaosi@teacher-platform.local`；随机初始密码只保存在 Mac 权限 0600 的 `bootstrap-admin-password.txt`，不写日志/Git；教师、学生、会话均未预建。
+- 容器构建与启动：提交版本 `e90a4ecad024240934c21005bda777d668eb8344` 的首次镜像构建发现 Debian slim 未装 OpenSSL，Prisma 默认检测错误版本，且基础 npm 与 lock 版本不一致；在启动容器/迁移前中止，固定 Node 22.19.0、npm 10.9.2 并安装 OpenSSL。最终 Mac 两个应用镜像构建成功，无上述警告；启动后全部 43 项现有迁移成功应用至新空库。`teacher-platform-web-1`、`teacher-platform-backend-1`、`teacher-platform-db-1` 均为 healthy，web 端口 `0.0.0.0:8443->443/tcp`。数据库无宿主端口，卷 `teacher-platform_teacher-platform-db` 与 `teacher-platform_teacher-platform-files` 已创建；后端挂载媒体卷至 `/app/.data`。
+- 实际访问验证：从 Windows 局域网工作站访问 `https://192.168.31.56:8443/` 返回 HTTP 200、1059 字节；`/admin/` 返回 HTTP 200、438 字节；`/api/v1/health/ready` 返回 HTTP 200、JSON `status=ready`。在 Mac 本机回环地址也测得首页 200。验证时 `/admin/` 曾返回 500，日志确认 Nginx 缺少站点级 `root` 导致内部重定向循环；已添加全局 root、补充配置回归断言、重新构建并启动 web，LAN 复测通过。
+- 自动化验证：Node 22.19.0 / npm 10.9.2 / Windows / PostgreSQL 17.11 隔离 harness 执行最终 `npm.cmd run check` 退出 0（2026-09-27）。治理、文件规模、类型、lint、隔离 PG17 全量测试和全部工作区构建通过；后端 350 文件/3105 项通过、2 项平台条件跳过；教师前端 67 文件/455 项通过；管理端 13 文件/85 项通过；ops 152 项中 151 通过、1 项因 Windows symlink 权限条件跳过；新增部署配置 2 项通过。已知 Prisma package 配置弃用与 Vite configLoader 提示不影响本次通过结果。
+- Git 留痕：`fc0aa49a7a507666c60596825a228fa62966bc93` 添加 Docker 部署；`db4011543e53d0a020b34a3911e7acb7d9d573e8` 增加媒体持久卷；`e90a4ecad024240934c21005bda777d668eb8344` 固定容器 Node/npm/OpenSSL；`36f11dc` 修复 Nginx 管理 SPA 根目录并增加部署配置测试。未 push。最终提交后工作区须确认干净。
+- 未验证及使用限制：未在浏览器交互登录/检查教师页面视觉，也未实测 Mac 重启后 Docker Desktop 是否自动启动；浏览器第一次访问会有自签证书信任提示。初始管理员密码可在 Mac 执行 `cat ~/docker-services/teacher-platform/bootstrap-admin-password.txt` 读取；管理登录后需通过邀请流程创建教师账号。未实际登录验证初始管理员密码；模型与微信保持关闭。教师/学生及其业务操作未测试，部署只证明页面、管理入口和 API readiness 可达。
+- 交付状态：部署和自动化检查完成，任务等待用户打开 `https://192.168.31.56:8443/`、接受证书提示并验收；本地 commit 不表示已 push 或公网发布。Docker 容器重启策略为 `unless-stopped`，Mac 开机自动启动 Docker Desktop 的设置未验证。
 ### UI-010｜2026-09-27｜教师 AI 助手单会话重设计
 
 - 来源与范围：用户要求基于当前教师平台重做 AI 助手，使用既有浅色/青绿色/中文字体方向，改成每位教师唯一持续会话，隐藏会话管理与模型/工具/任务内部状态，保留重要写入确认和真实回执。对应 PRODUCT V011 / F13、F14、F18 / IC-16。参考设计图未出现在可读附件中；既有多条会话如何映射仍为 D11 待决定，本实现暂选最近更新的进行中会话，其余记录仅不展示、不修改。
