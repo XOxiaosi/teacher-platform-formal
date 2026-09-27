@@ -101,13 +101,13 @@ export function validateGovernance(bundle, options = {}) {
   for (const id of codes(plan)) if (!known.has(id)) errors.push(`执行计划引用未知需求或决定: ${id}`);
   const phases = new Set((plan.match(/阶段编号：([^。]+)/)?.[1] ?? '').match(/P\d+/g) ?? []);
   if ([...phases].join(',') !== 'P0,P1,P2,P3,P4,P5,P6') errors.push('阶段定义缺失或无效');
-  const tasks = rows(plan).filter(([id]) => /^(?:GOV-\d+|CHAT-\d+|UI-\d+|A\d{2}|P\d+)$/.test(id));
+  const tasks = rows(plan).filter(([id]) => /^(?:GOV-\d+|CHAT-\d+|UI-\d+|DEP-\d+|A\d{2}|P\d+)$/.test(id));
   const ids = tasks.map(([id]) => id);
   for (const id of new Set(ids)) if (ids.filter((value) => value === id).length !== 1) errors.push(`任务重复: ${id}`);
   for (const [id, refs, , dependencies, status] of tasks) {
     if (!codes(refs).length && !refs.includes('治理')) errors.push(`${id} 缺少需求关联`);
     if (!['未开始', '进行中', '等待确认', '被阻塞', '已完成', '已取消'].includes(status)) errors.push(`${id} 状态无效`);
-    for (const dep of dependencies.match(/\b(?:GOV-\d+|CHAT-\d+|UI-\d+|A\d{2}|P\d+)\b/g) ?? []) {
+    for (const dep of dependencies.match(/\b(?:GOV-\d+|CHAT-\d+|UI-\d+|DEP-\d+|A\d{2}|P\d+)\b/g) ?? []) {
       if ((!ids.includes(dep) && !phases.has(dep)) || dep === id) errors.push(`${id} 依赖不存在或自引用: ${dep}`);
     }
   }
@@ -120,7 +120,7 @@ export function validateGovernance(bundle, options = {}) {
   if (!projection['历史进度']?.includes('V008') || /\d+%/.test(projection['V009 进度'] ?? '')) {
     errors.push('旧进度不得作为 V009 完成率');
   }
-  const currentTask = projection['当前任务']?.match(/GOV-\d+|CHAT-\d+|UI-\d+|A\d{2}|P\d/)?.[0];
+  const currentTask = projection['当前任务']?.match(/GOV-\d+|CHAT-\d+|UI-\d+|DEP-\d+|A\d{2}|P\d/)?.[0];
   const task = tasks.find(([id]) => id === currentTask);
   if (!task || !projection['当前任务状态']?.startsWith(task[4])) errors.push('当前任务状态与计划不一致');
   if (task?.[4] === '已完成' && projection['交付门禁'] !== '通过') errors.push('未通过交付门禁不能标为已完成');

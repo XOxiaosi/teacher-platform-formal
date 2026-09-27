@@ -1,0 +1,12 @@
+.git
+.data
+certs
+node_modules
+**/node_modules
+**/dist
+**/coverage
+.env
+.env.*
+!.env.example
+*.log
+teacher-platform-local-data

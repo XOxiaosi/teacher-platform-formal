@@ -53,7 +53,7 @@ test('reject silent approval of pending business semantics', () => {
 });
 test('reject completed tasks when delivery verification is still failing', () => {
   const bundle = structuredClone(baseline);
-  const match = bundle.files['PROJECT_LOG.md'].match(/\| 当前任务 \| (GOV-\d+|CHAT-\d+|UI-\d+|A\d{2}|P\d+)/);
+  const match = bundle.files['PROJECT_LOG.md'].match(/\| 当前任务 \| (GOV-\d+|CHAT-\d+|UI-\d+|DEP-\d+|A\d{2}|P\d+)/);
   assert.ok(match, 'current task must use a supported governance task identifier');
   const currentTask = match[1];
   bundle.files['PROJECT_LOG.md'] = bundle.files['PROJECT_LOG.md']

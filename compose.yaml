@@ -1,0 +1,69 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: teacher_platform
+      POSTGRES_USER: teacher_platform
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - teacher-platform-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U teacher_platform -d teacher_platform"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: backend
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      LISTEN_HOST: 0.0.0.0
+      DATABASE_URL: postgresql://teacher_platform:${POSTGRES_PASSWORD}@db:5432/teacher_platform?schema=public
+      ACTION_TOKEN_SECRET: ${ACTION_TOKEN_SECRET:?Set ACTION_TOKEN_SECRET in .env}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in .env}
+      MEDIA_ENCRYPTION_KEY: ${MEDIA_ENCRYPTION_KEY:?Set MEDIA_ENCRYPTION_KEY in .env}
+      PROVIDER_KEY_ENCRYPTION_KEY: ${PROVIDER_KEY_ENCRYPTION_KEY:?Set PROVIDER_KEY_ENCRYPTION_KEY in .env}
+      LOCAL_SAFE_MODE: "false"
+      PLATFORM_SERVICES_ENABLED: "false"
+      WECHAT_ILINK_ENABLED: "false"
+      STORAGE_BACKEND: local
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?Set ADMIN_EMAIL in .env}
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:?Set ADMIN_PASSWORD_HASH in .env}
+    command: ["sh", "-lc", "./node_modules/.bin/prisma migrate deploy --schema=packages/contracts/prisma && node packages/backend/dist/index.js"]
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: web
+    ports:
+      - "${WEB_PORT:-8443}:443"
+    volumes:
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --no-check-certificate -O /dev/null https://127.0.0.1/ || exit 1"]
+      interval: 15s
+      timeout: 4s
+      retries: 8
+    restart: unless-stopped
+
+volumes:
+  teacher-platform-db:
