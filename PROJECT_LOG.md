@@ -12,15 +12,15 @@
 | 更新时间 | 2026-09-27（香港；用户授权黑苹果部署 DEP-001） |
 | 需求版本 | V011；IC-14 已接受，UI-010 单会话已接受；D11 旧会话映射待确认；IC-15 样板待审 |
 | 当前任务 | DEP-001：黑苹果 Docker 部署并验证教师平台 |
-| 当前任务状态 | 进行中（部署配置与全量工程门禁通过；准备将已提交源码部署到 Mac，远端容器构建、启动及网络可达性待验证） |
+| 当前任务状态 | 进行中（数据库与媒体目录双持久卷修正已通过最终全量门禁，待修正提交及同步远端；容器构建、启动及网络可达性待验证） |
 | 已有实现 | 保留现有教师网页、业务接口、数据库与会话；Windows 本地 Node 22.19.0 / npm 10.9.2 / PostgreSQL 17.11。外部固定版 DSH 已接入平台凭据；黑苹果计划以新空库运行，不迁移本机教师资料或凭据。 |
 | V009 进度 | 不报完成百分比；P0–P6 工程尚未按新版验收，方案完成不代表实现完成 |
 | 历史进度 | V008 工程基线 43%，只供追溯，不换算成 V009 进度 |
-| 交付门禁 | DEP-001 本地完整 `npm run check` 使用仓库锁定 Node 22.19.0 / PostgreSQL 17.11 通过；远端构建、迁移、新容器状态、TLS/LAN 浏览器访问仍待实测。 |
-| 验证概况 | 完整根门禁：治理、文件规模、类型、lint、隔离 PG17 全量测试和所有工作区构建退出 0；3105 后端测试、85 前端测试、ops 测试及新增部署配置测试均通过，2 项既有条件跳过。 |
+| 交付门禁 | 双持久卷修正后的完整 `npm run check` 使用锁定 Node 22.19.0 / PostgreSQL 17.11 退出 0；远端构建、迁移、新容器状态、TLS/LAN 访问仍待实测。 |
+| 验证概况 | 最终根门禁：治理、文件规模、类型、lint、隔离 PG17 全量测试和所有工作区构建退出 0；3105 后端、455 前端、85 管理端测试通过，ops 151 通过/1 条件跳过。部署配置 2 项通过。 |
 | 下一步 | 审阅并提交 DEP-001 文件；在 `~/docker-services/teacher-platform` 建立隔离部署、构建启动并逐项核验端口 8443、HTTPS 页面、健康检查和持续卷。 |
 | 当前执行子任务 | Mac 只读预检通过：macOS 15.7.7 x86_64、Docker 29.8.0 / Compose 5.5.1；8081/8082 忙、8443 空闲；目标目录无教师平台部署。新数据库和容器尚未创建。 |
-| 长任务目标及结束条件 | 将当前已提交教师平台部署到黑苹果 `~/docker-services/teacher-platform`；通过 HTTPS 8443 提供教师端与管理端，API/数据库保持容器内网、持久卷、模型和微信关闭；新空库只运行已有迁移、不导入教师资料；容器健康、LAN HTTP/TLS 响应和登录壳可达验证后记录提交并等待用户验收。 |
+| 长任务目标及结束条件 | 将当前已提交教师平台部署到黑苹果 `~/docker-services/teacher-platform`；通过 HTTPS 8443 提供教师端与管理端，API/数据库保持容器内网、数据库和媒体使用持久卷、模型和微信关闭；新空库只运行已有迁移、不导入教师资料；容器健康、LAN HTTPS/API 响应和登录壳可达验证后记录提交并等待用户验收。 |
 | 当前可执行任务 | DEP-001 远端实际部署及验证；UI-010 改版代码仍待参考图/旧会话规则确认与用户验收，UI-008/009 原状态不变。 |
 | 被阻塞任务及解除条件 | B02 继续阻塞课程时长与计费课时的换算、普通完课扣课数量/步长以及“补录并完课”的扣课；真实教师资料、真实模型复测、设备/渠道与发布沿用既有边界，B01 仍阻塞反馈正文修改后的状态迁移。 |
 
@@ -149,11 +149,11 @@ D06 为范围约束；D07 已明确完整微信私聊，不重复列为待用户
 ### DEP-001｜2026-09-27｜黑苹果 Docker 部署教师平台
 
 - 来源与授权：用户要求参考静态站点部署流程，将当前教师平台部署到 `xiaosi@192.168.31.56`，明确要求重新配置端口。授权新建独立部署目录、Compose 服务和空白数据库并执行已有 schema migrations；不授权搬运 Windows 本机 `.env`、真实教师数据、DSH/模型密钥或演示业务写入。
-- 远端预检：SSH 免密成功；主机 `xiaosideiMac.local`，macOS 15.7.7 x86_64，Docker 29.8.0，Compose 5.5.1。既有 mahjong-web 8082、dev-services-web 8081 保持不动；`lsof` 确认 8443 空闲；部署目录此前只有上述服务，无教师平台同名部署。磁盘可用 704 GiB。
-- 实现：新增根 `compose.yaml`、`deploy/Dockerfile`、`deploy/nginx.conf`、`.dockerignore`；教师 SPA 与管理 SPA 由 HTTPS Nginx 提供，`/api/` 反代到后端；PostgreSQL 17 使用 Compose 命名卷且不发布宿主端口，API 执行已有 `prisma migrate deploy`；容器使用 `unless-stopped`。模型、微信关闭，不执行合成 seed。TLS 采用含 IP SAN 的部署机自签证书，首次浏览器连接会提示证书不受公有 CA 信任。初始管理员凭据只计划以受限文件保存于 Mac，由管理员创建教师邀请；教师身份、学生、会话均不预建。
+- 远端预检：SSH 免密成功；主机 `xiaosideiMac.local`，macOS 15.7.7 x86_64，Docker 29.8.0，Compose 5.5.1。既有 mahjong-web 8082、dev-services-web 8081、mac-preview 8083 保持不动；最终启动前复核 8443 空闲；部署目录此前无教师平台同名部署。磁盘可用 700 GiB。
+- 实现：新增根 `compose.yaml`、`deploy/Dockerfile`、`deploy/nginx.conf`、`.dockerignore`；教师 SPA 与管理 SPA 由 HTTPS Nginx 提供，`/api/` 反代到后端；PostgreSQL 17 和 `.data` 媒体目录均使用 Compose 命名卷且不发布数据库宿主端口，API 执行已有 `prisma migrate deploy`；容器使用 `unless-stopped`。模型、微信关闭，不执行合成 seed。TLS 采用含 IP SAN 的部署机自签证书，首次浏览器连接会提示证书不受公有 CA 信任。初始管理员凭据只计划以受限文件保存于 Mac，由管理员创建教师邀请；教师身份、学生、会话均不预建。
 - 新增验证：`scripts/deployment-config.test.mjs` 覆盖构建入口、TLS/API 代理、端口、持久数据库卷、服务关闭策略及凭据/数据构建上下文排除；纳入根 `test:infrastructure`，同步 `packages/ops/tests/runtime-baseline.test.mjs` 维护测试入口约定。
 - 本地验证：首次未加本仓库工具 PATH 的 `npm run check` 停在 `initdb` 前置检查；按 README 加入 `.data/tools/node-v22.19.0-win-x64` 和 `.data/tools/postgresql17/pgsql/bin` 后重跑。首轮重跑因 ops runtime-baseline 断言未纳入新增测试名而失败，已同步修正后最终 `npm.cmd run check` 退出 0：治理与文件规模通过，类型/lint 通过，隔离 PostgreSQL 全量迁移和 350 个后端测试文件/3105 项通过（既有 2 项条件跳过），前端 67 文件/455 项通过，admin 13 文件/85 项通过，ops 152 项中 151 通过、1 项因 Windows 文件 symlink privilege 不可用而按用例条件跳过；前后端生产构建通过。新增部署配置 2 项通过。最终全量日志仅在临时目录 `teacher-platform-deploy-release-check.log`，不入 Git。
-- 当前状态：本地方案待提交；尚未向 Mac 上传源码或创建服务/数据库，远端 Compose 解析、镜像拉取构建、容器运行、HTTPS/API/readiness、管理员登录及局域网其他设备访问均未验证。自签证书信任提示须如实呈现；完整模型/微信能力未验证且本部署保持关闭。部署完成后更新本条和当前投影，记录远端逐项命令与实际结果及 commit SHA。
+- 当前状态：首版配置已提交并上传源码，但未创建服务/数据库；启动前发现媒体文件默认在 `/app/.data` 且缺持久卷，已添加第二个命名卷。修正后的 `npm.cmd run check` 退出 0；最终日志仅在源码外临时目录 `teacher-platform-deploy-volume-check.log`。修正提交后将同步远端并完成 Compose 解析、镜像构建、容器运行、HTTPS/API/readiness 检查；管理员网页登录及局域网其他设备访问仍待实测。自签证书信任提示须如实呈现；完整模型/微信能力未验证且本部署保持关闭。部署完成后更新本条和当前投影，记录远端逐项命令与实际结果及 commit SHA。
 
 ### UI-010｜2026-09-27｜教师 AI 助手单会话重设计
 

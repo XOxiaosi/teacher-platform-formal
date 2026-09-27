@@ -17,6 +17,7 @@ test('deployment builds both production apps and runs the API behind TLS nginx',
   assert.match(compose, /LOCAL_SAFE_MODE: "false"/);
   assert.match(compose, /WECHAT_ILINK_ENABLED: "false"/);
   assert.match(compose, /teacher-platform-db/);
+  assert.match(compose, /teacher-platform-files:\/app\/\.data/);
   assert.match(compose, /\$\{WEB_PORT:-8443\}:443/);
   assert.doesNotMatch(compose, /5432:\d+/);
   assert.match(nginx, /listen 443 ssl/);

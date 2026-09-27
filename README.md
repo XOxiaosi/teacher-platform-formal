@@ -29,7 +29,7 @@ npm run test:governance
 
 ### 黑苹果 Docker 部署
 
-生产容器配置位于 `compose.yaml` 与 `deploy/`。部署前在源码根目录准备权限受限的 `.env`，至少包含 `WEB_PORT`、`POSTGRES_PASSWORD`、`ACTION_TOKEN_SECRET`、`ENCRYPTION_KEY`、`MEDIA_ENCRYPTION_KEY`、`PROVIDER_KEY_ENCRYPTION_KEY`、`ADMIN_EMAIL` 和 `ADMIN_PASSWORD_HASH`；绝不复制本地 `.env`、`.data`、真实教师数据库或平台模型凭据。首次部署在空白 PostgreSQL 上执行已有迁移，不运行合成账号/学生 seed。Nginx 通过 HTTPS 服务教师端 `/` 和管理端 `/admin/`，证书仅由部署主机保管；自签证书首次访问时浏览器会提示信任。数据库只在 Compose 私有网络开放并使用持久卷，模型与微信默认关闭。
+生产容器配置位于 `compose.yaml` 与 `deploy/`。部署前在源码根目录准备权限受限的 `.env`，至少包含 `WEB_PORT`、`POSTGRES_PASSWORD`、`ACTION_TOKEN_SECRET`、`ENCRYPTION_KEY`、`MEDIA_ENCRYPTION_KEY`、`PROVIDER_KEY_ENCRYPTION_KEY`、`ADMIN_EMAIL` 和 `ADMIN_PASSWORD_HASH`；绝不复制本地 `.env`、`.data`、真实教师数据库或平台模型凭据。首次部署在空白 PostgreSQL 上执行已有迁移，不运行合成账号/学生 seed。Nginx 通过 HTTPS 服务教师端 `/` 和管理端 `/admin/`，证书仅由部署主机保管；自签证书首次访问时浏览器会提示信任。数据库只在 Compose 私有网络开放，数据库和媒体文件均保存于持久卷，模型与微信默认关闭。
 
 ```sh
 docker compose up -d --build

@@ -38,6 +38,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    volumes:
+      - teacher-platform-files:/app/.data
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
@@ -67,3 +69,4 @@ services:
 
 volumes:
   teacher-platform-db:
+  teacher-platform-files:
