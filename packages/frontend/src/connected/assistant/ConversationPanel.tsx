@@ -13,6 +13,7 @@ import { ArrowDown, CircleAlert, LoaderCircle, Sparkles } from 'lucide-react';
 
 interface Props {
   teacherId: string; conversationId: string; transport?: AssistantTransport; messageState?: MessageState;
+  presentationMode?: 'formal' | 'sample';
   send: (conversationId: string, draft: AssistantDraft) => Promise<void>;
   onWorkspaceRefresh?: () => Promise<void>;
 }
@@ -40,7 +41,7 @@ function isVisibleBusinessOutcome(turn: AgentTurnDto): boolean {
 
 const WORKSPACE_REFRESH_TERMINAL_STATUSES = new Set(['succeeded', 'partial', 'failed']);
 
-export function ConversationPanel({ teacherId, conversationId, transport, messageState, send, onWorkspaceRefresh }: Props) {
+export function ConversationPanel({ teacherId, conversationId, transport, presentationMode = 'formal', messageState, send, onWorkspaceRefresh }: Props) {
   const session = useConversation(teacherId, conversationId, transport, messageState?.acceptedRequestId);
   const conversationBodyRef = useRef<HTMLDivElement>(null);
   const keepAtBottom = useRef(true);
@@ -263,7 +264,7 @@ export function ConversationPanel({ teacherId, conversationId, transport, messag
       {session.error && <Card className="assistant-inline-alert" role="alert"><CardContent><CircleAlert size={18} /><p>{session.error}</p><Button type="button" size="sm" variant="outline" disabled={session.busy} onClick={() => { void session.load(); }}>重新读取会话</Button></CardContent></Card>}
       {session.conversation && <>
         <div className="assistant-turns" aria-label="会话内容">{visibleTurns.map(turn =>
-          <div key={turn.id} className="assistant-turn-with-process"><TurnContent turn={turn} demoMode={transport?.runtimeAvailability === 'test_only'}
+          <div key={turn.id} className="assistant-turn-with-process"><TurnContent turn={turn} testOnlyMode={presentationMode === 'formal' && transport?.runtimeAvailability === 'test_only'} demoMode={presentationMode === 'sample' && transport?.runtimeAvailability === 'test_only'}
             confirmation={turn.kind === 'confirmation' ? {
               status: confirmationStatuses[turn.actionId], busy: confirmationBusy[turn.actionId], modifying: revisionBusyBatchId !== null,
               error: confirmationError[turn.actionId] ?? requestChangesErrors[turn.actionId], receipt: confirmationReceipts[turn.actionId],

@@ -45,15 +45,18 @@ describe('assistant turn presentation', () => {
     expect(document.body.textContent).not.toContain('not-rendered');
   });
 
-  it('labels a test-only confirmation as a page-only demonstration and never as a saved course', () => {
-    render(<TurnContent demoMode turn={{
-      id: 'demo-confirmation', conversationId: 'conversation-1', kind: 'confirmation', actionId: 'demo-action', actionName: 'scheduling.create',
-      target: { type: 'Schedule', id: 'demo-schedule' }, beforeSummary: null, afterSummary: '演示排课结果', parameterSummary: {},
-      status: 'consumed', expiresAt: '2099-01-01T00:00:00Z', actionToken: null, error: null, createdAt: '2026-09-20T12:00:00Z',
+  it.each(['pending', 'consumed'] as const)('keeps a test-only %s confirmation read-only and avoids claiming it was saved', (status) => {
+    render(<TurnContent testOnlyMode turn={{
+      id: `test-only-${status}`, conversationId: 'conversation-1', kind: 'confirmation', actionId: 'test-only-action', actionName: 'scheduling.create',
+      target: { type: 'Schedule', id: 'test-only-schedule' }, beforeSummary: null, afterSummary: '周三 16:00 安排课程', parameterSummary: {},
+      status, expiresAt: '2099-01-01T00:00:00Z', actionToken: status === 'pending' ? 'unexposed-action-token' : null, error: null, createdAt: '2026-09-20T12:00:00Z',
     }} />);
-    expect(screen.getByRole('heading', { name: '演示已确认' })).toBeInTheDocument();
-    expect(screen.getByText('演示已确认，未写入正式资料。')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '无法核实保存状态' })).toBeInTheDocument();
+    expect(screen.getByText('当前教学 AI 未启用正式服务，无法核实此项变更是否已保存。请在课表或相关资料中确认实际状态。')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '确认' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '查看课表' })).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/演示|样板|合成/);
+    expect(document.body.textContent).not.toContain('unexposed-action-token');
   });
 
   it('shows a saved student result with a student route and no raw identifier', () => {

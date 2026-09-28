@@ -17,7 +17,7 @@ interface TeacherDetailPageProps {
   pollDelayMs?: number;
 }
 
-const RESTORE_TARGET_HINT = '仅演练目标（teacher_db_*_restore_*），禁覆盖生产库';
+const RESTORE_TARGET_HINT = '仅支持隔离数据库（teacher_db_*_restore_*），禁止覆盖正式数据库';
 const POLL_INTERVAL_MS = 2000;
 const POLL_MAX_TRIES = 15;
 
@@ -103,13 +103,13 @@ export function TeacherDetailPage({ teacherId, onBack, pollDelayMs = POLL_INTERV
     event.preventDefault();
     const target = restoreTarget.trim();
     if (!target) return;
-    if (!window.confirm(`确认对演练目标 ${target} 执行恢复？仅允许 *_restore_* 目标，且会写入审计日志。`)) return;
+    if (!window.confirm(`确认将备份恢复到隔离数据库 ${target}？仅允许 *_restore_* 目标，且会写入审计日志。`)) return;
 
     setActionBusy(true);
     setActionMessage(null);
     try {
       await triggerRestore({ targetDatabaseName: target });
-      setActionMessage('恢复演练已提交，已记录审计');
+      setActionMessage('隔离数据库恢复已提交，已记录审计');
       setRestoreTarget('');
     } catch (restoreError) {
       setActionMessage(`恢复失败：${messageOf(restoreError)}`);
@@ -176,11 +176,11 @@ export function TeacherDetailPage({ teacherId, onBack, pollDelayMs = POLL_INTERV
       </article>
 
       <article className="page-card admin-restore-card">
-        <h3>恢复演练</h3>
+        <h3>恢复到隔离数据库</h3>
         <p className="admin-restore-hint">{RESTORE_TARGET_HINT}</p>
         <form className="admin-restore-form" onSubmit={handleRestore}>
           <label htmlFor="admin-restore-target">
-            演练目标数据库名
+            目标数据库名
             <input
               id="admin-restore-target"
               value={restoreTarget}
@@ -190,7 +190,7 @@ export function TeacherDetailPage({ teacherId, onBack, pollDelayMs = POLL_INTERV
             />
           </label>
           <button type="submit" className="primary-action" disabled={actionBusy || restoreTarget.trim() === ''}>
-            执行恢复演练
+            提交恢复
           </button>
         </form>
       </article>

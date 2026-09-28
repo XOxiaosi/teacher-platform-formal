@@ -139,14 +139,14 @@ describe('TeacherDetailPage', () => {
     expect(await screen.findByText(/备份失败：备份目录不可写/, {}, { timeout: 3000 })).toBeInTheDocument();
   });
 
-  it('恢复演练：confirm 通过后 POST /admin/restore?confirm=1 并显示审计 toast', async () => {
+  it('隔离数据库恢复：confirm 通过后 POST /admin/restore?confirm=1 并显示审计 toast', async () => {
     render(<TeacherDetailPage teacherId="teacher-1" onBack={() => undefined} />);
     await screen.findByText('张三');
 
-    fireEvent.change(screen.getByLabelText('演练目标数据库名'), {
+    fireEvent.change(screen.getByLabelText('目标数据库名'), {
       target: { value: 'teacher_db_demo_restore_20260831' },
     });
-    fireEvent.click(screen.getByRole('button', { name: '执行恢复演练' }));
+    fireEvent.click(screen.getByRole('button', { name: '提交恢复' }));
 
     await waitFor(() => expect(adminActionsApi.triggerRestore).toHaveBeenCalledWith({
       targetDatabaseName: 'teacher_db_demo_restore_20260831',
@@ -154,23 +154,24 @@ describe('TeacherDetailPage', () => {
     expect(screen.getByText(/已记录审计/)).toBeInTheDocument();
   });
 
-  it('恢复演练：confirm 取消则不调用 API', async () => {
+  it('隔离数据库恢复：confirm 取消则不调用 API', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(false);
     render(<TeacherDetailPage teacherId="teacher-1" onBack={() => undefined} />);
     await screen.findByText('张三');
 
-    fireEvent.change(screen.getByLabelText('演练目标数据库名'), { target: { value: 'teacher_db_demo_restore_x' } });
-    fireEvent.click(screen.getByRole('button', { name: '执行恢复演练' }));
+    fireEvent.change(screen.getByLabelText('目标数据库名'), { target: { value: 'teacher_db_demo_restore_x' } });
+    fireEvent.click(screen.getByRole('button', { name: '提交恢复' }));
 
     await waitFor(() => expect(adminActionsApi.triggerRestore).not.toHaveBeenCalled());
   });
 
-  it('恢复表单提示仅允许演练目标', async () => {
+  it('恢复表单说明仅允许隔离数据库，且正式数据库不能作为目标', async () => {
     render(<TeacherDetailPage teacherId="teacher-1" onBack={() => undefined} />);
     await screen.findByText('张三');
 
-    expect(screen.getByText(/仅演练目标/)).toBeInTheDocument();
-    expect(screen.getByLabelText('演练目标数据库名')).toHaveAttribute('placeholder', 'teacher_db_restore_20260929');
+    expect(screen.getByText(/仅支持隔离数据库/)).toBeInTheDocument();
+    expect(screen.getByLabelText('目标数据库名')).toHaveAttribute('placeholder', 'teacher_db_restore_20260929');
+    expect(document.body.textContent).not.toMatch(/演示|样板|合成|演练/);
   });
 
   it('加载失败展示错误与返回按钮', async () => {

@@ -12,6 +12,8 @@ import { LoaderCircle, Sparkles } from 'lucide-react';
 interface Props {
   teacherId: string;
   transport?: AssistantTransport;
+  /** Isolated review views may show in-memory actions; formal views keep test-only confirmations read-only. */
+  presentationMode?: 'formal' | 'sample';
   /** Reload formal workspace data after a durable assistant outcome. */
   onWorkspaceRefresh?: () => Promise<void>;
 }
@@ -37,7 +39,7 @@ function Welcome({ teacherId, available, busy, error, onSend }: {
   </section>;
 }
 
-function AccountWorkspace({ teacherId, transport, onWorkspaceRefresh }: Props) {
+function AccountWorkspace({ teacherId, transport, presentationMode = 'formal', onWorkspaceRefresh }: Props) {
   const list = useConversationList(teacherId, 'active', transport);
   const { messages, send } = useAssistantMessages(teacherId, transport);
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -90,7 +92,7 @@ function AccountWorkspace({ teacherId, transport, onWorkspaceRefresh }: Props) {
           : !conversationResolved
             ? <section className="assistant-loading-state" role="status"><LoaderCircle size={17} className="assistant-spin" />正在载入对话…</section>
             : conversationId
-            ? <ConversationPanel teacherId={teacherId} conversationId={conversationId} transport={transport} messageState={messages[conversationId]} send={send} onWorkspaceRefresh={onWorkspaceRefresh} />
+            ? <ConversationPanel teacherId={teacherId} conversationId={conversationId} transport={transport} presentationMode={presentationMode} messageState={messages[conversationId]} send={send} onWorkspaceRefresh={onWorkspaceRefresh} />
             : <Welcome teacherId={teacherId} available={Boolean(transport)} busy={list.creating} error={startError} onSend={startFromDraft} />}
     </div>
   </div>;

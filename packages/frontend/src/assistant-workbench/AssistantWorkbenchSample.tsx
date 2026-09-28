@@ -94,6 +94,6 @@ export function AssistantWorkbenchSample() {
       <strong>教学助手工作台</strong>
       <p>新版对话样板，仅使用合成资料，不连接真实 API。</p>
     </header>
-    <AssistantWorkspace teacherId="sample-teacher" transport={sampleTransport} />
+    <AssistantWorkspace teacherId="sample-teacher" transport={sampleTransport} presentationMode="sample" />
   </main>;
 }

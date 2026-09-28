@@ -99,16 +99,18 @@ function confirmationIsExpired(turn: ConfirmationTurnDto): boolean {
   return !Number.isFinite(expiresAt) || expiresAt <= Date.now();
 }
 
-function ConfirmationContent({ turn, action, demoMode = false }: { turn: ConfirmationTurnDto; action?: ConfirmationActionProps; demoMode?: boolean }) {
+function ConfirmationContent({ turn, action, testOnlyMode = false, demoMode = false }: { turn: ConfirmationTurnDto; action?: ConfirmationActionProps; testOnlyMode?: boolean; demoMode?: boolean }) {
   const status = action?.status ?? turn.status;
-  const eligible = confirmableActions.has(turn.actionName) && status === 'pending' && Boolean(turn.actionToken) && !confirmationIsExpired(turn);
-  const saved = status === 'consumed' && confirmableActions.has(turn.actionName);
-  const cancelled = status === 'cancelled' && confirmableActions.has(turn.actionName);
+  const isConfirmableAction = confirmableActions.has(turn.actionName);
+  const cannotVerifyTestOnlyResult = testOnlyMode && isConfirmableAction;
+  const eligible = !cannotVerifyTestOnlyResult && isConfirmableAction && status === 'pending' && Boolean(turn.actionToken) && !confirmationIsExpired(turn);
+  const saved = !cannotVerifyTestOnlyResult && status === 'consumed' && isConfirmableAction;
+  const cancelled = !cannotVerifyTestOnlyResult && status === 'cancelled' && isConfirmableAction;
   const destination = turn.actionName === 'scheduling.create'
     ? { href: '#/schedules', label: '查看课表' }
     : { href: '#/today', label: '查看待办' };
   return <Card className="assistant-confirmation"><CardContent>
-    <div className="assistant-confirmation-heading"><span className="assistant-confirmation-icon">{saved ? <CheckCircle2 size={17} /> : <FileCheck2 size={17} />}</span><div><h3>{eligible ? demoMode ? '演示确认' : '确认变更' : saved ? demoMode ? '演示已确认' : '变更已保存' : '变更记录'}</h3><p>{demoMode ? '演示确认仅改变本页状态，不写入正式资料。' : eligible ? '确认后才会保存到教学资料。' : ''}</p></div></div>
+    <div className="assistant-confirmation-heading"><span className="assistant-confirmation-icon">{saved ? <CheckCircle2 size={17} /> : <FileCheck2 size={17} />}</span><div><h3>{cannotVerifyTestOnlyResult ? '无法核实保存状态' : eligible ? demoMode ? '演示确认' : '确认变更' : saved ? demoMode ? '演示已确认' : '变更已保存' : '变更记录'}</h3><p>{cannotVerifyTestOnlyResult ? '当前教学 AI 未启用正式服务，无法核实此项变更是否已保存。请在课表或相关资料中确认实际状态。' : demoMode ? '演示确认仅改变本页状态，不写入正式资料。' : eligible ? '确认后才会保存到教学资料。' : ''}</p></div></div>
     {turn.beforeSummary && <p className="assistant-change-before">原有内容：{turn.beforeSummary}</p>}
     <p className="assistant-change-after"><span>拟调整为</span>{turn.afterSummary}</p>
     {eligible && <div className="assistant-confirmation-actions">
@@ -119,11 +121,11 @@ function ConfirmationContent({ turn, action, demoMode = false }: { turn: Confirm
     </div>}
     {saved && <p>{demoMode ? '演示已确认，未写入正式资料。' : <>{action?.receipt || `已保存：${turn.afterSummary}`} <a href={destination.href}>{destination.label}</a></>}</p>}
     {cancelled && <p>该操作已取消。不会写入资料。</p>}
-    {!eligible && !saved && !cancelled && <p>{confirmationIsExpired(turn) ? '这项确认已过期，请重新核对后提出。' : '这项变更暂时无法确认，请重新提出要求。'}</p>}
+    {!cannotVerifyTestOnlyResult && !eligible && !saved && !cancelled && <p>{confirmationIsExpired(turn) ? '这项确认已过期，请重新核对后提出。' : '这项变更暂时无法确认，请重新提出要求。'}</p>}
   </CardContent></Card>;
 }
 
-export function TurnContent({ turn, confirmation, demoMode = false }: { turn: AgentTurnDto; confirmation?: ConfirmationActionProps; demoMode?: boolean }) {
+export function TurnContent({ turn, confirmation, testOnlyMode = false, demoMode = false }: { turn: AgentTurnDto; confirmation?: ConfirmationActionProps; testOnlyMode?: boolean; demoMode?: boolean }) {
   const presentation = turn.kind === 'assistant' ? turn.presentation : undefined;
   const presentationSummaryIsTurnContent = turn.kind === 'assistant' && presentation
     ? presentation.summary.trim() === turn.content.trim()
@@ -134,7 +136,7 @@ export function TurnContent({ turn, confirmation, demoMode = false }: { turn: Ag
     {turn.kind === 'tool' && (turn.resultSummary || turn.references.length > 0) && <div className="assistant-tool-result">{turn.resultSummary && <p>{turn.resultSummary}</p>}<References references={turn.references} studentLinkLabel /></div>}
     {turn.kind === 'tool' && turn.status === 'failed' && !turn.resultSummary && <p className="assistant-turn-note" role="status">这次没有取得结果，可以调整要求后重试。</p>}
     {turn.kind === 'error' && <p className="assistant-turn-note" role="status">这次没有生成回复，可以稍后重试。</p>}
-    {turn.kind === 'confirmation' && <ConfirmationContent turn={turn} action={confirmation} demoMode={demoMode} />}
+    {turn.kind === 'confirmation' && <ConfirmationContent turn={turn} action={confirmation} testOnlyMode={testOnlyMode} demoMode={demoMode} />}
     {['user', 'assistant'].includes(turn.kind) && <time className="assistant-turn-time" dateTime={turn.createdAt}>{formatDateTime(turn.createdAt)}</time>}
   </article>;
 }
