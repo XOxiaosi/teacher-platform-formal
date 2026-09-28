@@ -4,6 +4,7 @@ import { dateAdd, recurrenceConflict, scheduleConflict as scheduleConflictInRang
 import { cancelPlannedSchedule, completePlannedSchedule, editCompletedSchedule as editCompletedScheduleMutation, endRuleBefore as endRuleBeforeMutation, replaceRuleFrom as replaceRuleFromMutation } from './schedule-mutations';
 import { Dialog, Shell } from './Chrome';
 import { TodayPage } from './Today';
+import { TodayPrototype } from './TodayPrototype';
 import { StudentPages } from './Students';
 import { Workflows } from './Workflows';
 import type {
@@ -100,7 +101,8 @@ export function PreviewApp({ assistantContent }: { assistantContent?: ReactNode 
   const addPayment = (payment: Payment) => setData((old) => ({ ...old, payments: [payment, ...old.payments], students: old.students.map((student) => student.id === payment.studentId ? { ...student, balance: student.balance + payment.lessons } : student) }));
   const actions: PreviewActions = { data, setData, ui, setUi, open, toast, close, complete, saveSchedule, cancelSchedule, editCompletedSchedule, saveRule, replaceRuleFrom, endRuleBefore, setRuleEnabled, addPayment };
   const page = route[0] || 'today';
-  let content: ReactNode = <TodayPage actions={actions} />;
+  const reviewingToday = import.meta.env.DEV && new URLSearchParams(location.search).get('prototype') === 'today';
+  let content: ReactNode = reviewingToday ? <TodayPrototype /> : <TodayPage actions={actions} />;
   if (page === 'students') content = <StudentPages actions={actions} studentId={route[1]} />;
   const normalizedPage = page === 'ai' ? 'agent' : page === 'schedule' ? 'schedules' : page;
   if (['agent', 'schedules', 'finance', 'feedback', 'settings'].includes(normalizedPage)) content = <Workflows page={normalizedPage} actions={actions} />;
