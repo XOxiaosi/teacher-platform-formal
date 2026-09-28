@@ -53,6 +53,8 @@ export function ConnectedWorkspace() {
   const [dialog, setDialog] = useState<{ title: string; body: ReactNode } | null>(null);
   const [notice, setNotice] = useState<Toast>(null);
   const [teachingRuntimeAvailability, setTeachingRuntimeAvailability] = useState<'available' | 'unavailable' | 'test_only'>('unavailable');
+  const [runtimeCheckState, setRuntimeCheckState] = useState<'checking' | 'ready' | 'error'>('checking');
+  const runtimeCheckSequence = useRef(0);
   const assistantTransport = useMemo(
     () => createTeachingTaskTransport({ runtimeAvailability: teachingRuntimeAvailability }),
     [teachingRuntimeAvailability],
@@ -63,6 +65,19 @@ export function ConnectedWorkspace() {
   const toast = (text: string, kind: 'warn' | 'ok' = 'ok') => { if (alive.current) setNotice({ text, kind }); };
   const close = () => { if (!busyRef.current) setDialog(null); };
   const open = (title: string, body: ReactNode) => setDialog({ title, body });
+  function refreshRuntime() {
+    const sequence = ++runtimeCheckSequence.current;
+    setTeachingRuntimeAvailability('unavailable');
+    setRuntimeCheckState('checking');
+    void getTeachingRuntimeAvailability(auth.teacherId!).then((result) => {
+      if (alive.current && sequence === runtimeCheckSequence.current) {
+        setTeachingRuntimeAvailability(result.runtimeAvailability);
+        setRuntimeCheckState('ready');
+      }
+    }).catch(() => {
+      if (alive.current && sequence === runtimeCheckSequence.current) setRuntimeCheckState('error');
+    });
+  }
   async function reload() {
     const current = ++generation.current;
     try {
@@ -77,15 +92,9 @@ export function ConnectedWorkspace() {
   }
   useEffect(() => {
     alive.current = true;
-    setTeachingRuntimeAvailability('unavailable');
     void reload().catch((e: unknown) => { if (alive.current) setError(e instanceof Error ? e.message : '资料加载失败'); });
-    void getTeachingRuntimeAvailability(auth.teacherId!).then((result) => {
-      if (alive.current) setTeachingRuntimeAvailability(result.runtimeAvailability);
-    }).catch(() => {
-      // Keep the explicit unavailable state when capability discovery is down.
-      if (alive.current) setTeachingRuntimeAvailability('unavailable');
-    });
-    return () => { alive.current = false; generation.current += 1; };
+    refreshRuntime();
+    return () => { alive.current = false; generation.current += 1; runtimeCheckSequence.current += 1; };
   }, [auth.teacherId]);
   useEffect(() => {
     const onRoute = () => { setRoute(routeParts()); if (!busyRef.current) setDialog(null); };
@@ -189,7 +198,7 @@ export function ConnectedWorkspace() {
   };
   const page = route[0] || 'today';
   const normalized = page === 'schedule' ? 'schedules' : page === 'ai' ? 'agent' : page;
-  const content = page === 'captures' ? <CaptureInbox key={auth.teacherId} teacherId={auth.teacherId!} onRecordsChanged={reload} students={snapshot.data.students} /> : page === 'students' ? <StudentPages actions={actions} studentId={route[1]} recordPanel={(studentId) => <StudentRecordPanel teacherId={auth.teacherId!} studentId={studentId} refreshToken={snapshot} onRecordsChanged={reload} />} timelinePanel={(studentId) => <StudentTimelineReadback teacherId={auth.teacherId!} studentId={studentId} refreshToken={snapshot} />} ledgerPanel={(studentId) => <StudentLedgerReadback teacherId={auth.teacherId!} studentId={studentId} refreshToken={snapshot} onLedgerChanged={reload} />} /> : ['agent', 'schedules', 'finance', 'feedback', 'settings'].includes(normalized) ? <Workflows page={normalized} actions={actions} assistantContent={<AssistantWorkspace teacherId={auth.teacherId!} transport={assistantTransport} onWorkspaceRefresh={reload} />} modelSettings={<PlatformAIStatus availability={teachingRuntimeAvailability} />} /> : <TodayPage actions={actions} />;
+  const content = page === 'captures' ? <CaptureInbox key={auth.teacherId} teacherId={auth.teacherId!} onRecordsChanged={reload} students={snapshot.data.students} /> : page === 'students' ? <StudentPages actions={actions} studentId={route[1]} recordPanel={(studentId) => <StudentRecordPanel teacherId={auth.teacherId!} studentId={studentId} refreshToken={snapshot} onRecordsChanged={reload} />} timelinePanel={(studentId) => <StudentTimelineReadback teacherId={auth.teacherId!} studentId={studentId} refreshToken={snapshot} />} ledgerPanel={(studentId) => <StudentLedgerReadback teacherId={auth.teacherId!} studentId={studentId} refreshToken={snapshot} onLedgerChanged={reload} />} /> : ['agent', 'schedules', 'finance', 'feedback', 'settings'].includes(normalized) ? <Workflows page={normalized} actions={actions} assistantContent={<AssistantWorkspace teacherId={auth.teacherId!} transport={assistantTransport} onWorkspaceRefresh={reload} />} modelSettings={<PlatformAIStatus availability={teachingRuntimeAvailability} checkState={runtimeCheckState} onRefresh={refreshRuntime} />} /> : <TodayPage actions={actions} />;
   return <><div inert={busy || undefined} aria-busy={busy}>
     <Shell page={normalized} studioName={snapshot.data.studioName} displayName={auth.displayName || '教师'} accountActions={<><a className="button secondary small" href="#/captures">待核对材料</a><span>{auth.email}</span><button className="button secondary small" onClick={retry}>刷新资料</button><button className="button secondary small" onClick={() => void auth.logout()}>退出登录</button></>}>
       {(error || auth.error) && <div className="connected-error" role="alert">{error || auth.error}</div>}{content}

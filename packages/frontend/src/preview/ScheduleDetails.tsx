@@ -99,7 +99,7 @@ function CorrectionConfirmation({ actions, result }: { actions: PreviewActions; 
       actions.toast('出勤状态更正已保存');
     });
   };
-  return <><p className="dialog-copy">请确认以下更正。当前只是预览，尚未生效。</p><dl className="schedule-detail correction-preview"><div><dt>学生</dt><dd>{name}</dd></div><div><dt>出勤状态</dt><dd>{attendanceLabel(confirmation.fromStatus)} → {attendanceLabel(confirmation.toStatus)}</dd></div><div><dt>课时余额</dt><dd>{balanceBefore.remaining} → {balanceAfter.remaining}（{remainingDelta > 0 ? '+' : ''}{remainingDelta}）</dd></div><div><dt>余额说明</dt><dd>{balanceExplanation}</dd></div><div><dt>更正原因</dt><dd>{confirmation.reason}</dd></div></dl><p className="dialog-copy">确认后会保留本次更正记录，并按上述影响保存余额变化。</p><div className="dialog-actions"><button className="button secondary" onClick={actions.close}>取消</button><button className="button primary" onClick={confirm}>确认更正</button></div></>;
+  return <><p className="dialog-copy">请核对以下更正。点击确认前，出勤和余额不会改变。</p><dl className="schedule-detail correction-preview"><div><dt>学生</dt><dd>{name}</dd></div><div><dt>出勤状态</dt><dd>{attendanceLabel(confirmation.fromStatus)} → {attendanceLabel(confirmation.toStatus)}</dd></div><div><dt>课时余额</dt><dd>{balanceBefore.remaining} → {balanceAfter.remaining}（{remainingDelta > 0 ? '+' : ''}{remainingDelta}）</dd></div><div><dt>余额说明</dt><dd>{balanceExplanation}</dd></div><div><dt>更正原因</dt><dd>{confirmation.reason}</dd></div></dl><p className="dialog-copy">确认后会保留本次更正记录，并按上述影响保存余额变化。</p><div className="dialog-actions"><button className="button secondary" onClick={actions.close}>取消</button><button className="button primary" onClick={confirm}>确认更正</button></div></>;
 }
 
 function CorrectionForm({ actions, item, attendance }: { actions: PreviewActions; item: Schedule; attendance: LessonAttendance }) {
@@ -112,9 +112,9 @@ function CorrectionForm({ actions, item, attendance }: { actions: PreviewActions
     if (!actions.prepareLessonStatusCorrection) return;
     void actions.prepareLessonStatusCorrection({ lessonId: attendance.lessonId, targetStatus, reason: trimmed, clientRequestId: requestId }).then((result) => {
       actions.open('确认出勤状态更正', <CorrectionConfirmation actions={actions} result={result} />);
-    }).catch((error: unknown) => actions.toast(error instanceof Error ? error.message : '预览未生成，请重试。', 'warn'));
+    }).catch((error: unknown) => actions.toast(error instanceof Error ? error.message : '无法获取更正影响，请重试。', 'warn'));
   };
-  return <><p className="dialog-copy">{studentName(actions.data, attendance.studentId)}：{attendanceLabel(attendance.status)} → {attendanceLabel(targetStatus)}</p><label className="field-label" htmlFor={`correction-reason-${item.id}-${attendance.lessonId}`}>更正原因（必填）</label><textarea id={`correction-reason-${item.id}-${attendance.lessonId}`} className="text-input" rows={4} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="例如：课后核对签到记录后发现状态录入错误" required /><div className="dialog-actions"><button className="button secondary" onClick={actions.close}>取消</button><button className="button primary" disabled={!reason.trim()} onClick={prepare}>查看影响预览</button></div></>;
+  return <><p className="dialog-copy">{studentName(actions.data, attendance.studentId)}：{attendanceLabel(attendance.status)} → {attendanceLabel(targetStatus)}</p><label className="field-label" htmlFor={`correction-reason-${item.id}-${attendance.lessonId}`}>更正原因（必填）</label><textarea id={`correction-reason-${item.id}-${attendance.lessonId}`} className="text-input" rows={4} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="例如：课后核对签到记录后发现状态录入错误" required /><div className="dialog-actions"><button className="button secondary" onClick={actions.close}>取消</button><button className="button primary" disabled={!reason.trim()} onClick={prepare}>查看更正影响</button></div></>;
 }
 
 function openCorrection(actions: PreviewActions, item: Schedule, attendance: LessonAttendance) {

@@ -170,6 +170,7 @@ describe('TeacherDetailPage', () => {
     await screen.findByText('张三');
 
     expect(screen.getByText(/仅演练目标/)).toBeInTheDocument();
+    expect(screen.getByLabelText('演练目标数据库名')).toHaveAttribute('placeholder', 'teacher_db_restore_20260929');
   });
 
   it('加载失败展示错误与返回按钮', async () => {

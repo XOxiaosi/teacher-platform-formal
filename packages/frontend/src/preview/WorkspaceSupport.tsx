@@ -56,7 +56,7 @@ function WorkspaceHelp({ actions }: { actions: PreviewActions }) {
     <div className="support-faq">
       <details><summary>如何连接微信并查看学生反馈？</summary><p>从微信连接页打开二维码，使用手机微信扫码并确认。同一部手机不方便扫描时，请在电脑或另一块屏幕打开页面。连接后，你通过机器人录入的学生情况会进入今日工作台，核对后才成为正式记录。</p><a href="#/settings/wechat">打开微信连接 →</a></details>
       <details><summary>提示已保存，但页面没有新记录怎么办？</summary><p>先核对当前账号和学生，再重新加载资料。已经收到保存回执的操作不要重复提交；仍找不到时，反馈发生时间及具体步骤。</p></details>
-      <details><summary>AI 暂不可用或额度不足，还能工作吗？</summary><p>可以继续查看学生档案、课表和人工记录。AI 服务只使用 DeepSeek；真实额度与恢复时间以后续服务状态为准，当前预览不显示虚构额度。</p></details>
+      <details><summary>AI 暂不可用或额度不足，还能工作吗？</summary><p>可以继续查看学生档案、课表和人工记录。AI 服务只使用 DeepSeek；服务状态请到“AI 服务”页面查看，额度与恢复时间以平台通知为准。</p></details>
       <details><summary>如何管理个人资料和隐私？</summary><p>数据与隐私页提供当前可用的数据操作。问题反馈由你选择必要描述，不自动附上全部聊天或学生资料。</p><a href="#/settings/privacy">查看数据与隐私 →</a></details>
     </div>
     <details className="support-feedback"><summary>记录一个使用问题</summary>

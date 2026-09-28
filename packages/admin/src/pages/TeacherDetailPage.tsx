@@ -185,7 +185,7 @@ export function TeacherDetailPage({ teacherId, onBack, pollDelayMs = POLL_INTERV
               id="admin-restore-target"
               value={restoreTarget}
               onChange={(event) => setRestoreTarget(event.target.value)}
-              placeholder="teacher_db_demo_restore_20260831"
+              placeholder="teacher_db_restore_20260929"
               required
             />
           </label>

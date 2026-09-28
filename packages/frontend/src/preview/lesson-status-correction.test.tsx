@@ -35,13 +35,13 @@ describe('已完成课程出勤状态更正', () => {
     fireEvent.click(screen.getByRole('button', { name: '更正李雨桐的出勤状态' }));
     render(<>{body()}</>);
     expect(screen.getByText('李雨桐：已出勤 → 缺席')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '查看影响预览' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '查看更正影响' })).toBeDisabled();
     fireEvent.change(screen.getByLabelText('更正原因（必填）'), { target: { value: '签到复核' } });
-    fireEvent.click(screen.getByRole('button', { name: '查看影响预览' }));
+    fireEvent.click(screen.getByRole('button', { name: '查看更正影响' }));
     await waitFor(() => expect(open).toHaveBeenCalledTimes(2));
     expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ lessonId: 'lesson-1', targetStatus: 'absent', reason: '签到复核', clientRequestId: expect.any(String) }));
     render(<>{body()}</>);
-    expect(screen.getByText(/当前只是预览，尚未生效/)).toBeInTheDocument();
+    expect(screen.getByText(/点击确认前，出勤和余额不会改变/)).toBeInTheDocument();
     expect(screen.getByText('7 → 8（+1）')).toBeInTheDocument();
     expect(screen.getByText('改为缺席后，本次不再计入已用课时，预计返还 1 课时。')).toBeInTheDocument();
     fireEvent.click(screen.getAllByRole('button', { name: '取消' }).at(-1)!);
@@ -69,7 +69,7 @@ describe('已完成课程出勤状态更正', () => {
     fireEvent.click(screen.getByRole('button', { name: '更正李雨桐的出勤状态' }));
     render(<>{body()}</>);
     fireEvent.change(screen.getByLabelText('更正原因（必填）'), { target: { value: '签到复核' } });
-    fireEvent.click(screen.getByRole('button', { name: '查看影响预览' }));
+    fireEvent.click(screen.getByRole('button', { name: '查看更正影响' }));
     await waitFor(() => expect(open).toHaveBeenCalledTimes(2));
     render(<>{body()}</>);
     fireEvent.click(screen.getByRole('button', { name: '确认更正' }));

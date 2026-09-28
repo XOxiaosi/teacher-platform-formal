@@ -247,6 +247,31 @@ describe('connected workspace server-backed writes', () => {
     expect(screen.queryByLabelText(/API Key|供应商|API 地址|协议|模型 ID/)).not.toBeInTheDocument();
     expect(screen.queryByText('提交演示配置')).not.toBeInTheDocument();
   });
+  it('distinguishes an AI status lookup failure and can check again', async () => {
+    mock.availability.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ runtimeAvailability: 'available' });
+    location.hash = '#/settings/models';
+    render(<ConnectedWorkspace />);
+    await screen.findByText('无法获取服务状态');
+    expect(screen.queryByText('服务暂不可用')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '重新检查' }));
+    await screen.findByText('教学 AI 已启用');
+    expect(mock.availability).toHaveBeenCalledTimes(2);
+  });
+  it('shows a pending AI status lookup without claiming that DeepSeek is offline', async () => {
+    mock.availability.mockImplementationOnce(() => new Promise(() => {}));
+    location.hash = '#/settings/models';
+    render(<ConnectedWorkspace />);
+    await screen.findByText('正在查询服务状态');
+    expect(screen.queryByText('服务暂不可用')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '重新检查' })).toBeDisabled();
+  });
+  it.each(['#/today', '#/students', '#/schedules', '#/finance', '#/feedback', '#/settings', '#/settings/models', '#/settings/wechat', '#/settings/privacy', '#/agent'])('does not show prototype wording on formal route %s', async (route) => {
+    location.hash = route;
+    const { container } = render(<ConnectedWorkspace />);
+    await waitFor(() => expect(mock.load).toHaveBeenCalled());
+    await screen.findByRole('heading', { level: 1 });
+    expect(container.textContent).not.toMatch(/演示|样板|合成|当前预览/);
+  });
   it('mounts the formal assistant entry for the authenticated teacher', async () => {
     location.hash = '#/agent';
     render(<ConnectedWorkspace />);
@@ -390,7 +415,7 @@ describe('connected workspace server-backed writes', () => {
     fireEvent.click(screen.getByRole('button', { name: /查看 09:00 至 10:30/ }));
     fireEvent.click(screen.getByRole('button', { name: '更正李雨桐的出勤状态' }));
     fireEvent.change(screen.getByLabelText('更正原因（必填）'), { target: { value: '签到复核' } });
-    fireEvent.click(screen.getByRole('button', { name: '查看影响预览' }));
+    fireEvent.click(screen.getByRole('button', { name: '查看更正影响' }));
     await screen.findByText('9 → 10（+1）');
     expect(mock.prepareCorrection).toHaveBeenCalledWith(expect.objectContaining({ lessonId: 'lesson-1', targetStatus: 'absent', reason: '签到复核', clientRequestId: expect.any(String) }));
     expect(mock.load).toHaveBeenCalledTimes(1);

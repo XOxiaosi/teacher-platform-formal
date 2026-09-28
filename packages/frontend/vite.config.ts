@@ -10,10 +10,6 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: resolve(import.meta.dirname, 'index.html'),
-        preview: resolve(import.meta.dirname, 'preview.html'),
-        prototypeV009: resolve(import.meta.dirname, 'prototype-v009.html'),
-        assistantWorkbench: resolve(import.meta.dirname, 'assistant-workbench.html'),
-        designReview: resolve(import.meta.dirname, 'design-review.html'),
       },
     },
   },
